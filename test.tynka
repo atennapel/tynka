@@ -1,0 +1,30 @@
+-- booleans
+def Bool = (A : Type) -> A -> A -> A
+def True : Bool = \A t f. t
+def False : Bool = \A t f. f
+
+def if_ {A} (b : Bool) (t f : A) : A = b A t f
+
+def (!) b = if b then False else True
+def (&&) a b = if a then b else False
+def (||) a b = if a then True else b
+
+-- natural numbers
+def Nat = (A : Type) -> A -> (A -> A) -> A
+def Z : Nat = \A z s. z
+def S (n : Nat) : Nat = \A z s. s (n A z s)
+
+def foldNat {A} (n : Nat) (z : A) (s : A -> A) : A = n A z s
+
+def (+) a b = foldNat a b S
+
+def test = 1 + 2
+
+-- identity
+def (~) {A} (x y : A) = (P : A -> Type) -> P x -> P y
+def Refl {A} (x : A) : x ~ x = \P x. x
+
+def rewrite {A x y} (P : A -> Type) (p : x ~ y) (x : P x) : P y = p P x
+
+def p1 : 1 + 2 ~ 3 = Refl
+def p2 {b} : !(!b) ~ b = Refl
