@@ -83,7 +83,7 @@ object Common:
   extension (r: RevPruning)
     @targetName("exposeRevPruning")
     inline def expose: Pruning = r
-  def revPruning(p: Pruning): RevPruning = p
+  def revPruning(p: Pruning): RevPruning = p.reverse
 
   // meta ids
   opaque type MetaId = Int
