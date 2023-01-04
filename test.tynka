@@ -22,9 +22,9 @@ def test = 1 + 2
 
 -- identity
 def (~) {A} (x y : A) = (P : A -> Type) -> P x -> P y
-def Refl {A} (x : A) : x ~ x = \P x. x
+def Refl {A} {x : A} : x ~ x = \P x. x
 
 def rewrite {A x y} (P : A -> Type) (p : x ~ y) (x : P x) : P y = p P x
 
 def p1 : 1 + 2 ~ 3 = Refl
-def p2 {b} : !(!b) ~ b = Refl
+def p2 : !True ~ False = Refl

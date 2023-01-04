@@ -11,7 +11,7 @@ object Globals:
 
   case class GlobalEntry(name: Name, tm: Tm, ty: Ty, value: Val, vty: VTy)
 
-  def addGlobal(x: Name, entry: GlobalEntry): Unit = map.put(x, entry)
+  def setGlobal(entry: GlobalEntry): Unit = map.put(entry.name, entry)
   def getGlobal(x: Name): Option[GlobalEntry] = map.get(x)
 
   def resetGlobals(): Unit = map.clear()

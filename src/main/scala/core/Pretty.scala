@@ -84,3 +84,8 @@ object Pretty:
 
     case Meta(id)         => s"?$id"
     case AppPruning(f, _) => s"?*${prettyParen(f)}"
+
+  def pretty(d: Def): String = d match
+    case DDef(x, t, v) => s"def $x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
+
+  def pretty(ds: Defs): String = ds.toList.map(pretty).mkString("\n")

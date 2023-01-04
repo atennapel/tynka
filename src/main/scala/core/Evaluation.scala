@@ -87,7 +87,7 @@ object Evaluation:
   def force(v: Val, unfold: Unfold = UnfoldAll): Val = v match
     case VFlex(id, sp) =>
       getMeta(id) match
-        case Solved(v, _) => force(vspine(v, sp))
+        case Solved(v, _) => force(vspine(v, sp), unfold)
         case Unsolved(_)  => v
     case VGlobal(_, _, v) if unfold == UnfoldAll => force(v(), UnfoldAll)
     case _                                       => v
