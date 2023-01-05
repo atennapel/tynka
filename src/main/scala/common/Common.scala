@@ -94,10 +94,14 @@ object Common:
 
   // primitives
   enum PrimName:
-    case PType
+    case PMeta
+    case PVF
+    case PV
+    case PF
+    case PTy
 
     case PVoid
-    case PAbsurd
+    // case PAbsurd
 
     case PUnitType
     case PUnit
@@ -105,35 +109,43 @@ object Common:
     case PBool
     case PTrue
     case PFalse
-    case PElimBool
+    // case PElimBool
 
     override def toString: String = this match
-      case PType => "Type"
+      case PMeta => "Meta"
+      case PVF   => "VF"
+      case PV    => "V"
+      case PF    => "F"
+      case PTy   => "Ty"
 
-      case PVoid   => "Void"
-      case PAbsurd => "absurd"
+      case PVoid => "Void"
+      // case PAbsurd => "absurd"
 
       case PUnitType => "()"
       case PUnit     => "[]"
 
-      case PBool     => "Bool"
-      case PTrue     => "True"
-      case PFalse    => "False"
-      case PElimBool => "elimBool"
+      case PBool  => "Bool"
+      case PTrue  => "True"
+      case PFalse => "False"
+      // case PElimBool => "elimBool"
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
-      case "Type" => Some(PType)
+      case "Meta" => Some(PMeta)
+      case "VF"   => Some(PVF)
+      case "V"    => Some(PV)
+      case "F"    => Some(PF)
+      case "Ty"   => Some(PTy)
 
-      case "Void"   => Some(PVoid)
-      case "absurd" => Some(PAbsurd)
+      case "Void" => Some(PVoid)
+      // case "absurd" => Some(PAbsurd)
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)
 
-      case "Bool"     => Some(PBool)
-      case "True"     => Some(PTrue)
-      case "False"    => Some(PFalse)
-      case "elimBool" => Some(PElimBool)
+      case "Bool"  => Some(PBool)
+      case "True"  => Some(PTrue)
+      case "False" => Some(PFalse)
+      // case "elimBool" => Some(PElimBool)
 
       case _ => None

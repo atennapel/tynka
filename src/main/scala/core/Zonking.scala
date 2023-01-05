@@ -24,16 +24,20 @@ object Zonking:
   private def proj(t: VT, p: ProjType): VT =
     t.fold(v => Left(vproj(v, p)), t => Right(Proj(t, p)))
 
+  private def splice(t: VT): VT =
+    t.fold(v => Left(vsplice(v)), t => Right(Splice(t)))
+
   private def meta(id: MetaId)(implicit l: Lvl, e: Env): VT =
     getMeta(id) match
-      case Solved(v, _) => Left(v)
-      case Unsolved(_)  => Right(Meta(id))
+      case Solved(v, _, _) => Left(v)
+      case Unsolved(_, _)  => Right(Meta(id))
 
   private def zonkSp(t: Tm)(implicit l: Lvl, e: Env): VT = t match
     case Meta(id)         => meta(id)
     case AppPruning(t, p) => Left(vappPruning(eval(t), p))
     case App(f, a, i)     => app(zonkSp(f), a, i)
     case Proj(t, p)       => proj(zonkSp(t), p)
+    case Splice(t)        => splice(zonkSp(t))
     case Wk(t)            => zonkSp(t)(l - 1, e.tail).map(Wk(_))
     case t                => Right(t)
 
@@ -50,6 +54,10 @@ object Zonking:
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
     case Pair(a, b)     => Pair(zonk(a), zonk(b))
     case Proj(_, _)     => quoteVT(zonkSp(t))
+
+    case Lift(vf, t) => Lift(zonk(vf), zonk(t))
+    case Quote(t)    => Quote(zonk(t))
+    case Splice(_)   => quoteVT(zonkSp(t))
 
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))
 

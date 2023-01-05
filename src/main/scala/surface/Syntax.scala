@@ -45,6 +45,10 @@ object Syntax:
     case Pair(fst: Tm, snd: Tm)
     case Proj(tm: Tm, proj: ProjType)
 
+    case Lift(ty: Ty)
+    case Quote(tm: Tm)
+    case Splice(tm: Tm)
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -73,6 +77,10 @@ object Syntax:
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
       case Pair(a, b)            => s"($a, $b)"
       case Proj(t, p)            => s"$t$p"
+
+      case Lift(t)   => s"^$t"
+      case Quote(t)  => s"`$t"
+      case Splice(t) => s"$$$t"
 
       case Hole(None)    => "_"
       case Hole(Some(x)) => s"_$x"

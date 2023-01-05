@@ -28,6 +28,7 @@ object Syntax:
   export ProjType.*
 
   type Ty = Tm
+  type Univ = Tm
   enum Tm:
     case Var(ix: Ix)
     case Global(name: Name)
@@ -42,6 +43,10 @@ object Syntax:
     case Pair(fst: Tm, snd: Tm)
     case Proj(tm: Tm, proj: ProjType)
 
+    case Lift(vf: Ty, tm: Ty)
+    case Quote(tm: Tm)
+    case Splice(tm: Tm)
+
     case Wk(tm: Tm)
 
     case Meta(id: MetaId)
@@ -53,6 +58,13 @@ object Syntax:
         case Some(i) :: pr => App(go(x + 1, pr), Var(x), i)
         case None :: pr    => go(x + 1, pr)
       go(ix0, pr)
+
+    def quote: Tm = this match
+      case Splice(t) => t
+      case t         => Quote(t)
+    def splice: Tm = this match
+      case Quote(t) => t
+      case t        => Splice(t)
 
     override def toString: String = this match
       case Var(x)          => s"'$x"
@@ -71,6 +83,10 @@ object Syntax:
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
       case Pair(a, b)            => s"($a, $b)"
       case Proj(t, p)            => s"$t$p"
+
+      case Lift(_, t) => s"^$t"
+      case Quote(t)   => s"`$t"
+      case Splice(t)  => s"$$$t"
 
       case Wk(t) => s"(Wk $t)"
 

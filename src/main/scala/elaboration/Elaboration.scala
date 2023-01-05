@@ -9,7 +9,7 @@ import core.Evaluation.*
 import core.Unification.{UnifyError, unify as unify0}
 import core.Metas.*
 import core.Globals.*
-import elaboration.Ctx
+import core.Ctx
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -33,7 +33,7 @@ object Elaboration:
         )
 
   // holes
-  private final case class HoleEntry(ctx: Ctx, tm: Tm, ty: VTy)
+  private final case class HoleEntry(ctx: Ctx, tm: Tm, ty: VTy, univ: VUniv)
   private val holes: mutable.Map[Name, HoleEntry] = mutable.Map.empty
 
   // metas
@@ -83,17 +83,49 @@ object Elaboration:
 
   private def hasMetaType(x: Name)(implicit ctx: Ctx): Boolean =
     ctx.lookup(x) match
-      case Some((_, vty)) =>
+      case Some((_, vty, _)) =>
         force(vty) match
           case VFlex(_, _) => true
           case _           => false
       case _ => false
 
-  private def checkType(tm: S.Ty)(implicit ctx: Ctx): Ty = check(tm, VType())
+  private def piUniv(a: VUniv, b: VUniv)(implicit ctx: Ctx): VUniv =
+    (force(a), force(b)) match
+      case (VMetaTy(), _) => unify(a, b); a
+      case (_, VMetaTy()) => unify(a, b); b
+      case (VTy(_), _) =>
+        unify(a, VTyV())
+        val vf = ctx.eval(newMeta(VVF()))
+        unify(b, VTy(vf))
+        VTyF()
+      case (_, VTy(_)) =>
+        unify(a, VTyV())
+        val vf = ctx.eval(newMeta(VVF()))
+        unify(b, VTy(vf))
+        VTyF()
+      case _ =>
+        error(
+          s"ambigious pi universe: ${ctx.pretty(a)} and ${ctx.pretty(b)}"
+        )
+
+  private def sigmaUniv(a: VUniv, b: VUniv)(implicit ctx: Ctx): VUniv =
+    (force(a), force(b)) match
+      case (VMetaTy(), _) => unify(a, b); a
+      case (_, VMetaTy()) => unify(a, b); b
+      case (VTy(_), _)    => unify(a, VTyV()); unify(b, VTyV()); a
+      case (_, VTy(_))    => unify(a, VTyV()); unify(b, VTyV()); b
+      case _ =>
+        error(
+          s"ambigious sigma universe: ${ctx.pretty(a)} and ${ctx.pretty(b)}"
+        )
+
+  private def checkType(tm: S.Ty)(implicit ctx: Ctx): (Ty, VUniv) =
+    val (ety, vt, vu) = infer(tm)
+    (ety, vt)
 
   private def check(tm: S.Tm, ty: Option[S.Ty])(implicit
       ctx: Ctx
-  ): (Tm, Ty, VTy) = ty match
+  ): (Tm, Ty, VTy, VUniv) = ty match
     case Some(ty) =>
       val ety = checkType(ty)
       val vty = ctx.eval(ety)
@@ -103,7 +135,7 @@ object Elaboration:
       val (etm, vty) = infer(tm)
       (etm, ctx.quote(vty), vty)
 
-  private def check(tm: S.Tm, ty: VTy)(implicit ctx: Ctx): Tm =
+  private def check(tm: S.Tm, ty: VTy, univ: VUniv)(implicit ctx: Ctx): Tm =
     if !tm.isPos then debug(s"check $tm : ${ctx.pretty(ty)}")
     (tm, force(ty)) match
       case (S.Pos(pos, tm), _) => check(tm, ty)(ctx.enter(pos))
@@ -169,29 +201,33 @@ object Elaboration:
           )
     go(ty, 0, Set.empty)
 
-  private def infer(tm: S.Tm)(implicit ctx: Ctx): (Tm, VTy) =
+  private def infer(tm: S.Tm)(implicit ctx: Ctx): (Tm, VTy, VUniv) =
     if !tm.isPos then debug(s"infer $tm")
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
       case S.Var(x) =>
         PrimName(x) match
-          case Some(p) => (Prim(p), primType(p))
+          case Some(p) =>
+            val (t, u) = primType(p)
+            (Prim(p), t, u)
           case None =>
             ctx.lookup(x) match
-              case Some((ix, ty)) => (Var(ix), ty)
+              case Some((ix, ty, u)) => (Var(ix), ty, u)
               case None =>
                 getGlobal(x) match
-                  case Some(e) => (Global(x), e.vty)
+                  case Some(e) => (Global(x), e.vty, e.vuniv)
                   case None    => error(s"undefined variable $x")
       case S.Let(x, t, v, b) =>
         val (ev, et, vt) = check(v, t)
         val (eb, rt) = infer(b)(ctx.define(x, vt, et, ctx.eval(ev), ev))
         (Let(x, et, ev, eb), rt)
       case S.Hole(ox) =>
-        val a = ctx.eval(newMeta(VType()))
+        val top = ctx.eval(newMeta(VMetaTy()))
+        val u = ctx.eval(newMeta(top))
+        val a = ctx.eval(newMeta(u))
         val t = newMeta(a)
-        ox.foreach(x => holes += x -> HoleEntry(ctx, t, a))
-        (t, a)
+        ox.foreach(x => holes += x -> HoleEntry(ctx, t, a, u))
+        (t, a, u)
       case S.Pi(x, i, a, b) =>
         val ea = checkType(a)
         val eb = checkType(b)(ctx.bind(x, ctx.eval(ea)))
@@ -201,9 +237,13 @@ object Elaboration:
         val eb = checkType(b)(ctx.bind(x, ctx.eval(ea)))
         (Sigma(x, ea, eb), VType())
       case S.Pair(fst, snd) =>
-        val (efst, fstty) = infer(fst)
-        val (esnd, sndty) = infer(snd)
-        (Pair(efst, esnd), VSigma(DontBind, fstty, CFun(_ => sndty)))
+        val (efst, fstty, u1) = infer(fst)
+        val (esnd, sndty, u2) = infer(snd)
+        (
+          Pair(efst, esnd),
+          VSigma(DontBind, fstty, CFun(_ => sndty)),
+          sigmaUniv(u1, u2)
+        )
       case S.Lam(x, S.ArgIcit(i), mty, b) =>
         val pty = mty match
           case Some(ty) =>

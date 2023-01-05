@@ -14,53 +14,88 @@ import scala.util.{Failure, Success, Try}
 object Unification:
   case class UnifyError(msg: String) extends Exception(msg)
 
-  private final case class PRen(
+  private final case class PSub(
       occ: Option[MetaId],
       dom: Lvl,
       cod: Lvl,
-      ren: IntMap[Lvl]
+      sub: IntMap[Val]
   ):
-    def lift: PRen = PRen(occ, dom + 1, cod + 1, ren + (cod.expose, dom))
-    def skip: PRen = PRen(occ, dom, cod + 1, ren)
+    def lift: PSub = PSub(occ, dom + 1, cod + 1, sub + (cod.expose, VVar(dom)))
+    def skip: PSub = PSub(occ, dom, cod + 1, sub)
 
-  private def invert(sp: Spine)(implicit gamma: Lvl): (PRen, Option[Pruning]) =
-    def go(sp: Spine): (Lvl, Set[Lvl], IntMap[Lvl], Pruning, Boolean) = sp match
+  private def invert(sp: Spine)(implicit gamma: Lvl): (PSub, Option[Pruning]) =
+    def go(sp: Spine): (Lvl, Set[Lvl], IntMap[Val], Pruning, Boolean) = sp match
       case SId => (lvl0, Set.empty, IntMap.empty, Nil, true)
       case SApp(f, a, i) =>
-        val (dom, domvars, ren, pr, isLinear) = go(f)
+        val (dom, domvars, sub, pr, isLinear) = go(f)
+        def invertVal(
+            x: Lvl,
+            invx: Val
+        ): (Lvl, Set[Lvl], IntMap[Val], Pruning, Boolean) =
+          if domvars.contains(x) then
+            (dom + 1, domvars, sub - x.expose, None :: pr, false)
+          else
+            (
+              dom + 1,
+              domvars + x,
+              sub + (x.expose -> invx),
+              Some(i) :: pr,
+              isLinear
+            )
         force(a) match
-          case VVar(x) =>
-            if domvars.contains(x) then
-              (dom + 1, domvars, ren - x.expose, None :: pr, false)
-            else
-              (
-                dom + 1,
-                domvars + x,
-                ren + (x.expose -> dom),
-                Some(i) :: pr,
-                isLinear
-              )
+          case VVar(x)         => invertVal(x, VVar(dom))
+          case VQuote(VVar(x)) => invertVal(x, VRigid(HVar(dom), SSplice(SId)))
+          case VRigid(HVar(x), SSplice(SId)) => invertVal(x, VQuote(VVar(dom)))
           case _ => throw UnifyError(s"non-var in meta spine")
       case _ => throw UnifyError(s"non-app in meta spine")
-    val (dom, _, ren, pr, isLinear) = go(sp)
-    (PRen(None, dom, gamma, ren), if isLinear then None else Some(pr))
+    val (dom, _, sub, pr, isLinear) = go(sp)
+    (PSub(None, dom, gamma, sub), if isLinear then None else Some(pr))
 
   private def pruneTy(p: RevPruning, a: VTy): Ty =
-    def go(p: Pruning, a: VTy)(implicit pren: PRen): Ty = (p, force(a)) match
-      case (Nil, a) => rename(a)
+    def go(p: Pruning, a: VTy)(implicit psub: PSub): Ty = (p, force(a)) match
+      case (Nil, a) => psubst(a)
       case (Some(_) :: p, VPi(x, i, a, b)) =>
-        Pi(x, i, rename(a), go(p, b(VVar(pren.cod)))(pren.lift))
-      case (None :: p, VPi(_, _, _, b)) => go(p, b(VVar(pren.cod)))(pren.skip)
+        Pi(x, i, psubst(a), go(p, b(VVar(psub.cod)))(psub.lift))
+      case (None :: p, VPi(_, _, _, b)) => go(p, b(VVar(psub.cod)))(psub.skip)
       case _                            => impossible()
-    go(p.expose, a)(PRen(None, lvl0, lvl0, IntMap.empty))
+    go(p.expose, a)(PSub(None, lvl0, lvl0, IntMap.empty))
 
   private def pruneMeta(p: Pruning, m: MetaId): MetaId =
-    val mty = getMetaUnsolved(m).ty
+    val u = getMetaUnsolved(m)
+    val mty = u.ty
     val prunedty = eval(pruneTy(revPruning(p), mty))(Nil)
-    val m2 = freshMeta(prunedty)
+    val m2 = freshMeta(prunedty, u.univ)
     val solution = eval(lams(mkLvl(p.size), mty, AppPruning(Meta(m2), p)))(Nil)
     solveMeta(m, solution)
     m2
+
+  /*
+  etaExpandMeta :: MetaVar -> IO Val
+  etaExpandMeta m = do
+    (!a, !s) <- readUnsolved m
+
+    let go :: Cxt -> VTy -> Stage -> IO Tm
+        go cxt a s = case force a of
+          VPi x i a b -> Lam x i (quote (lvl cxt) a) <$!> go (bind cxt x a s) (b $ VVar (lvl cxt)) s
+                                                    <*!> pure V0
+          VLift a     -> Quote <$!> go cxt a S0
+          a           -> freshMeta cxt a s
+
+    t <- go (emptyCxt (initialPos "")) a s
+    let val = eval [] t
+    modifyIORef' mcxt $ IM.insert (coerce m) (Solved val a s)
+    pure val
+   */
+
+  private def etaExpandMeta(m: MetaId): Val =
+    val uns = getMetaUnsolved(m)
+    val a = uns.ty
+    val s = uns.univ
+    def go(a: VTy, u: VUniv)(implicit ctx: Ctx): Tm = ???
+    val t = go(a, s)(Ctx.empty((0, 0)))
+    val v = eval(t)(Nil)
+    solveMeta(m, v)
+    v
 
   private enum PruneStatus:
     case OKRenaming
@@ -68,23 +103,23 @@ object Unification:
     case NeedsPruning
   import PruneStatus.*
 
-  private def pruneVFlex(m: MetaId, sp: Spine)(implicit pren: PRen): Tm =
+  private def pruneVFlex(m: MetaId, sp: Spine)(implicit psub: PSub): Tm =
     def go(sp: Spine): (List[(Option[Tm], Icit)], PruneStatus) = sp match
       case SId => (Nil, OKRenaming)
       case SApp(sp, t, i) =>
         val (sp2, status) = go(sp)
         force(t) match
           case VVar(x) =>
-            (pren.ren.get(x.expose), status) match
+            (psub.sub.get(x.expose), status) match
               case (Some(x), _) =>
-                ((Some(Var(x.toIx(pren.dom))), i) :: sp2, status)
+                ((Some(Var(x.toIx(psub.dom))), i) :: sp2, status)
               case (None, OKNonRenaming) =>
                 throw UnifyError(s"meta prune failure ?$m")
               case (None, _) => ((None, i) :: sp2, NeedsPruning)
           case t =>
             status match
               case NeedsPruning => throw UnifyError(s"meta prune failure ?$m")
-              case _            => ((Some(rename(t)), i) :: sp2, OKNonRenaming)
+              case _            => ((Some(psubst(t)), i) :: sp2, OKNonRenaming)
       case _ => throw UnifyError(s"non-app in meta spine of ?$m")
     val (sp2, status) = go(sp)
     val m2 = status match
@@ -92,31 +127,31 @@ object Unification:
       case _            => getMetaUnsolved(m); m
     sp2.foldRight(Meta(m2)) { case ((m, i), t) => m.fold(t)(App(t, _, i)) }
 
-  private def rename(v: Val)(implicit pren: PRen): Tm =
-    def goSp(t: Tm, sp: Spine)(implicit pren: PRen): Tm = sp match
+  private def psubst(v: Val)(implicit psub: PSub): Tm =
+    def goSp(t: Tm, sp: Spine)(implicit psub: PSub): Tm = sp match
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SProj(hd, proj)  => Proj(goSp(t, hd), proj)
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
-    def go(v: Val)(implicit pren: PRen): Tm = force(v, UnfoldMetas) match
+    def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
-        pren.ren.get(x.expose) match
-          case None     => throw UnifyError(s"escaping variable '$x")
-          case Some(x2) => goSp(Var(x2.toIx(pren.dom)), sp)
+        psub.sub.get(x.expose) match
+          case None    => throw UnifyError(s"escaping variable '$x")
+          case Some(w) => goSp(quote(w)(psub.dom), sp)
       case VRigid(HPrim(x), sp) => goSp(Prim(x), sp)
 
-      case VFlex(m, _) if pren.occ.contains(m) =>
+      case VFlex(m, _) if psub.occ.contains(m) =>
         throw UnifyError(s"occurs check failed ?$m")
       case VFlex(m, sp) => pruneVFlex(m, sp)
 
       case VGlobal(x, sp, _) => goSp(Global(x), sp)
 
-      case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(pren.cod)))(pren.lift))
-      case VLam(x, i, b)   => Lam(x, i, go(b(VVar(pren.cod)))(pren.lift))
+      case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
+      case VLam(x, i, b)   => Lam(x, i, go(b(VVar(psub.cod)))(psub.lift))
 
-      case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(pren.cod)))(pren.lift))
+      case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd) => Pair(go(fst), go(snd))
     go(v)
 
@@ -139,14 +174,14 @@ object Unification:
 
   private def solveWithPRen(
       m: MetaId,
-      data: (PRen, Option[Pruning]),
+      data: (PSub, Option[Pruning]),
       rhs: Val
   ): Unit =
-    val (pren, pruneNonLinear) = data
+    val (psub, pruneNonLinear) = data
     val mty = getMetaUnsolved(m).ty
     pruneNonLinear.foreach(pr => pruneTy(revPruning(pr), mty))
-    val rhs2 = rename(rhs)(pren.copy(occ = Some(m)))
-    val solution = lams(pren.dom, mty, rhs2)
+    val rhs2 = psubst(rhs)(psub.copy(occ = Some(m)))
+    val solution = lams(psub.dom, mty, rhs2)
     debug(s"solution ?$m = $solution")
     solveMeta(m, eval(solution)(Nil))
 

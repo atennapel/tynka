@@ -36,7 +36,10 @@ object Parser:
         ",",
         "->",
         "**",
-        "_"
+        "_",
+        "^",
+        "`",
+        "$"
       ),
       identStart = Predicate(_.isLetter),
       identLetter =
@@ -81,7 +84,10 @@ object Parser:
     private lazy val holeP: Parsley[Tm] = ("_" *> option(ident)).map(Hole.apply)
 
     private lazy val atom: Parsley[Tm] = positioned(
-      attempt("(" *> userOp.map(Var.apply) <* ")")
+      ("^" *> atom).map(Lift.apply)
+        <|> ("`" *> atom).map(Quote.apply)
+        <|> ("$" *> atom).map(Splice.apply)
+        <|> attempt("(" *> userOp.map(Var.apply) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
           .map(mkUnitPair)
