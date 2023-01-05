@@ -37,11 +37,13 @@ object Elaboration:
   private val holes: mutable.Map[Name, HoleEntry] = mutable.Map.empty
 
   // metas
-  private def newMeta(ty: VTy)(implicit ctx: Ctx): Tm =
-    val closed = ctx.closeVTy(ty)
-    val m = freshMeta(closed)
-    debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
-    AppPruning(Meta(m), ctx.pruning)
+  private def newMeta(ty: VTy)(implicit ctx: Ctx): Tm = force(ty) match
+    case VUnitType() => Prim(PUnit)
+    case _ =>
+      val closed = ctx.closeVTy(ty)
+      val m = freshMeta(closed)
+      debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
+      AppPruning(Meta(m), ctx.pruning)
 
   private enum InsertMode:
     case All
@@ -87,7 +89,7 @@ object Elaboration:
           case _           => false
       case _ => false
 
-  private def checkType(tm: S.Ty)(implicit ctx: Ctx): Ty = check(tm, VType)
+  private def checkType(tm: S.Ty)(implicit ctx: Ctx): Ty = check(tm, VType())
 
   private def check(tm: S.Tm, ty: Option[S.Ty])(implicit
       ctx: Ctx
@@ -171,31 +173,33 @@ object Elaboration:
     if !tm.isPos then debug(s"infer $tm")
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
-      case S.Type         => (Type, VType)
       case S.Var(x) =>
-        ctx.lookup(x) match
-          case Some((ix, ty)) => (Var(ix), ty)
+        PrimName(x) match
+          case Some(p) => (Prim(p), primType(p))
           case None =>
-            getGlobal(x) match
-              case Some(e) => (Global(x), e.vty)
-              case None    => error(s"undefined variable $x")
+            ctx.lookup(x) match
+              case Some((ix, ty)) => (Var(ix), ty)
+              case None =>
+                getGlobal(x) match
+                  case Some(e) => (Global(x), e.vty)
+                  case None    => error(s"undefined variable $x")
       case S.Let(x, t, v, b) =>
         val (ev, et, vt) = check(v, t)
         val (eb, rt) = infer(b)(ctx.define(x, vt, et, ctx.eval(ev), ev))
         (Let(x, et, ev, eb), rt)
       case S.Hole(ox) =>
-        val a = ctx.eval(newMeta(VType))
+        val a = ctx.eval(newMeta(VType()))
         val t = newMeta(a)
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, a))
         (t, a)
       case S.Pi(x, i, a, b) =>
         val ea = checkType(a)
         val eb = checkType(b)(ctx.bind(x, ctx.eval(ea)))
-        (Pi(x, i, ea, eb), VType)
+        (Pi(x, i, ea, eb), VType())
       case S.Sigma(x, a, b) =>
         val ea = checkType(a)
         val eb = checkType(b)(ctx.bind(x, ctx.eval(ea)))
-        (Sigma(x, ea, eb), VType)
+        (Sigma(x, ea, eb), VType())
       case S.Pair(fst, snd) =>
         val (efst, fstty) = infer(fst)
         val (esnd, sndty) = infer(snd)
@@ -206,7 +210,7 @@ object Elaboration:
             val ety = checkType(ty)
             ctx.eval(ety)
           case None =>
-            val m = newMeta(VType)
+            val m = newMeta(VType())
             ctx.eval(m)
         val ctx2 = ctx.bind(x, pty)
         val (eb, rty) = insert(infer(b)(ctx2))(ctx2)
@@ -228,9 +232,9 @@ object Elaboration:
             if icit != icit2 then error(s"icit mismatch: $tm")
             (pty, rty)
           case _ =>
-            val pty = ctx.eval(newMeta(VType))
+            val pty = ctx.eval(newMeta(VType()))
             val x = DoBind(Name("x"))
-            val rty = CClos(ctx.env, newMeta(VType)(ctx.bind(x, pty)))
+            val rty = CClos(ctx.env, newMeta(VType())(ctx.bind(x, pty)))
             unify(fty, VPi(x, icit, pty, rty))
             (pty, rty)
         val ea = check(a, pty)
@@ -245,15 +249,15 @@ object Elaboration:
           case (VSigma(_, _, sndty), S.Snd) =>
             (Proj(et, Snd), sndty(vfst(ctx.eval(et))))
           case (tty, S.Fst) =>
-            val pty = ctx.eval(newMeta(VType))
+            val pty = ctx.eval(newMeta(VType()))
             val rty =
-              CClos(ctx.env, newMeta(VType)(ctx.bind(DoBind(Name("x")), pty)))
+              CClos(ctx.env, newMeta(VType())(ctx.bind(DoBind(Name("x")), pty)))
             unify(tty, VSigma(DoBind(Name("x")), pty, rty))
             (Proj(et, Fst), pty)
           case (tty, S.Snd) =>
-            val pty = ctx.eval(newMeta(VType))
+            val pty = ctx.eval(newMeta(VType()))
             val rty =
-              CClos(ctx.env, newMeta(VType)(ctx.bind(DoBind(Name("x")), pty)))
+              CClos(ctx.env, newMeta(VType())(ctx.bind(DoBind(Name("x")), pty)))
             unify(tty, VSigma(DoBind(Name("x")), pty, rty))
             (Proj(et, Snd), rty(vfst(ctx.eval(et))))
 

@@ -23,7 +23,6 @@ object Parser:
       keywords = Set(
         "def",
         "let",
-        "Type",
         "if",
         "then",
         "else"
@@ -84,15 +83,15 @@ object Parser:
     private lazy val atom: Parsley[Tm] = positioned(
       attempt("(" *> userOp.map(Var.apply) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
-        <|> ("[" *> sepEndBy(tm, ",") <* "]").map(mkUnitPair)
+        <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
+          .map(mkUnitPair)
         <|> holeP
-        <|> ("Type" #> Type)
         <|> nat
         <|> ident.map(Var.apply)
     )
 
-    private val unittype = Var(Name("UnitType"))
-    private val unit = Var(Name("Unit"))
+    private val unittype = Var(Name("()"))
+    private val unit = Var(Name("[]"))
     private val hole = Hole(None)
     private val nZ = Var(Name("Z"))
     private val nS = Var(Name("S"))
@@ -101,7 +100,14 @@ object Parser:
       case Nil => unittype
       case ts  => ts.reduceRight(Pair.apply)
 
-    private def mkUnitPair(ts: List[Tm]): Tm = ts.foldRight(unit)(Pair.apply)
+    private val nil = Var(Name("Nil"))
+    private val cons = Var(Name("::"))
+    private def mkUnitPair(isList: Boolean, ts: List[Tm]): Tm =
+      if isList then
+        ts.foldRight(nil)((x, y) =>
+          App(App(cons, x, ArgIcit(Expl)), y, ArgIcit(Expl))
+        )
+      else ts.foldRight(unit)(Pair.apply)
 
     private lazy val nat: Parsley[Tm] = natural.map(n =>
       var c: Tm = nZ
@@ -168,24 +174,55 @@ object Parser:
     private lazy val lam: Parsley[Tm] =
       ("\\" *> many(lamParam) <~> "." *> tm).map(lamFromLamParams _)
 
-    private val ifVar: Tm = Var(Name("if_"))
-    private val ifIndVar: Tm = Var(Name("if-ind_"))
+    private val elimBoolVar: Tm = Var(Name("elimBool"))
+    private val tyName = Name("ty")
     private lazy val ifP: Parsley[Tm] =
       ("if" *> tm <~> option(":" *> tm) <~> "then" *> tm <~> "else" *> tm)
         .map { case (((c, ty), t), f) =>
-          App(
-            App(
+          ty match
+            // elimBool (let t = _; \_. t) t f c
+            case None =>
               App(
-                ty.map(App(ifIndVar, _, ArgIcit(Expl))).getOrElse(ifVar),
+                App(
+                  App(
+                    App(
+                      elimBoolVar,
+                      Let(
+                        tyName,
+                        None,
+                        hole,
+                        Lam(DontBind, ArgIcit(Expl), None, Var(tyName))
+                      ),
+                      ArgIcit(Expl)
+                    ),
+                    t,
+                    ArgIcit(Expl)
+                  ),
+                  f,
+                  ArgIcit(Expl)
+                ),
                 c,
                 ArgIcit(Expl)
-              ),
-              t,
-              ArgIcit(Expl)
-            ),
-            f,
-            ArgIcit(Expl)
-          )
+              )
+            // elimBool ty t f c
+            case Some(ty) =>
+              App(
+                App(
+                  App(
+                    App(
+                      elimBoolVar,
+                      ty,
+                      ArgIcit(Expl)
+                    ),
+                    t,
+                    ArgIcit(Expl)
+                  ),
+                  f,
+                  ArgIcit(Expl)
+                ),
+                c,
+                ArgIcit(Expl)
+              )
         }
 
     private lazy val app: Parsley[Tm] =

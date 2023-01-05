@@ -91,3 +91,49 @@ object Common:
   extension (id: MetaId)
     @targetName("exposeMetaId")
     inline def expose: Int = id
+
+  // primitives
+  enum PrimName:
+    case PType
+
+    case PVoid
+    case PAbsurd
+
+    case PUnitType
+    case PUnit
+
+    case PBool
+    case PTrue
+    case PFalse
+    case PElimBool
+
+    override def toString: String = this match
+      case PType => "Type"
+
+      case PVoid   => "Void"
+      case PAbsurd => "absurd"
+
+      case PUnitType => "()"
+      case PUnit     => "[]"
+
+      case PBool     => "Bool"
+      case PTrue     => "True"
+      case PFalse    => "False"
+      case PElimBool => "elimBool"
+  export PrimName.*
+  object PrimName:
+    def apply(x: Name): Option[PrimName] = x.expose match
+      case "Type" => Some(PType)
+
+      case "Void"   => Some(PVoid)
+      case "absurd" => Some(PAbsurd)
+
+      case "()" => Some(PUnitType)
+      case "[]" => Some(PUnit)
+
+      case "Bool"     => Some(PBool)
+      case "True"     => Some(PTrue)
+      case "False"    => Some(PFalse)
+      case "elimBool" => Some(PElimBool)
+
+      case _ => None

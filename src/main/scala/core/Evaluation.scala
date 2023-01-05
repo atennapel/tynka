@@ -27,6 +27,9 @@ object Evaluation:
       VGlobal(uri, SApp(sp, a, i), () => vapp(v(), a, i))
     case _ => impossible()
 
+  def vappE(f: Val, a: Val): Val = vapp(f, a, Expl)
+  def vappI(f: Val, a: Val): Val = vapp(f, a, Impl)
+
   def vproj(v: Val, p: ProjType): Val = v match
     case VPair(fst, snd) =>
       p match
@@ -42,14 +45,26 @@ object Evaluation:
   def vfst(v: Val): Val = vproj(v, Fst)
   def vsnd(v: Val): Val = vproj(v, Snd)
 
+  private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
+    (x, force(v), as) match
+      case (PElimBool, VTrue(), List(_, (t, _), _))  => t
+      case (PElimBool, VFalse(), List(_, _, (f, _))) => f
+
+      case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
+      case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
+      case (_, VGlobal(y, sp, v), _) =>
+        VGlobal(y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
+      case _ => impossible()
+
+  private def vspine(v: Val, sp: Spine): Val = sp match
+    case SId              => v
+    case SApp(sp, a, i)   => vapp(vspine(v, sp), a, i)
+    case SProj(sp, proj)  => vproj(vspine(v, sp), proj)
+    case SPrim(sp, x, as) => vprimelim(x, as, vspine(v, sp))
+
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _) => v
     case Unsolved(_)  => VMeta(id)
-
-  private def vspine(v: Val, sp: Spine): Val = sp match
-    case SId             => v
-    case SApp(sp, a, i)  => vapp(vspine(v, sp), a, i)
-    case SProj(sp, proj) => vproj(vspine(v, sp), proj)
 
   def vappPruning(v: Val, p: Pruning)(implicit env: Env): Val =
     (env, p) match
@@ -58,11 +73,40 @@ object Evaluation:
       case (_ :: env, None :: p)    => vappPruning(v, p)(env)
       case _                        => impossible()
 
+  private def vprim(x: PrimName): Val = x match
+    // \{A} v. absurd {A} v
+    case PAbsurd =>
+      vlamI("A", a => vlam("v", v => vprimelim(PAbsurd, List((a, Impl)), v)))
+    // \P t f b. elimBool P t f b
+    case PElimBool =>
+      vlam(
+        "P",
+        p =>
+          vlam(
+            "t",
+            t =>
+              vlam(
+                "f",
+                f =>
+                  vlam(
+                    "b",
+                    b =>
+                      vprimelim(
+                        PElimBool,
+                        List((p, Expl), (t, Expl), (f, Expl)),
+                        b
+                      )
+                  )
+              )
+          )
+      )
+    case _ => VPrim(x)
+
   def eval(tm: Tm)(implicit env: Env): Val = tm match
     case Var(ix)         => env(ix.expose)
     case Global(x)       => vglobal(x)
+    case Prim(x)         => vprim(x)
     case Let(_, _, v, b) => eval(b)(eval(v) :: env)
-    case Type            => VType
 
     case Pi(x, i, t, b) => VPi(x, i, eval(t), Clos(b))
     case Lam(x, i, b)   => VLam(x, i, Clos(b))
@@ -97,13 +141,18 @@ object Evaluation:
       case SId              => hd
       case SApp(fn, arg, i) => App(quote(hd, fn, unfold), quote(arg, unfold), i)
       case SProj(tm, proj)  => Proj(quote(hd, tm, unfold), proj)
+      case SPrim(sp, x, args) =>
+        val as = args.foldLeft(Prim(x)) { case (f, (a, i)) =>
+          App(f, quote(a, unfold), i)
+        }
+        App(as, quote(hd, sp, unfold), Expl)
 
   private def quote(hd: Head)(implicit l: Lvl): Tm = hd match
     case HVar(ix) => Var(ix.toIx)
+    case HPrim(x) => Prim(x)
 
   def quote(v: Val, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): Tm =
     force(v, unfold) match
-      case VType             => Type
       case VRigid(hd, sp)    => quote(quote(hd), sp, unfold)
       case VFlex(id, sp)     => quote(Meta(id), sp, unfold)
       case VGlobal(x, sp, _) => quote(Global(x), sp, unfold)
@@ -118,3 +167,28 @@ object Evaluation:
 
   def nf(tm: Tm)(implicit l: Lvl = lvl0, env: Env = Nil): Tm =
     quote(eval(tm), UnfoldAll)
+
+  def primType(x: PrimName): Val = x match
+    case PType => VType()
+
+    case PVoid => VType()
+    // {A : Type} -> Void -> A
+    case PAbsurd => vpiI("A", VType(), a => vpi("_", VVoid(), _ => a))
+
+    case PUnitType => VType()
+    case PUnit     => VUnitType()
+
+    case PBool  => VType()
+    case PTrue  => VBool()
+    case PFalse => VBool()
+    // (P : Bool -> Type) -> P True -> P False -> (b : bool) -> P b
+    case PElimBool =>
+      vpi(
+        "P",
+        vfun(VBool(), VType()),
+        p =>
+          vfun(
+            vappE(p, VTrue()),
+            vfun(vappE(p, VFalse()), vpi("b", VBool(), b => vappE(p, b)))
+          )
+      )

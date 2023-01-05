@@ -31,8 +31,8 @@ object Syntax:
   enum Tm:
     case Var(ix: Ix)
     case Global(name: Name)
+    case Prim(name: PrimName)
     case Let(name: Name, ty: Ty, value: Tm, body: Tm)
-    case Type
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, icit: Icit, body: Tm)
@@ -57,8 +57,8 @@ object Syntax:
     override def toString: String = this match
       case Var(x)          => s"'$x"
       case Global(x)       => s"$x"
+      case Prim(x)         => s"$x"
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
-      case Type            => "Type"
 
       case Pi(DontBind, Expl, t, b) => s"($t -> $b)"
       case Pi(x, i, t, b)           => s"(${i.wrap(s"$x : $t")} -> $b)"

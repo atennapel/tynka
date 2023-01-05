@@ -97,17 +97,20 @@ object Unification:
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SProj(hd, proj)  => Proj(goSp(t, hd), proj)
+      case SPrim(sp, x, args) =>
+        val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
+        App(as, goSp(t, sp), Expl)
     def go(v: Val)(implicit pren: PRen): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         pren.ren.get(x.expose) match
           case None     => throw UnifyError(s"escaping variable '$x")
           case Some(x2) => goSp(Var(x2.toIx(pren.dom)), sp)
+      case VRigid(HPrim(x), sp) => goSp(Prim(x), sp)
 
       case VFlex(m, _) if pren.occ.contains(m) =>
         throw UnifyError(s"occurs check failed ?$m")
       case VFlex(m, sp) => pruneVFlex(m, sp)
 
-      case VType             => Type
       case VGlobal(x, sp, _) => goSp(Global(x), sp)
 
       case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(pren.cod)))(pren.lift))
@@ -186,6 +189,9 @@ object Unification:
     case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
     case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
     case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
+    case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
+      unify(a, b)
+      as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
     case _ => throw UnifyError(s"spine mismatch")
 
   private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =
@@ -195,7 +201,6 @@ object Unification:
   def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
-      case (VType, VType) => ()
       case (VPi(_, i1, a1, b1), VPi(_, i2, a2, b2)) if i1 == i2 =>
         unify(a1, a2); unify(b1, b2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
@@ -216,6 +221,9 @@ object Unification:
 
       case (VFlex(m, sp), v) => solve(m, sp, v)
       case (v, VFlex(m, sp)) => solve(m, sp, v)
+
+      case (VUnit(), _) => ()
+      case (_, VUnit()) => ()
 
       case (VGlobal(x1, sp1, v1), VGlobal(x2, sp2, v2)) if x1 == x2 =>
         try unify(sp1, sp2)

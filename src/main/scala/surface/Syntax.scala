@@ -36,7 +36,6 @@ object Syntax:
   enum Tm:
     case Var(name: Name)
     case Let(name: Name, ty: Option[Ty], value: Tm, body: Tm)
-    case Type
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
@@ -58,7 +57,6 @@ object Syntax:
       case Var(x)                => s"$x"
       case Let(x, None, v, b)    => s"(let $x = $v; $b)"
       case Let(x, Some(t), v, b) => s"(let $x : $t = $v; $b)"
-      case Type                  => "Type"
 
       case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
       case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"

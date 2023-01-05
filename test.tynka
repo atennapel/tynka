@@ -1,13 +1,33 @@
+-- unit
+def indUnit (P : () -> Type) (p : P []) (x : ()) : P x = p
+
 -- booleans
-def Bool = (A : Type) -> A -> A -> A
-def True : Bool = \A t f. t
-def False : Bool = \A t f. f
-
-def if_ {A} (b : Bool) (t f : A) : A = b A t f
-
 def (!) b = if b then False else True
 def (&&) a b = if a then b else False
 def (||) a b = if a then True else b
+
+-- sums
+def (:+:) A B = (tag : Bool) ** if tag then A else B
+def Left {A B} (x : A) : A :+: B = (True, x)
+def Right {A B} (x : B) : A :+: B = (False, x)
+
+def elimSum {A B} (P : A :+: B -> Type)
+  (left : (x : A) -> P (Left x))
+  (right : (x : B) -> P (Right x))
+  (x : A :+: B) : P x =
+  (if x.tag : \tag. (x : if tag then A else B) -> P (tag, x) then
+    left else right) x.2
+
+def sum {A B R} (x : A :+: B) (l : A -> R) (r : B -> R) : R =
+  elimSum (\_. R) l r x
+
+-- maybe
+def Maybe A = () :+: A
+def Just {A} (x : A) : Maybe A = Right x
+def Nothing {A} : Maybe A = Left []
+
+def maybe {A R} (x : Maybe A) (n : R) (j : A -> R) : R =
+  sum x (\_. n) j
 
 -- natural numbers
 def Nat = (A : Type) -> A -> (A -> A) -> A
@@ -20,6 +40,18 @@ def (+) a b = foldNat a b S
 
 def test = 1 + 2
 
+-- lists
+def List A = (R : Type) -> R -> (A -> R -> R) -> R
+def Nil {A} : List A = \R n c. n
+def (::) {A} (hd : A) (tl : List A) : List A = \R n c. c hd (tl R n c)
+
+def foldr {A R} (n : R) (c : A -> R -> R) (l : List A) : R = l R n c
+
+def map {A B} (f : A -> B) (l : List A) : List B =
+  foldr Nil (\hd tl. f hd :: tl) l
+
+def test2 = map ((+) 1) #[1, 2, 3]
+
 -- identity
 def (~) {A} (x y : A) = (P : A -> Type) -> P x -> P y
 def Refl {A} {x : A} : x ~ x = \P x. x
@@ -28,3 +60,18 @@ def rewrite {A x y} (P : A -> Type) (p : x ~ y) (x : P x) : P y = p P x
 
 def p1 : 1 + 2 ~ 3 = Refl
 def p2 : !True ~ False = Refl
+def p3 {b} : !(!b) ~ b = if b : \b. !(!b) ~ b then Refl else Refl
+
+-- sigma module
+def NatS =
+  (Nat : Type) **
+  (Z : Nat) **
+  (S : Nat -> Nat) **
+  (fold : {A} (n : Nat) (z : A) (s : A -> A) -> A) **
+  ()
+def NatM : NatS = [Nat, Z, S, foldNat]
+
+def addM (m : NatS) (a : m.Nat) (b : m.Nat) : m.Nat =
+  m.fold a b m.S
+
+def testM = addM NatM 1 2

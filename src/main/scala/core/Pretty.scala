@@ -31,15 +31,16 @@ object Pretty:
     case rest => pretty(rest)
 
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =
-    def go(tm: Tm, ns: List[Name], first: Boolean = false): String = tm match
-      case Lam(x0, Expl, b) =>
-        val x = x0.fresh
-        s"${if first then "" else " "}$x${go(b, x.toName :: ns)}"
-      case Lam(x0, Impl, b) =>
-        val x = x0.fresh
-        s"${if first then "" else " "}{$x}${go(b, x.toName :: ns)}"
-      case rest => s". ${pretty(rest)(ns)}"
-    s"\\${go(tm, ns, true)}"
+    def go(tm: Tm, first: Boolean = false)(implicit ns: List[Name]): String =
+      tm match
+        case Lam(x0, Expl, b) =>
+          val x = x0.fresh
+          s"${if first then "" else " "}$x${go(b)(x.toName :: ns)}"
+        case Lam(x0, Impl, b) =>
+          val x = x0.fresh
+          s"${if first then "" else " "}{$x}${go(b)(x.toName :: ns)}"
+        case rest => s". ${pretty(rest)}"
+    s"\\${go(tm, true)}"
 
   @tailrec
   private def prettyParen(tm: Tm, app: Boolean = false)(implicit
@@ -48,7 +49,7 @@ object Pretty:
     tm match
       case Var(_)              => pretty(tm)
       case Global(_)           => pretty(tm)
-      case Type                => pretty(tm)
+      case Prim(_)             => pretty(tm)
       case Pair(_, _)          => pretty(tm)
       case Proj(_, _)          => pretty(tm)
       case Meta(_)             => pretty(tm)
@@ -67,7 +68,7 @@ object Pretty:
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Var(ix)   => s"${ns(ix.expose)}"
     case Global(x) => s"$x"
-    case Type      => "Type"
+    case Prim(x)   => s"$x"
     case Let(x0, t, v, b) =>
       val x = x0.fresh
       s"let $x : ${pretty(t)} = ${pretty(v)}; ${prettyLift(x, b)}"
@@ -77,8 +78,11 @@ object Pretty:
     case App(_, _, _)   => prettyApp(tm)
 
     case Sigma(_, _, _) => prettySigma(tm)
-    case Pair(_, _)     => s"(${flattenPair(tm).map(pretty).mkString(", ")})"
-    case Proj(t, p)     => s"${prettyParen(t)}$p"
+    case Pair(_, _) =>
+      val es = flattenPair(tm)
+      if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
+      else s"(${es.map(pretty).mkString(", ")})"
+    case Proj(t, p) => s"${prettyParen(t)}$p"
 
     case Wk(tm) => pretty(tm)(ns.tail)
 

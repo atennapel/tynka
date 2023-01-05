@@ -40,8 +40,8 @@ object Zonking:
   def zonk(t: Tm)(implicit l: Lvl, e: Env): Tm = t match
     case Var(ix)         => t
     case Global(x)       => t
+    case Prim(x)         => t
     case Let(x, t, v, b) => Let(x, zonk(t), zonk(v), zonkLift(b))
-    case Type            => t
 
     case Pi(x, i, t, b) => Pi(x, i, zonk(t), zonkLift(b))
     case Lam(x, i, b)   => Lam(x, i, zonkLift(b))
