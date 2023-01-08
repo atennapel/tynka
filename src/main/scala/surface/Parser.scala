@@ -96,7 +96,7 @@ object Parser:
         <|> holeP
         <|> nat
         <|> ("Meta" #> U(S1))
-        <|> ("Ty" *> atom).map(t => U(S0(t))) 
+        <|> ("Ty" *> atom).map(t => U(S0(t)))
         <|> ident.map(Var.apply)
     )
 
@@ -163,10 +163,11 @@ object Parser:
     private lazy val let: Parsley[Tm] =
       ("let" *> identOrOp <~> many(defParam) <~> option(
         ":" *> tm
-      ) <~> "=" *> tm <~> ";" *> tm)
-        .map { case ((((x, ps), ty), v), b) =>
+      ) <~> (option(":") <* "=").map(_.isEmpty) <~> tm <~> ";" *> tm)
+        .map { case (((((x, ps), ty), m), v), b) =>
           Let(
             x,
+            m,
             ty.map(typeFromParams(ps, _)),
             lamFromDefParams(ps, v, ty.isEmpty),
             b
@@ -199,6 +200,7 @@ object Parser:
                       elimBoolVar,
                       Let(
                         tyName,
+                        true,
                         None,
                         hole,
                         Lam(DontBind, ArgIcit(Expl), None, Var(tyName))
@@ -335,10 +337,11 @@ object Parser:
     private lazy val defP: Parsley[Def] =
       ("def" *> identOrOp <~> many(defParam) <~> option(
         ":" *> tm
-      ) <~> "=" *> tm)
-        .map { case (((x, ps), ty), v) =>
+      ) <~> (option(":") <* "=").map(_.isEmpty) <~> tm)
+        .map { case ((((x, ps), ty), m), v) =>
           DDef(
             x,
+            m,
             ty.map(typeFromParams(ps, _)),
             lamFromDefParams(ps, v, ty.isEmpty)
           )

@@ -9,11 +9,11 @@ object Syntax:
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: Name, ty: Option[Ty], value: Tm)
+    case DDef(name: Name, meta: Boolean, ty: Option[Ty], value: Tm)
 
     override def toString: String = this match
-      case DDef(x, Some(t), v) => s"def $x : $t = $v"
-      case DDef(x, None, v)    => s"def $x = $v"
+      case DDef(x, m, Some(t), v) => s"def $x : $t ${if m then "" else ":"}= $v"
+      case DDef(x, m, None, v)    => s"def $x ${if m then "" else ":"}= $v"
   export Def.*
 
   enum ArgInfo:
@@ -35,7 +35,7 @@ object Syntax:
   type Ty = Tm
   enum Tm:
     case Var(name: Name)
-    case Let(name: Name, ty: Option[Ty], value: Tm, body: Tm)
+    case Let(name: Name, meta: Boolean, ty: Option[Ty], value: Tm, body: Tm)
     case U(stage: Stage[Ty])
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
@@ -60,8 +60,9 @@ object Syntax:
 
     override def toString: String = this match
       case Var(x)                => s"$x"
-      case Let(x, None, v, b)    => s"(let $x = $v; $b)"
-      case Let(x, Some(t), v, b) => s"(let $x : $t = $v; $b)"
+      case Let(x, m, None, v, b) => s"(let $x ${if m then "" else ":"}= $v; $b)"
+      case Let(x, m, Some(t), v, b) =>
+        s"(let $x : $t ${if m then "" else ":"}= $v; $b)"
 
       case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
       case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"

@@ -84,6 +84,12 @@ object Elaboration:
       case Lam(_, Impl, _) => inp
       case _               => insertPi(inp)
 
+  private def insert(s: Stage[VTy], inp: (Tm, VTy))(implicit
+      ctx: Ctx
+  ): (Tm, VTy) =
+    val res = insert((inp._1, inp._2, s))
+    (res._1, res._2)
+
   // elaboration
   private def icitMatch(i1: S.ArgInfo, b: Bind, i2: Icit): Boolean = i1 match
     case S.ArgNamed(x) =>
@@ -99,36 +105,6 @@ object Elaboration:
           case VFlex(_, _) => true
           case _           => false
       case _ => false
-
-  private def piUniv(a: VUniv, b: VUniv)(implicit ctx: Ctx): VUniv =
-    (force(a), force(b)) match
-      case (VMetaTy(), _) => unify(a, b); a
-      case (_, VMetaTy()) => unify(a, b); b
-      case (VTy(_), _) =>
-        unify(a, VTyV())
-        val vf = ctx.eval(newMeta(VVF()))
-        unify(b, VTy(vf))
-        VTyF()
-      case (_, VTy(_)) =>
-        unify(a, VTyV())
-        val vf = ctx.eval(newMeta(VVF()))
-        unify(b, VTy(vf))
-        VTyF()
-      case _ =>
-        error(
-          s"ambigious pi universe: ${ctx.pretty(a)} and ${ctx.pretty(b)}"
-        )
-
-  private def sigmaUniv(a: VUniv, b: VUniv)(implicit ctx: Ctx): VUniv =
-    (force(a), force(b)) match
-      case (VMetaTy(), _) => unify(a, b); a
-      case (_, VMetaTy()) => unify(a, b); b
-      case (VTy(_), _)    => unify(a, VTyV()); unify(b, VTyV()); a
-      case (_, VTy(_))    => unify(a, VTyV()); unify(b, VTyV()); b
-      case _ =>
-        error(
-          s"ambigious sigma universe: ${ctx.pretty(a)} and ${ctx.pretty(b)}"
-        )
 
   private def checkType(tm: S.Ty)(implicit ctx: Ctx): (Ty, VUniv) =
     val (ety, vt, vu) = infer(tm)
