@@ -121,17 +121,19 @@ object Evaluation:
     case S0(vf) => S0(eval(vf))
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
-    case Var(ix)         => env(ix.expose)
-    case Global(x)       => vglobal(x)
-    case Prim(x)         => vprim(x)
-    case Let(_, _, v, b) => eval(b)(eval(v) :: env)
-    case U(s)            => VU(eval(s))
+    case Var(ix)            => env(ix.expose)
+    case Global(x)          => vglobal(x)
+    case Prim(x)            => vprim(x)
+    case Let(_, _, _, v, b) => eval(b)(eval(v) :: env)
+    case U(s)               => VU(eval(s))
 
-    case Pi(x, i, t, b) => VPi(x, i, eval(t), Clos(b))
-    case Lam(x, i, b)   => VLam(x, i, Clos(b))
-    case App(f, a, i)   => vapp(eval(f), eval(a), i)
+    case Pi(x, i, t, b)  => VPi(x, i, eval(t), Clos(b))
+    case FunTy(t, vf, b) => VFunTy(eval(t), eval(vf), eval(b))
+    case Lam(x, i, b)    => VLam(x, i, Clos(b))
+    case App(f, a, i)    => vapp(eval(f), eval(a), i)
 
     case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
+    case PairTy(t, b)   => VPairTy(eval(t), eval(b))
     case Pair(a, b)     => VPair(eval(a), eval(b))
     case Proj(t, p)     => vproj(eval(t), p)
 
@@ -191,10 +193,13 @@ object Evaluation:
       case VLam(x, i, b) => Lam(x, i, quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
         Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
+      case VFunTy(t, vf, b) =>
+        FunTy(quote(t, unfold), quote(vf, unfold), quote(b, unfold))
 
       case VPair(fst, snd) => Pair(quote(fst, unfold), quote(snd, unfold))
       case VSigma(x, t, b) =>
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
+      case VPairTy(t, b) => PairTy(quote(t, unfold), quote(b, unfold))
 
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => Quote(quote(t, unfold))

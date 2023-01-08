@@ -46,17 +46,19 @@ object Zonking:
     case S0(vf) => S0(zonk(vf))
 
   def zonk(t: Tm)(implicit l: Lvl, e: Env): Tm = t match
-    case Var(ix)         => t
-    case Global(x)       => t
-    case Prim(x)         => t
-    case Let(x, t, v, b) => Let(x, zonk(t), zonk(v), zonkLift(b))
-    case U(s)            => U(zonk(s))
+    case Var(ix)            => t
+    case Global(x)          => t
+    case Prim(x)            => t
+    case Let(x, t, s, v, b) => Let(x, zonk(t), zonk(s), zonk(v), zonkLift(b))
+    case U(s)               => U(zonk(s))
 
-    case Pi(x, i, t, b) => Pi(x, i, zonk(t), zonkLift(b))
-    case Lam(x, i, b)   => Lam(x, i, zonkLift(b))
-    case App(_, _, _)   => quoteVT(zonkSp(t))
+    case Pi(x, i, t, b)  => Pi(x, i, zonk(t), zonkLift(b))
+    case FunTy(t, vf, b) => FunTy(zonk(t), zonk(vf), zonk(b))
+    case Lam(x, i, b)    => Lam(x, i, zonkLift(b))
+    case App(_, _, _)    => quoteVT(zonkSp(t))
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
+    case PairTy(t, b)   => PairTy(zonk(t), zonk(b))
     case Pair(a, b)     => Pair(zonk(a), zonk(b))
     case Proj(_, _)     => quoteVT(zonkSp(t))
 

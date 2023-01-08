@@ -323,7 +323,7 @@ object Elaboration:
   def elaborate(d: S.Def): Def =
     debug(s"elaborate $d")
     d match
-      case S.DDef(x, t, v) =>
+      case S.DDef(x, t, _, v) =>
         implicit val ctx: Ctx = Ctx.empty()
         if getGlobal(x).isDefined then error(s"duplicate global $x")
         val (etm, ety) = elaborate(v, t)

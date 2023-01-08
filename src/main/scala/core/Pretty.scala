@@ -17,7 +17,8 @@ object Pretty:
     case Sigma(DoBind(x0), t, b) =>
       val x = x0.fresh
       s"($x : ${pretty(t)}) ** ${prettySigma(b)(x :: ns)}"
-    case rest => pretty(rest)
+    case PairTy(t, b) => s"(${prettyParen(t, true)} ** ${prettySigma(b)})"
+    case rest         => pretty(rest)
 
   private def prettyPi(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Pi(DontBind, Expl, t, b) =>
@@ -28,7 +29,8 @@ object Pretty:
     case Pi(x0, Impl, t, b) =>
       val x = x0.fresh
       s"{$x : ${pretty(t)}} -> ${prettyPi(b)(x.toName :: ns)}"
-    case rest => pretty(rest)
+    case FunTy(t, _, b) => s"(${prettyParen(t, true)} -> ${prettyPi(b)})"
+    case rest           => pretty(rest)
 
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =
     def go(tm: Tm, first: Boolean = false)(implicit ns: List[Name]): String =
@@ -74,17 +76,22 @@ object Pretty:
     case Var(ix)   => s"${ns(ix.expose)}"
     case Global(x) => s"$x"
     case Prim(x)   => s"$x"
-    case Let(x0, t, v, b) =>
+    case Let(x0, t, s, v, b) =>
       val x = x0.fresh
-      s"let $x : ${pretty(t)} = ${pretty(v)}; ${prettyLift(x, b)}"
+      val ss = s match
+        case S1    => ""
+        case S0(_) => ":"
+      s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
     case U(S1)     => s"Meta"
     case U(S0(vf)) => s"Ty ${prettyParen(vf)}"
 
     case Pi(_, _, _, _) => prettyPi(tm)
+    case FunTy(_, _, _) => prettyPi(tm)
     case Lam(_, _, _)   => prettyLam(tm)
     case App(_, _, _)   => prettyApp(tm)
 
     case Sigma(_, _, _) => prettySigma(tm)
+    case PairTy(_, _)   => prettySigma(tm)
     case Pair(_, _) =>
       val es = flattenPair(tm)
       if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
@@ -101,6 +108,8 @@ object Pretty:
     case AppPruning(f, _) => s"?*${prettyParen(f)}"
 
   def pretty(d: Def): String = d match
-    case DDef(x, t, v) => s"def $x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
+    case DDef(x, t, S1, v) => s"def $x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
+    case DDef(x, t, S0(_), v) =>
+      s"def $x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
 
   def pretty(ds: Defs): String = ds.toList.map(pretty).mkString("\n")

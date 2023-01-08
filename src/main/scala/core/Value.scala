@@ -45,9 +45,11 @@ object Value:
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, body: Clos)
+    case VFunTy(ty: VTy, vf: VTy, rt: VTy)
 
     case VSigma(name: Bind, ty: VTy, body: Clos)
     case VPair(fst: Val, snd: Val)
+    case VPairTy(fst: VTy, snd: VTy)
 
     case VLift(vf: VTy, tm: Val)
     case VQuote(tm: Val)
