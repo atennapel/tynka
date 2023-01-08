@@ -25,6 +25,10 @@ object Value:
       case SProj(sp, _)    => 1 + sp.size
       case SSplice(sp)     => 1 + sp.size
       case SPrim(sp, _, _) => 1 + sp.size
+
+    def isEmpty: Boolean = this match
+      case SId => true
+      case _   => false
   export Spine.*
 
   enum Head:
@@ -33,11 +37,11 @@ object Value:
   export Head.*
 
   type VTy = Val
-  type VUniv = Val
   enum Val:
     case VRigid(head: Head, spine: Spine)
     case VFlex(id: MetaId, spine: Spine)
     case VGlobal(name: Name, spine: Spine, value: () => Val)
+    case VU(stage: Stage[VTy])
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, body: Clos)
@@ -78,10 +82,10 @@ object Value:
       case _                     => None
 
   object VMetaTy:
-    def apply(): Val = VRigid(HPrim(PMeta), SId)
+    def apply(): Val = VU(S1)
     def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PMeta), SId) => true
-      case _                         => false
+      case VU(S1) => true
+      case _      => false
 
   object VVF:
     def apply(): Val = VRigid(HPrim(PVF), SId)
@@ -102,22 +106,22 @@ object Value:
       case _                      => false
 
   object VTy:
-    def apply(v: Val): Val = VRigid(HPrim(PTy), SApp(SId, v, Expl))
+    def apply(v: Val): Val = VU(S0(v))
     def unapply(value: Val): Option[Val] = value match
-      case VRigid(HPrim(PTy), SApp(SId, v, Expl)) => Some(v)
-      case _                                      => None
+      case VU(S0(v)) => Some(v)
+      case _         => None
 
   object VTyV:
-    def apply(): Val = VRigid(HPrim(PTy), SApp(SId, VV(), Expl))
+    def apply(): Val = VU(S0(VV()))
     def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PTy), SApp(SId, VV(), Expl)) => true
-      case _                                         => false
+      case VU(S0(VV())) => true
+      case _            => false
 
   object VTyF:
-    def apply(): Val = VRigid(HPrim(PTy), SApp(SId, VF(), Expl))
+    def apply(): Val = VU(S0(VF()))
     def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PTy), SApp(SId, VF(), Expl)) => true
-      case _                                         => false
+      case VU(S0(VF())) => true
+      case _            => false
 
   object VVoid:
     def apply(): Val = VRigid(HPrim(PVoid), SId)

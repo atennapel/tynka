@@ -92,13 +92,17 @@ object Common:
     @targetName("exposeMetaId")
     inline def expose: Int = id
 
+  // stages
+  enum Stage[+VF]:
+    case S0(vf: VF)
+    case S1 extends Stage[Nothing]
+  export Stage.*
+
   // primitives
   enum PrimName:
-    case PMeta
     case PVF
     case PV
     case PF
-    case PTy
 
     case PVoid
     // case PAbsurd
@@ -112,11 +116,9 @@ object Common:
     // case PElimBool
 
     override def toString: String = this match
-      case PMeta => "Meta"
-      case PVF   => "VF"
-      case PV    => "V"
-      case PF    => "F"
-      case PTy   => "Ty"
+      case PVF => "VF"
+      case PV  => "V"
+      case PF  => "F"
 
       case PVoid => "Void"
       // case PAbsurd => "absurd"
@@ -131,11 +133,9 @@ object Common:
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
-      case "Meta" => Some(PMeta)
-      case "VF"   => Some(PVF)
-      case "V"    => Some(PV)
-      case "F"    => Some(PF)
-      case "Ty"   => Some(PTy)
+      case "VF" => Some(PVF)
+      case "V"  => Some(PV)
+      case "F"  => Some(PF)
 
       case "Void" => Some(PVoid)
       // case "absurd" => Some(PAbsurd)

@@ -25,7 +25,9 @@ object Parser:
         "let",
         "if",
         "then",
-        "else"
+        "else",
+        "Meta",
+        "Ty"
       ),
       operators = Set(
         "=",
@@ -93,6 +95,8 @@ object Parser:
           .map(mkUnitPair)
         <|> holeP
         <|> nat
+        <|> ("Meta" #> U(S1))
+        <|> ("Ty" *> atom).map(t => U(S0(t))) 
         <|> ident.map(Var.apply)
     )
 

@@ -36,6 +36,7 @@ object Syntax:
   enum Tm:
     case Var(name: Name)
     case Let(name: Name, ty: Option[Ty], value: Tm, body: Tm)
+    case U(stage: Stage[Ty])
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)

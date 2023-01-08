@@ -58,6 +58,8 @@ object Pretty:
       case Splice(_)           => pretty(tm)
       case AppPruning(_, _)    => pretty(tm)
       case App(_, _, _) if app => pretty(tm)
+      case U(S1)               => pretty(tm)
+      case U(S0(_)) if app     => pretty(tm)
       case Wk(tm)              => prettyParen(tm, app)(ns.tail)
       case _                   => s"(${pretty(tm)})"
 
@@ -75,6 +77,8 @@ object Pretty:
     case Let(x0, t, v, b) =>
       val x = x0.fresh
       s"let $x : ${pretty(t)} = ${pretty(v)}; ${prettyLift(x, b)}"
+    case U(S1)     => s"Meta"
+    case U(S0(vf)) => s"Ty ${prettyParen(vf)}"
 
     case Pi(_, _, _, _) => prettyPi(tm)
     case Lam(_, _, _)   => prettyLam(tm)

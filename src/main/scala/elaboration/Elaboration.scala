@@ -9,7 +9,7 @@ import core.Evaluation.*
 import core.Unification.{UnifyError, unify as unify0}
 import core.Metas.*
 import core.Globals.*
-import core.Ctx
+import Ctx.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -33,15 +33,22 @@ object Elaboration:
         )
 
   // holes
-  private final case class HoleEntry(ctx: Ctx, tm: Tm, ty: VTy, univ: VUniv)
+  private final case class HoleEntry(
+      ctx: Ctx,
+      tm: Tm,
+      ty: VTy,
+      stage: Stage[VTy]
+  )
   private val holes: mutable.Map[Name, HoleEntry] = mutable.Map.empty
 
   // metas
-  private def newMeta(ty: VTy)(implicit ctx: Ctx): Tm = force(ty) match
+  private def newMeta(ty: VTy, s: Stage[VTy])(implicit ctx: Ctx): Tm = force(
+    ty
+  ) match
     case VUnitType() => Prim(PUnit)
     case _ =>
       val closed = ctx.closeVTy(ty)
-      val m = freshMeta(closed)
+      val m = freshMeta(closed, s)
       debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
       AppPruning(Meta(m), ctx.pruning)
 
@@ -50,25 +57,29 @@ object Elaboration:
     case Until(name: Name)
   import InsertMode.*
 
-  private def insertPi(inp: (Tm, VTy), mode: InsertMode = All)(implicit
-      ctx: Ctx
-  ): (Tm, VTy) =
+  private def insertPi(inp: (Tm, VTy, Stage[VTy]), mode: InsertMode = All)(
+      implicit ctx: Ctx
+  ): (Tm, VTy, Stage[VTy]) =
     @tailrec
-    def go(tm: Tm, ty: VTy): (Tm, VTy) = force(ty) match
+    def go(tm: Tm, ty: VTy, st: Stage[VTy]): (Tm, VTy, Stage[VTy]) = force(
+      ty
+    ) match
       case VPi(y, Impl, a, b) =>
         mode match
-          case Until(x) if x == y => (tm, ty)
+          case Until(x) if x == y => (tm, ty, st)
           case _ =>
-            val m = newMeta(a)
+            val m = newMeta(a, st)
             val mv = ctx.eval(m)
-            go(App(tm, m, Impl), b(mv))
+            go(App(tm, m, Impl), b(mv), st)
       case _ =>
         mode match
           case Until(x) => error(s"no implicit pi found with parameter $x")
-          case _        => (tm, ty)
-    go(inp._1, inp._2)
+          case _        => (tm, ty, st)
+    go(inp._1, inp._2, inp._3)
 
-  private def insert(inp: (Tm, VTy))(implicit ctx: Ctx): (Tm, VTy) =
+  private def insert(inp: (Tm, VTy, Stage[VTy]))(implicit
+      ctx: Ctx
+  ): (Tm, VTy, Stage[VTy]) =
     inp._1 match
       case Lam(_, Impl, _) => inp
       case _               => insertPi(inp)

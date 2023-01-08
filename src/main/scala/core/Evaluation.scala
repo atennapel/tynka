@@ -69,7 +69,7 @@ object Evaluation:
         VGlobal(y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
       case _ => impossible()
 
-  private def vspine(v: Val, sp: Spine): Val = sp match
+  def vspine(v: Val, sp: Spine): Val = sp match
     case SId              => v
     case SApp(sp, a, i)   => vapp(vspine(v, sp), a, i)
     case SSplice(sp)      => vsplice(vspine(v, sp))
@@ -116,11 +116,16 @@ object Evaluation:
       )*/
     case _ => VPrim(x)
 
+  def eval(s: Stage[Ty])(implicit env: Env): Stage[VTy] = s match
+    case S1     => S1
+    case S0(vf) => S0(eval(vf))
+
   def eval(tm: Tm)(implicit env: Env): Val = tm match
     case Var(ix)         => env(ix.expose)
     case Global(x)       => vglobal(x)
     case Prim(x)         => vprim(x)
     case Let(_, _, v, b) => eval(b)(eval(v) :: env)
+    case U(s)            => VU(eval(s))
 
     case Pi(x, i, t, b) => VPi(x, i, eval(t), Clos(b))
     case Lam(x, i, b)   => VLam(x, i, Clos(b))
@@ -170,11 +175,18 @@ object Evaluation:
     case HVar(ix) => Var(ix.toIx)
     case HPrim(x) => Prim(x)
 
+  def quoteS(s: Stage[VTy], unfold: Unfold = UnfoldMetas)(implicit
+      l: Lvl
+  ): Stage[Ty] = s match
+    case S1     => S1
+    case S0(vf) => S0(quote(vf, unfold))
+
   def quote(v: Val, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): Tm =
     force(v, unfold) match
       case VRigid(hd, sp)    => quote(quote(hd), sp, unfold)
       case VFlex(id, sp)     => quote(Meta(id), sp, unfold)
       case VGlobal(x, sp, _) => quote(Global(x), sp, unfold)
+      case VU(s)             => U(quoteS(s, unfold))
 
       case VLam(x, i, b) => Lam(x, i, quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
@@ -190,24 +202,21 @@ object Evaluation:
   def nf(tm: Tm)(implicit l: Lvl = lvl0, env: Env = Nil): Tm =
     quote(eval(tm), UnfoldAll)
 
-  def primType(x: PrimName): (VTy, VUniv) = x match
-    case PMeta => (VMetaTy(), VMetaTy())
-    case PVF   => (VMetaTy(), VMetaTy())
-    case PV    => (VVF(), VMetaTy())
-    case PF    => (VVF(), VMetaTy())
-    // VF -> Meta
-    case PTy => (vfun(VVF(), VMetaTy()), VMetaTy())
+  def primType(x: PrimName): (VTy, Stage[VTy]) = x match
+    case PVF => (VMetaTy(), S1)
+    case PV  => (VVF(), S1)
+    case PF  => (VVF(), S1)
 
-    case PVoid => (VTyV(), VMetaTy())
+    case PVoid => (VTyV(), S1)
     // {A : Type} -> Void -> A
     // case PAbsurd => vpiI("A", VType(), a => vpi("_", VVoid(), _ => a))
 
-    case PUnitType => (VTyV(), VMetaTy())
-    case PUnit     => (VUnitType(), VTyV())
+    case PUnitType => (VTyV(), S1)
+    case PUnit     => (VUnitType(), S0(VV()))
 
-    case PBool  => (VTyV(), VMetaTy())
-    case PTrue  => (VBool(), VTyV())
-    case PFalse => (VBool(), VTyV())
+    case PBool  => (VTyV(), S1)
+    case PTrue  => (VBool(), S0(VV()))
+    case PFalse => (VBool(), S0(VV()))
     // (P : Bool -> Type) -> P True -> P False -> (b : bool) -> P b
     /*case PElimBool =>
       vpi(

@@ -1,6 +1,6 @@
 package core
 
-import common.Common.Name
+import common.Common.*
 import Syntax.*
 import Value.*
 
@@ -13,10 +13,10 @@ object Globals:
       name: Name,
       tm: Tm,
       ty: Ty,
-      univ: Univ,
+      stage: Stage[Ty],
       value: Val,
       vty: VTy,
-      vuniv: VUniv
+      vstage: Stage[VTy]
   )
 
   def setGlobal(entry: GlobalEntry): Unit = map.put(entry.name, entry)
