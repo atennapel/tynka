@@ -58,10 +58,7 @@ object Unification:
       case (Nil, a) => psubst(a)
       case (Some(_) :: p, VPi(x, i, a, b)) =>
         Pi(x, i, psubst(a), go(p, b(VVar(psub.cod)))(psub.lift))
-      case (Some(_) :: p, VFunTy(a, vf, b)) =>
-        FunTy(psubst(a), psubst(vf), go(p, b))
       case (None :: p, VPi(_, _, _, b)) => go(p, b(VVar(psub.cod)))(psub.skip)
-      case (None :: p, VFunTy(_, _, b)) => go(p, b)
       case _                            => impossible()
     go(p.expose, a)(PSub(None, lvl0, lvl0, IntMap.empty))
 
@@ -89,19 +86,6 @@ object Unification:
               lvl + 1,
               Some(Expl) :: p,
               Bound(locals, x, quote(a)(lvl), quoteS(s)(lvl))
-            )
-          )
-        case VFunTy(a, vf, b) =>
-          val x = DoBind(Name(s"x$lvl"))
-          Lam(
-            x,
-            Expl,
-            go(
-              b,
-              S0(vf),
-              lvl + 1,
-              Some(Expl) :: p,
-              Bound(locals, x, quote(a)(lvl), quoteS(S0(VV()))(lvl))
             )
           )
         case VLift(vf, a) => Quote(go(a, S0(vf), lvl, p, locals))
@@ -218,9 +202,6 @@ object Unification:
               case DontBind => DoBind(Name(s"x$l2"))
               case _        => x
             Lam(y, i, go(b(VVar(l2)), l2 + 1))
-          case VFunTy(_, _, b) =>
-            val y = DoBind(Name(s"x$l2"))
-            Lam(y, Expl, go(b, l2 + 1))
           case _ => impossible()
     go(a, lvl0)
 

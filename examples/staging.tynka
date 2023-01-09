@@ -1,2 +1,1 @@
-def id {vf} {A : Ty vf} (x : A) : A = x 
-def test := id True
+def a (v : Void) : Bool := absurd v

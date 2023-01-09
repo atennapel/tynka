@@ -1,1 +1,1 @@
-def f (v : Void) : Bool := $(absurd {V} {Bool} `v)
+def f (v : Void) : Bool := absurd v

@@ -11,7 +11,7 @@ enum Locals:
   def closeTy(b: Ty): Ty = this match
     case Empty                   => b
     case Bound(ls, x, a, S1)     => ls.closeTy(Pi(x, Expl, a, b))
-    case Bound(ls, x, a, S0(vf)) => ls.closeTy(FunTy(a, vf, b))
+    case Bound(ls, x, a, S0(vf)) => ls.closeTy(Pi(x, Expl, a, b))
     case Defined(ls, x, a, s, v) => ls.closeTy(Let(x, a, s, v, b))
 
   def names: List[Name] = this match
