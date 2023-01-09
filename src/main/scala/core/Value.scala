@@ -64,6 +64,8 @@ object Value:
   def vpiI(x: String, t: Val, f: Val => Val): Val =
     VPi(name(x), Impl, t, CFun(f))
   def vfun(a: Val, b: Val): Val = VPi(DontBind, Expl, a, CFun(_ => b))
+  def vsigma(x: String, t: Val, f: Val => Val): Val =
+    VSigma(name(x), t, CFun(f))
 
   object VVar:
     def apply(lvl: Lvl): Val = VRigid(HVar(lvl), SId)

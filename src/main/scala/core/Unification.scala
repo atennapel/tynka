@@ -184,6 +184,7 @@ object Unification:
           case None    => throw UnifyError(s"escaping variable '$x")
           case Some(w) => goSp(quote(w)(psub.dom), sp)
       case VRigid(HPrim(x), sp) => goSp(Prim(x), sp)
+      case VU(s)                => U(s.map(go))
 
       case VFlex(m, _) if psub.occ.contains(m) =>
         throw UnifyError(s"occurs check failed ?$m")
@@ -195,11 +196,16 @@ object Unification:
 
       case VGlobal(x, sp, _) => goSp(Global(x), sp)
 
-      case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
-      case VLam(x, i, b)   => Lam(x, i, go(b(VVar(psub.cod)))(psub.lift))
+      case VPi(x, i, t, b)  => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
+      case VLam(x, i, b)    => Lam(x, i, go(b(VVar(psub.cod)))(psub.lift))
+      case VFunTy(t, vf, b) => FunTy(go(t), go(vf), go(b))
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd) => Pair(go(fst), go(snd))
+      case VPairTy(fst, snd) => PairTy(go(fst), go(snd))
+
+      case VLift(vf, t) => Lift(go(vf), go(t))
+      case VQuote(t)    => Quote(go(t))
     go(v)
 
   private def lams(l: Lvl, a: VTy, t: Tm): Tm =
@@ -337,8 +343,11 @@ object Unification:
         unify(a1, a2); unify(b1, b2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
         unify(a1, a2); unify(b1, b2)
-      case (VLam(_, _, b1), VLam(_, _, b2)) => unify(b1, b2)
-      case (VPair(a1, b1), VPair(a2, b2))   => unify(a1, a2); unify(b1, b2)
+      case (VFunTy(a1, vf1, b1), VFunTy(a2, vf2, b2)) =>
+        unify(a1, a2); unify(vf1, vf2); unify(b1, b2)
+      case (VPairTy(a1, b1), VPairTy(a2, b2)) => unify(a1, a2); unify(b1, b2)
+      case (VLam(_, _, b1), VLam(_, _, b2))   => unify(b1, b2)
+      case (VPair(a1, b1), VPair(a2, b2))     => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>

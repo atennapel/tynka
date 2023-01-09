@@ -76,12 +76,14 @@ final case class Ctx(
   def quote(s: Stage[VTy]): Stage[Ty] = quoteS0(s)(lvl)
   def zonk(t: Tm): Tm = zonk0(t)(lvl, env)
   def zonk(v: Val): Tm = zonk(quote(v))
+  def zonk(v: Stage[Ty]): Stage[Ty] = zonk0(v)(lvl, env)
 
   def close(v: Val): Clos = Clos(quote0(v)(lvl + 1))(env)
   def inst(c: Clos): Val = c(VVar(lvl))
 
   def pretty(tm: Tm): String = pretty0(zonk(tm))(names)
   def pretty(v: Val): String = pretty(quote(v))
+  def pretty(s: Stage[VTy]): String = pretty0(zonk(quote(s)))(names)
 
   def closeTy(b: Ty): Ty = locals.closeTy(b)
   def closeVTy(b: VTy): VTy = eval0(closeTy(quote(b)))(Nil)

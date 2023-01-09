@@ -96,6 +96,10 @@ object Common:
   enum Stage[+VF]:
     case S0(vf: VF)
     case S1 extends Stage[Nothing]
+
+    def map[R](f: VF => R): Stage[R] = this match
+      case S0(x) => S0(f(x))
+      case S1    => S1
   export Stage.*
 
   // primitives

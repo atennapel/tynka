@@ -63,6 +63,8 @@ object Syntax:
       case Let(x, m, None, v, b) => s"(let $x ${if m then "" else ":"}= $v; $b)"
       case Let(x, m, Some(t), v, b) =>
         s"(let $x : $t ${if m then "" else ":"}= $v; $b)"
+      case U(S0(vf)) => s"(Ty $vf)"
+      case U(S1)     => "Meta"
 
       case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
       case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"

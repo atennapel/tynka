@@ -1,0 +1,60 @@
+-- booleans
+def CBool = (A : Meta) -> A -> A -> A
+def CTrue : CBool = \A t f. t
+def CFalse : CBool = \A t f. f
+
+def cond {A} (b : CBool) (t : A) (f : A) : A = b A t f
+
+def (!) b = cond b CFalse CTrue
+def (&&) a b = cond a b CFalse
+def (||) a b = cond a CTrue b
+
+-- natural numbers
+def Nat = (A : Meta) -> A -> (A -> A) -> A
+def Z : Nat = \A z s. z
+def S (n : Nat) : Nat = \A z s. s (n A z s)
+
+def foldNat {A} (n : Nat) (z : A) (s : A -> A) : A = n A z s
+
+def (+) a b = foldNat a b S
+
+def test = 1 + 2
+
+-- lists
+def List A = (R : Meta) -> R -> (A -> R -> R) -> R
+def Nil {A} : List A = \R n c. n
+def (::) {A} (hd : A) (tl : List A) : List A = \R n c. c hd (tl R n c)
+
+def foldr {A R} (n : R) (c : A -> R -> R) (l : List A) : R = l R n c
+
+def map {A B} (f : A -> B) (l : List A) : List B =
+  foldr Nil (\hd tl. f hd :: tl) l
+
+def test2 = map ((+) 1) #[1, 2, 3]
+
+-- identity
+def (~) {A} (x y : A) = (P : A -> Meta) -> P x -> P y
+def Refl {A} {x : A} : x ~ x = \P x. x
+
+def rewrite {A x y} (P : A -> Meta) (p : x ~ y) (x : P x) : P y = p P x
+
+def p1 : 1 + 2 ~ 3 = Refl
+def p2 : !CTrue ~ CFalse = Refl
+
+-- unit
+def UnitType = (A : Meta) -> A -> A
+def Unit : UnitType = \A x. x
+
+-- sigma module
+def NatS =
+  (Nat : Meta) **
+  (Z : Nat) **
+  (S : Nat -> Nat) **
+  (fold : {A} (n : Nat) (z : A) (s : A -> A) -> A) **
+  UnitType
+def NatM : NatS = (Nat, Z, S, foldNat, Unit)
+
+def addM (m : NatS) (a : m.Nat) (b : m.Nat) : m.Nat =
+  m.fold a b m.S
+
+def testM = addM NatM 1 2

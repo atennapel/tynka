@@ -72,6 +72,10 @@ object Pretty:
   private def prettyLift(x: Name, tm: Tm)(implicit ns: List[Name]): String =
     pretty(tm)(x :: ns)
 
+  def pretty(s: Stage[Ty])(implicit ns: List[Name]): String = s match
+    case S1     => s"Meta"
+    case S0(vf) => s"Ty ${prettyParen(vf)}"
+
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Var(ix)   => s"${ns(ix.expose)}"
     case Global(x) => s"$x"
@@ -82,8 +86,7 @@ object Pretty:
         case S1    => ""
         case S0(_) => ":"
       s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
-    case U(S1)     => s"Meta"
-    case U(S0(vf)) => s"Ty ${prettyParen(vf)}"
+    case U(s) => pretty(s)
 
     case Pi(_, _, _, _) => prettyPi(tm)
     case FunTy(_, _, _) => prettyPi(tm)
