@@ -10,7 +10,7 @@ import parsley.io.given
 object Main:
   @main def run(filename: String): Unit =
     try
-      setDebug(false)
+      setDebug(true)
       val ptimeStart = System.nanoTime()
       val ds = defsParser.parseFromFile(new File(filename)).flatMap(_.toTry).get
       val ptime = System.nanoTime() - ptimeStart

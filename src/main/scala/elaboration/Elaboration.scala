@@ -287,18 +287,19 @@ object Elaboration:
       case S.Pos(pos, tm) => infer(tm, s)(ctx.enter(pos))
 
       case S.Lam(x, S.ArgIcit(i), ot, b) =>
-        val sa = s match
-          case S1 => S1
+        val (sa, sb) = s match
+          case S1 => (S1, S1)
           case S0(vf) =>
             if i == Impl then error(s"implicit lambda cannot be in Ty: $tm")
             unify(vf, VF())
-            S0(VV())
+            val vf2 = ctx.eval(newMeta(VVF(), S1))
+            (S0(VV()), S0(vf2))
         val a = ot match
           case None     => newMeta(VU(sa), S1)
           case Some(ty) => checkType(ty, sa)
         val va = ctx.eval(a)
-        val (eb, rt) = infer(b, s)(ctx.bind(x, va, sa))
-        val fun = s match
+        val (eb, rt) = infer(b, sb)(ctx.bind(x, va, sa))
+        val fun = sb match
           case S1     => VPi(x, i, va, ctx.close(rt))
           case S0(vf) => VFunTy(va, vf, rt)
         (Lam(x, i, eb), fun)
@@ -532,11 +533,15 @@ object Elaboration:
       )
       .mkString("\n\n")
 
-  private def elaborate(tm: S.Tm, ty: Option[S.Ty], stage: Stage[VTy])(implicit
+  private def elaborate(tm: S.Tm, ty: Option[S.Ty], meta: Boolean)(implicit
       ctx: Ctx
   ): (Tm, Ty, Stage[Ty]) =
     resetMetas()
     holes.clear()
+
+    val stage =
+      if meta then S1
+      else S0(ctx.eval(newMeta(VVF(), S1)))
 
     val (etm_, ety_, _) = check(tm, ty, stage)
     val etm = ctx.zonk(etm_)
@@ -567,10 +572,7 @@ object Elaboration:
       case S.DDef(x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty()
         if getGlobal(x).isDefined then error(s"duplicate global $x")
-        val stage =
-          if m then S1
-          else S0(ctx.eval(newMeta(VVF(), S1)))
-        val (etm, ety, estage) = elaborate(v, t, stage)
+        val (etm, ety, estage) = elaborate(v, t, m)
         setGlobal(
           GlobalEntry(
             x,

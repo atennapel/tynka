@@ -31,6 +31,7 @@ object Parser:
       ),
       operators = Set(
         "=",
+        ":=",
         ":",
         ";",
         "\\",
@@ -163,7 +164,7 @@ object Parser:
     private lazy val let: Parsley[Tm] =
       ("let" *> identOrOp <~> many(defParam) <~> option(
         ":" *> tm
-      ) <~> (option(":") <* "=").map(_.isEmpty) <~> tm <~> ";" *> tm)
+      ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
         .map { case (((((x, ps), ty), m), v), b) =>
           Let(
             x,
@@ -337,7 +338,7 @@ object Parser:
     private lazy val defP: Parsley[Def] =
       ("def" *> identOrOp <~> many(defParam) <~> option(
         ":" *> tm
-      ) <~> (option(":") <* "=").map(_.isEmpty) <~> tm)
+      ) <~> (":=" #> false <|> "=" #> true) <~> tm)
         .map { case ((((x, ps), ty), m), v) =>
           DDef(
             x,

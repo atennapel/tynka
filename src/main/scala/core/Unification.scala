@@ -218,6 +218,9 @@ object Unification:
               case DontBind => DoBind(Name(s"x$l2"))
               case _        => x
             Lam(y, i, go(b(VVar(l2)), l2 + 1))
+          case VFunTy(_, _, b) =>
+            val y = DoBind(Name(s"x$l2"))
+            Lam(y, Expl, go(b, l2 + 1))
           case _ => impossible()
     go(a, lvl0)
 
@@ -242,6 +245,7 @@ object Unification:
           def go(a: Spine, b: Spine): Unit = (a, b) match
             case (SId, b) => solveWithPSub(m2, psub, VRigid(x, b))
             case (SApp(s1, a, _), SApp(s2, b, _)) => go(s1, s2); unify(a, b)
+            case (SSplice(s1), SSplice(s2))       => go(s1, s2)
             case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => go(s1, s2)
             case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => goProj(s1, s2, n)
             case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => goProj(s1, s2, n)
@@ -318,6 +322,7 @@ object Unification:
   private def unify(a: Spine, b: Spine)(implicit l: Lvl): Unit = (a, b) match
     case (SId, SId)                       => ()
     case (SApp(s1, a, _), SApp(s2, b, _)) => unify(s1, s2); unify(a, b)
+    case (SSplice(s1), SSplice(s2))       => unify(s1, s2)
     case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
     case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
     case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
@@ -349,6 +354,9 @@ object Unification:
       case (VLam(_, _, b1), VLam(_, _, b2))   => unify(b1, b2)
       case (VPair(a1, b1), VPair(a2, b2))     => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
+      case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
+        unify(vf1, vf2); unify(ty1, ty2)
+      case (VQuote(a), VQuote(b)) => unify(a, b)
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)

@@ -1,0 +1,2 @@
+def k (a b : Bool) := a
+def test b = k b b
