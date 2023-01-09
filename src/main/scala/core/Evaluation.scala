@@ -213,8 +213,21 @@ object Evaluation:
     case PF  => (VVF(), S1)
 
     case PVoid => (VTyV(), S1)
-    // {A : Type} -> Void -> A
-    // case PAbsurd => vpiI("A", VType(), a => vpi("_", VVoid(), _ => a))
+    // {vf : VF} {A : Ty vf} -> ^Void -> ^A
+    case PAbsurd =>
+      (
+        vpiI(
+          "vf",
+          VVF(),
+          vf =>
+            vpiI(
+              "A",
+              VU(S0(vf)),
+              a => vpi("_", VLift(VV(), VVoid()), _ => VLift(vf, a))
+            )
+        ),
+        S1
+      )
 
     case PUnitType => (VTyV(), S1)
     case PUnit     => (VUnitType(), S0(VV()))

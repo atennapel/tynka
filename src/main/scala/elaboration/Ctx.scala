@@ -86,7 +86,9 @@ final case class Ctx(
   def pretty(s: Stage[VTy]): String = pretty0(zonk(quote(s)))(names)
 
   def closeTy(b: Ty): Ty = locals.closeTy(b)
-  def closeVTy(b: VTy): VTy = eval0(closeTy(quote(b)))(Nil)
+  def closeVTy(b: VTy): VTy =
+    val t = closeTy(quote(b))
+    eval0(t)(Nil)
 
   def lookup(x: Name): Option[(Ix, VTy, Stage[VTy])] =
     types.get(x).map((k, ty, s) => (k.toIx(lvl), ty, s))

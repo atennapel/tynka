@@ -109,7 +109,7 @@ object Common:
     case PF
 
     case PVoid
-    // case PAbsurd
+    case PAbsurd
 
     case PUnitType
     case PUnit
@@ -124,8 +124,8 @@ object Common:
       case PV  => "V"
       case PF  => "F"
 
-      case PVoid => "Void"
-      // case PAbsurd => "absurd"
+      case PVoid   => "Void"
+      case PAbsurd => "absurd"
 
       case PUnitType => "()"
       case PUnit     => "[]"
@@ -141,8 +141,8 @@ object Common:
       case "V"  => Some(PV)
       case "F"  => Some(PF)
 
-      case "Void" => Some(PVoid)
-      // case "absurd" => Some(PAbsurd)
+      case "Void"   => Some(PVoid)
+      case "absurd" => Some(PAbsurd)
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)

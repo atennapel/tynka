@@ -55,6 +55,7 @@ object Elaboration:
   ) match
     case VUnitType() => Prim(PUnit)
     case _ =>
+      debug(s"===newMeta ${ctx.pretty(ty)} : ${ctx.pretty(s)}")
       val closed = ctx.closeVTy(ty)
       val m = freshMeta(closed, s)
       debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
@@ -106,13 +107,18 @@ object Elaboration:
     case (S0(a), S0(b)) => unify(a, b); None
     case (S0(vf), S1)   => Some((t.quote, VLift(vf, a)))
     case (S1, S0(vf)) =>
+      debug(s"$t : ${ctx.pretty(a)} : ${ctx.pretty(s1)} to ${ctx.pretty(s2)}")
       val m = ctx.eval(newMeta(VU(s2), S1))
       unify(a, VLift(vf, m))
       Some((t.splice, m))
 
   private def adjustStage(t: Tm, a: VTy, s1: Stage[VTy], s2: Stage[VTy])(
       implicit ctx: Ctx
-  ): (Tm, VTy) = tryAdjustStage(t, a, s1, s2).fold((t, a))(x => x)
+  ): (Tm, VTy) =
+    debug(
+      s"adjustStage $t : ${ctx.pretty(a)} : ${ctx.pretty(s1)} to ${ctx.pretty(s2)}"
+    )
+    tryAdjustStage(t, a, s1, s2).fold((t, a))(x => x)
 
   private def coe(t: Tm, a: VTy, st1: Stage[VTy], b: VTy, st2: Stage[VTy])(
       implicit ctx: Ctx
@@ -330,12 +336,12 @@ object Elaboration:
         val eb = check(b, ctx.inst(rt), S1)(ctx.bind(x, a, S1))
         Lam(x, i2, eb)
       case (S.Lam(x, S.ArgIcit(Expl), ot, b), VFunTy(a, vf, rt)) =>
-        unify(stage, S0(VVF()))
+        unify(stage, S0(VF()))
         ot.foreach(t0 => {
           val ety = checkType(t0, S0(VV()))
           unify(ctx.eval(ety), a)
         })
-        val eb = check(b, rt, S0(vf))
+        val eb = check(b, rt, S0(vf))(ctx.bind(x, a, S0(VV())))
         Lam(x, Expl, eb)
       case (S.Var(x), VPi(_, Impl, _, _)) if hasMetaType(x) =>
         val Some((ix, varty, S1)) = ctx.lookup(x): @unchecked
@@ -486,6 +492,9 @@ object Elaboration:
 
       case _ =>
         val (t, a, si) = infer(tm)
+        debug(
+          s"inferred $t : ${ctx.pretty(a)} : ${ctx.pretty(si)} to ${ctx.pretty(s)}"
+        )
         adjustStage(t, a, si, s)
 
   private def infer(tm: S.Tm)(implicit ctx: Ctx): (Tm, VTy, Stage[VTy]) =
