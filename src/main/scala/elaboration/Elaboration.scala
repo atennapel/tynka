@@ -146,43 +146,132 @@ object Elaboration:
       )
       (force(a), force(b)) match
         case (VPi(x, i, p1, r1), VPi(x2, i2, p2, r2)) =>
-          if i == i2 then
+          unify(st1, S1); unify(st2, S1)
+          if i != i2 then
             error(
               s"plicity mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
             )
-          val ctx2 = ctx.bind(x, p2, st2)
-          val coev0 = go(Var(ix0), p2, st2, p1, st1)
-          coev0 match
+          val ctx2 = ctx.bind(x, p2, S1)
+          go(Var(ix0), p2, S1, p1, S1)(ctx2) match
             case None =>
               val v = VVar(ctx.lvl)
               val body =
-                go(App(Wk(t), Var(ix0), i), r1(v), st1, r2(v), st2)(ctx2)
+                go(App(Wk(t), Var(ix0), i), r1(v), S1, r2(v), S1)(ctx2)
               body.map(Lam(x, i, _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
                 r1(ctx2.eval(coev0)),
-                st1,
+                S1,
                 r2(VVar(ctx.lvl)),
-                st2
+                S1
               )(ctx2) match
                 case None => Some(Lam(pick(x, x2), i, App(Wk(t), coev0, i)))
                 case Some(body) => Some(Lam(pick(x, x2), i, body))
 
         case (VSigma(x, p1, r1), VSigma(x2, p2, r2)) =>
-          val fst = go(Proj(t, Fst), p1, st1, p2, st2)
+          unify(st1, S1); unify(st2, S1)
+          val fst = go(Proj(t, Fst), p1, S1, p2, S1)
           val f = vfst(ctx.eval(t))
           val snd = fst match
-            case None => go(Proj(t, Snd), r1(f), st1, r2(f), st2)
+            case None => go(Proj(t, Snd), r1(f), S1, r2(f), S1)
             case Some(fst) =>
-              go(Proj(t, Snd), r1(f), st1, r2(ctx.eval(fst)), st2)
+              go(Proj(t, Snd), r1(f), S1, r2(ctx.eval(fst)), S1)
           (fst, snd) match
             case (None, None)           => None
             case (Some(fst), None)      => Some(Pair(fst, Proj(t, Snd)))
             case (None, Some(snd))      => Some(Pair(Proj(t, Fst), snd))
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd))
 
-        // TODO: coercion for FunTy and PairTy
+        case (VFunTy(p1, vf1, r1), VFunTy(p2, vf2, r2)) =>
+          val x = DoBind(Name("x"))
+          val ctx2 = ctx.bind(x, p2, S0(VV()))
+          go(Var(ix0), p2, S0(VV()), p1, S0(VV()))(ctx2) match
+            case None =>
+              val body =
+                go(App(Wk(t), Var(ix0), Expl), r1, S0(vf1), r2, S0(vf2))(ctx2)
+              body.map(Lam(x, Expl, _))
+            case Some(coev0) =>
+              go(App(Wk(t), coev0, Expl), r1, S0(vf1), r2, S0(vf2))(ctx2) match
+                case None       => Some(Lam(x, Expl, App(Wk(t), coev0, Expl)))
+                case Some(body) => Some(Lam(x, Expl, body))
+
+        case (VPairTy(p1, r1), VPairTy(p2, r2)) =>
+          val fst = go(Proj(t, Fst), p1, S0(VV()), p2, S0(VV()))
+          val snd = go(Proj(t, Snd), r1, S0(VV()), r2, S0(VV()))
+          (fst, snd) match
+            case (None, None)           => None
+            case (Some(fst), None)      => Some(Pair(fst, Proj(t, Snd)))
+            case (None, Some(snd))      => Some(Pair(Proj(t, Fst), snd))
+            case (Some(fst), Some(snd)) => Some(Pair(fst, snd))
+
+        case (VFunTy(p1, vf, r1), VPi(x, i, p2, r2)) =>
+          if i == Impl then
+            error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
+          val ctx2 = ctx.bind(x, p2, S1)
+          go(Var(ix0), p2, S1, p1, S0(VV()))(ctx2) match
+            case None =>
+              val body =
+                go(App(Wk(t), Var(ix0), i), r1, S0(vf), r2(VVar(ctx.lvl)), S1)(
+                  ctx2
+                )
+              body.map(Lam(x, i, _))
+            case Some(coev0) =>
+              go(
+                App(Wk(t), coev0, i),
+                r1,
+                S0(vf),
+                r2(VVar(ctx.lvl)),
+                S1
+              )(ctx2) match
+                case None       => Some(Lam(x, i, App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(x, i, body))
+        case (VPi(x, i, p1, r1), VFunTy(p2, vf, r2)) =>
+          if i == Impl then
+            error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
+          val ctx2 = ctx.bind(x, p2, S1)
+          go(Var(ix0), p2, S0(VV()), p1, S1)(ctx2) match
+            case None =>
+              val body =
+                go(App(Wk(t), Var(ix0), i), r1(VVar(ctx.lvl)), S1, r2, S0(vf))(
+                  ctx2
+                )
+              body.map(Lam(x, i, _))
+            case Some(coev0) =>
+              go(
+                App(Wk(t), coev0, i),
+                r1(ctx2.eval(coev0)),
+                S1,
+                r2,
+                S0(vf)
+              )(ctx2) match
+                case None       => Some(Lam(x, i, App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(x, i, body))
+
+        case (VPairTy(p1, r1), VSigma(_, p2, r2)) =>
+          val fst = go(Proj(t, Fst), p1, S0(VV()), p2, S1)
+          val snd = fst match
+            case None =>
+              go(Proj(t, Snd), r1, S0(VV()), r2(vfst(ctx.eval(t))), S1)
+            case Some(fst) =>
+              go(Proj(t, Snd), r1, S0(VV()), r2(ctx.eval(fst)), S1)
+          (fst, snd) match
+            case (None, None)           => None
+            case (Some(fst), None)      => Some(Pair(fst, Proj(t, Snd)))
+            case (None, Some(snd))      => Some(Pair(Proj(t, Fst), snd))
+            case (Some(fst), Some(snd)) => Some(Pair(fst, snd))
+        case (VSigma(_, p1, r1), VPairTy(p2, r2)) =>
+          val fst = go(Proj(t, Fst), p1, S1, p2, S0(VV()))
+          val f = vfst(ctx.eval(t))
+          val snd = fst match
+            case None => go(Proj(t, Snd), r1(f), S1, r2, S0(VV()))
+            case Some(fst) =>
+              go(Proj(t, Snd), r1(f), S1, r2, S1)
+          (fst, snd) match
+            case (None, None)           => None
+            case (Some(fst), None)      => Some(Pair(fst, Proj(t, Snd)))
+            case (None, Some(snd))      => Some(Pair(Proj(t, Fst), snd))
+            case (Some(fst), Some(snd)) => Some(Pair(fst, snd))
 
         case (VU(S0(vf)), VU(S1)) => Some(Lift(ctx.quote(vf), t))
         case (VLift(r1, a), VLift(r2, b)) =>
