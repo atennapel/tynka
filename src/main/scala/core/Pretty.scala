@@ -17,7 +17,7 @@ object Pretty:
     case Sigma(DoBind(x0), t, b) =>
       val x = x0.fresh
       s"($x : ${pretty(t)}) ** ${prettySigma(b)(x :: ns)}"
-    case PairTy(t, b) => s"(${prettyParen(t, true)} ** ${prettySigma(b)})"
+    case PairTy(t, b) => s"${prettyParen(t, true)} ** ${prettySigma(b)}"
     case rest         => pretty(rest)
 
   private def prettyPi(tm: Tm)(implicit ns: List[Name]): String = tm match
@@ -29,7 +29,7 @@ object Pretty:
     case Pi(x0, Impl, t, b) =>
       val x = x0.fresh
       s"{$x : ${pretty(t)}} -> ${prettyPi(b)(x.toName :: ns)}"
-    case FunTy(t, _, b) => s"(${prettyParen(t, true)} -> ${prettyPi(b)})"
+    case FunTy(t, _, b) => s"${prettyParen(t, true)} -> ${prettyPi(b)}"
     case rest           => pretty(rest)
 
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =

@@ -114,12 +114,85 @@ object Elaboration:
       implicit ctx: Ctx
   ): (Tm, VTy) = tryAdjustStage(t, a, s1, s2).fold((t, a))(x => x)
 
-  private def coe(tm: Tm, ty1: VTy, s1: Stage[VTy], ty2: VTy, s2: Stage[VTy])(
+  private def coe(t: Tm, a: VTy, st1: Stage[VTy], b: VTy, st2: Stage[VTy])(
       implicit ctx: Ctx
   ): Tm =
-    unify(s1, s2)
-    unify(ty1, ty2)
-    tm
+    debug(
+      s"coeTop ${ctx.pretty(t)} : ${ctx.pretty(a)} : ${ctx.pretty(st1)} to ${ctx
+          .pretty(b)} : ${ctx.pretty(st2)}"
+    )
+    def pick(x: Bind, y: Bind)(implicit ctx: Ctx): Bind = ctx.fresh((x, y) match
+      case (DontBind, DontBind) => DoBind(Name("x"))
+      case (DontBind, x)        => x
+      case (x, DontBind)        => x
+      case (_, x)               => x
+    )
+    def justAdjust(t: Tm, a: VTy, st1: Stage[VTy], b: VTy, st2: Stage[VTy])(
+        implicit ctx: Ctx
+    ): Option[Tm] =
+      tryAdjustStage(t, a, st1, st2) match
+        case None         => unify(st1, st2); unify(a, b); None
+        case Some((t, a)) => unify(a, b); Some(t)
+    def go(
+        t: Tm,
+        a: VTy,
+        st1: Stage[VTy],
+        b: VTy,
+        st2: Stage[VTy]
+    )(implicit ctx: Ctx): Option[Tm] =
+      debug(
+        s"coe ${ctx.pretty(t)} : ${ctx.pretty(a)} : ${ctx.pretty(st1)} to ${ctx
+            .pretty(b)} : ${ctx.pretty(st2)}"
+      )
+      (force(a), force(b)) match
+        case (VPi(x, i, p1, r1), VPi(x2, i2, p2, r2)) =>
+          if i == i2 then
+            error(
+              s"plicity mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
+            )
+          val ctx2 = ctx.bind(x, p2, st2)
+          val coev0 = go(Var(ix0), p2, st2, p1, st1)
+          coev0 match
+            case None =>
+              val v = VVar(ctx.lvl)
+              val body =
+                go(App(Wk(t), Var(ix0), i), r1(v), st1, r2(v), st2)(ctx2)
+              body.map(Lam(x, i, _))
+            case Some(coev0) =>
+              go(
+                App(Wk(t), coev0, i),
+                r1(ctx2.eval(coev0)),
+                st1,
+                r2(VVar(ctx.lvl)),
+                st2
+              )(ctx2) match
+                case None => Some(Lam(pick(x, x2), i, App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(pick(x, x2), i, body))
+
+        case (VSigma(x, p1, r1), VSigma(x2, p2, r2)) =>
+          val fst = go(Proj(t, Fst), p1, st1, p2, st2)
+          val f = vfst(ctx.eval(t))
+          val snd = fst match
+            case None => go(Proj(t, Snd), r1(f), st1, r2(f), st2)
+            case Some(fst) =>
+              go(Proj(t, Snd), r1(f), st1, r2(ctx.eval(fst)), st2)
+          (fst, snd) match
+            case (None, None)           => None
+            case (Some(fst), None)      => Some(Pair(fst, Proj(t, Snd)))
+            case (None, Some(snd))      => Some(Pair(Proj(t, Fst), snd))
+            case (Some(fst), Some(snd)) => Some(Pair(fst, snd))
+
+        // TODO: coercion for FunTy and PairTy
+
+        case (VU(S0(vf)), VU(S1)) => Some(Lift(ctx.quote(vf), t))
+        case (VLift(r1, a), VLift(r2, b)) =>
+          unify(r1, r2)
+          unify(a, b)
+          None
+        case (VLift(vf, a), b) => Some(coe(t.splice, a, S0(vf), b, st2))
+        case (a, VLift(vf, b)) => Some(coe(t, a, st1, b, S0(vf)).quote)
+        case _                 => justAdjust(t, a, st1, b, st2)
+    go(t, a, st1, b, st2).getOrElse(t)
 
   // elaboration
   private def icitMatch(i1: S.ArgInfo, b: Bind, i2: Icit): Boolean = i1 match

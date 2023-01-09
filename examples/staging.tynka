@@ -1,2 +1,3 @@
 def k (a b : Bool) := a
 def test b = k b b
+def test2 := test False
