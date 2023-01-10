@@ -40,6 +40,7 @@ object Syntax:
     case Lam(name: Bind, icit: Icit, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
     case FunTy(ty: Ty, vf: Ty, rt: Ty)
+    case Fix(go: Name, name: Name, body: Tm, arg: Tm)
 
     case Sigma(name: Bind, ty: Ty, body: Ty)
     case Pair(fst: Tm, snd: Tm)
@@ -87,6 +88,7 @@ object Syntax:
       case App(f, a, Expl)          => s"($f $a)"
       case App(f, a, Impl)          => s"($f {$a})"
       case FunTy(a, _, b)           => s"($a -> $b)"
+      case Fix(go, x, b, arg)       => s"(fix ($go $x. $b) $arg)"
 
       case Sigma(DontBind, t, b) => s"($t ** $b)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"

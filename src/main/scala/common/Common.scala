@@ -100,6 +100,10 @@ object Common:
     def map[R](f: VF => R): Stage[R] = this match
       case S0(x) => S0(f(x))
       case S1    => S1
+
+    def isS0: Boolean = this match
+      case S0(_) => true
+      case _     => false
   export Stage.*
 
   // primitives

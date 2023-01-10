@@ -400,6 +400,15 @@ object Elaboration:
         )
         Let(x, et, qvs, ev, eb)
 
+      case (S.Fix(go, x, b, a), _) if stage.isS0 =>
+        val (ea, ta) = infer(a, S0(VV()))
+        val S0(vf) = stage: @unchecked
+        val fun = VFunTy(ta, vf, ty)
+        val eb = check(b, ty, S0(vf))(
+          ctx.bind(DoBind(go), fun, S0(VF())).bind(DoBind(x), ta, S0(VV()))
+        )
+        Fix(go, x, eb, ea)
+
       case (S.Hole(ox), _) =>
         val t = newMeta(ty, stage)
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, ty, stage))
@@ -487,6 +496,16 @@ object Elaboration:
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, ty, s))
         (t, ty)
 
+      case S.Fix(go, x, b, a) if s.isS0 =>
+        val (ea, ta) = infer(a, S0(VV()))
+        val S0(vf) = s: @unchecked
+        val rt = ctx.eval(newMeta(VU(S0(vf)), S1))
+        val fun = VFunTy(ta, vf, rt)
+        val eb = check(b, rt, S0(vf))(
+          ctx.bind(DoBind(go), fun, S0(VF())).bind(DoBind(x), ta, S0(VV()))
+        )
+        (Fix(go, x, eb, ea), rt)
+
       case _ =>
         val (t, a, si) = infer(tm)
         debug(
@@ -522,6 +541,16 @@ object Elaboration:
         val (eb, rt, st) =
           infer(b)(ctx.define(x, vt, et, vs, qvs, ctx.eval(ev), ev))
         (Let(x, et, qvs, ev, eb), rt, st)
+
+      case S.Fix(go, x, b, a) =>
+        val (ea, ta) = infer(a, S0(VV()))
+        val vf = ctx.eval(newMeta(VVF(), S1))
+        val rt = ctx.eval(newMeta(VU(S0(vf)), S1))
+        val fun = VFunTy(ta, vf, rt)
+        val eb = check(b, rt, S0(vf))(
+          ctx.bind(DoBind(go), fun, S0(VF())).bind(DoBind(x), ta, S0(VV()))
+        )
+        (Fix(go, x, eb, ea), rt, S0(vf))
 
       case S.Hole(ox) => error(s"cannot infer hole $tm")
 

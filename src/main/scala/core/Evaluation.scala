@@ -14,6 +14,11 @@ object Evaluation:
       case CClos(env, tm) => eval(tm)(v :: env)
       case CFun(fn)       => fn(v)
 
+  extension (c: Clos2)
+    def apply(v: Val, w: Val): Val = c match
+      case CClos2(env, tm) => eval(tm)(w :: v :: env)
+      case CFun2(f)        => f(v, w)
+
   // evaluation
   private def vglobal(x: Name): Val =
     val value = getGlobal(x).get.value
@@ -129,10 +134,11 @@ object Evaluation:
     case Let(_, _, _, v, b) => eval(b)(eval(v) :: env)
     case U(s)               => VU(eval(s))
 
-    case Pi(x, i, t, b)  => VPi(x, i, eval(t), Clos(b))
-    case FunTy(t, vf, b) => VFunTy(eval(t), eval(vf), eval(b))
-    case Lam(x, i, b)    => VLam(x, i, Clos(b))
-    case App(f, a, i)    => vapp(eval(f), eval(a), i)
+    case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
+    case FunTy(t, vf, b)  => VFunTy(eval(t), eval(vf), eval(b))
+    case Lam(x, i, b)     => VLam(x, i, Clos(b))
+    case App(f, a, i)     => vapp(eval(f), eval(a), i)
+    case Fix(go, x, b, a) => VFix(go, x, CClos2(env, b), eval(a))
 
     case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
     case PairTy(t, b)   => VPairTy(eval(t), eval(b))
@@ -199,6 +205,13 @@ object Evaluation:
         Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VFunTy(t, vf, b) =>
         FunTy(quote(t, unfold), quote(vf, unfold), quote(b, unfold))
+      case VFix(go, x, b, a) =>
+        Fix(
+          go,
+          x,
+          quote(b(VVar(l), VVar(l + 1)), unfold)(l + 2),
+          quote(a, unfold)
+        )
 
       case VPair(fst, snd) => Pair(quote(fst, unfold), quote(snd, unfold))
       case VSigma(x, t, b) =>

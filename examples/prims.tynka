@@ -24,4 +24,21 @@ def foldNat {A} (n : Nat) (z : A) (s : A -> A) : A = n A z s
 
 def pow (a : Nat) (b : Int) : Int = foldNat a 1 (\r. r * b)
 
+def fac (n : Int) : Int :=
+  fix (go n.
+    if n < 2 then 1
+    else n * (go (n - 1))) n
+
+def facTR (n : Int) : Int :=
+  fix (go n. \acc.
+    if n < 2 then acc
+    else go (n - 1) (acc * n)) n 1
+
+def foldInt {A : Ty V} (n : Int) (z : A) (s : Int -> A -> A) : A =
+  fix (go n. \acc.
+    if n <= 0 then acc
+    else go (n - 1) (s n acc)) n z
+
+def facTR2 (n : Int) : Int := foldInt n 1 (\n r. n * r)
+
 def test := \n. pow (S (S (S Z))) n

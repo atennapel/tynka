@@ -39,7 +39,7 @@ object Zonking:
     case Proj(t, p)       => proj(zonkSp(t), p)
     case Splice(t)        => splice(zonkSp(t))
     case Wk(t)            => zonkSp(t)(l - 1, e.tail).map(Wk(_))
-    case t                => Right(t)
+    case t                => Right(zonk(t))
 
   def zonk(s: Stage[Ty])(implicit l: Lvl, e: Env): Stage[Ty] = s.map(zonk)
 
@@ -55,6 +55,8 @@ object Zonking:
     case FunTy(t, vf, b) => FunTy(zonk(t), zonk(vf), zonk(b))
     case Lam(x, i, b)    => Lam(x, i, zonkLift(b))
     case App(_, _, _)    => quoteVT(zonkSp(t))
+    case Fix(go, x, b, a) =>
+      Fix(go, x, zonk(b)(l + 2, VVar(l + 1) :: VVar(l) :: e), zonk(a))
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
     case PairTy(t, b)   => PairTy(zonk(t), zonk(b))

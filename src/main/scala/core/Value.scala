@@ -12,6 +12,11 @@ object Value:
   object Clos:
     def apply(tm: Tm)(implicit env: Env): Clos = CClos(env, tm)
 
+  enum Clos2:
+    case CClos2(env: Env, tm: Tm)
+    case CFun2(fn: (Val, Val) => Val)
+  export Clos2.*
+
   enum Spine:
     case SId
     case SApp(spine: Spine, arg: Val, icit: Icit)
@@ -46,6 +51,7 @@ object Value:
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, body: Clos)
     case VFunTy(ty: VTy, vf: VTy, rt: VTy)
+    case VFix(go: Name, name: Name, body: Clos2, arg: Val)
 
     case VSigma(name: Bind, ty: VTy, body: Clos)
     case VPair(fst: Val, snd: Val)

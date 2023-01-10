@@ -183,6 +183,13 @@ object Unification:
       case VPi(x, i, t, b)  => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, b)    => Lam(x, i, go(b(VVar(psub.cod)))(psub.lift))
       case VFunTy(t, vf, b) => FunTy(go(t), go(vf), go(b))
+      case VFix(g, x, b, a) =>
+        Fix(
+          g,
+          x,
+          go(b(VVar(psub.cod), VVar(psub.cod + 1)))(psub.lift.lift),
+          go(a)
+        )
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd) => Pair(go(fst), go(snd))
@@ -341,6 +348,12 @@ object Unification:
         unify(vf1, vf2); unify(ty1, ty2)
       case (VQuote(a), VQuote(b))             => unify(a, b)
       case (VIntLit(a), VIntLit(b)) if a == b => ()
+
+      case (VFix(_, _, b1, a1), VFix(_, _, b2, a2)) =>
+        val v = VVar(l)
+        val w = VVar(l + 1)
+        unify(b1(v, w), b2(v, w))(l + 2)
+        unify(a1, a2)
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)

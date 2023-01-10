@@ -35,6 +35,7 @@ object Staging:
     case VPrim0(x: PrimName)
     case VApp0(f: Val0, a: Val0)
     case VLam0(x: Bind, body: Val0 => Val0)
+    case VFix0(go: Name, x: Name, body: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(x: Name, ty: Val1, value: Val0, body: Val0 => Val0)
     case VPair0(fst: Val0, snd: Val0)
     case VFst0(t: Val0)
@@ -90,6 +91,7 @@ object Staging:
     case Splice(_)        => impossible()
     case AppPruning(_, _) => impossible()
     case IntLit(_)        => impossible()
+    case Fix(_, _, _, _)  => impossible()
 
   private def vvar0(ix: Ix)(implicit env: Env): Val0 =
     def go(e: Env, i: Int): Val0 = (e, i) match
@@ -165,6 +167,8 @@ object Staging:
     case Splice(t)      => vsplice0(eval1(t))
     case Wk(t)          => eval0(t)(env.tail)
     case IntLit(n)      => VIntLit0(n)
+    case Fix(go, x, b, a) =>
+      VFix0(go, x, (v, w) => eval0(b)(Def0(Def0(env, v), w)), eval0(a))
 
     case FunTy(pt, vf, rt) => impossible()
     case PairTy(pt, rt)    => impossible()
@@ -230,6 +234,15 @@ object Staging:
     case VLet0(_, ty, v, b) =>
       val x = IR.Name.fresh
       IR.Let(x, quoteExpr(v), quoteExpr(b(VVar0(l)))(l + 1, x :: ns))
+    case VFix0(_, _, b, a) =>
+      val go = IR.Name.fresh
+      val x = IR.Name.fresh(go :: ns)
+      IR.Fix(
+        go,
+        x,
+        quoteExpr(b(VVar0(l), VVar0(l + 1)))(l + 2, x :: go :: ns),
+        quoteExpr(a)
+      )
 
     case VPair0(fst, snd) => IR.Pair(quoteExpr(fst), quoteExpr(snd))
     case VFst0(t)         => IR.Fst(quoteExpr(t))

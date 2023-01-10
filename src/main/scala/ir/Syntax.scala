@@ -75,6 +75,7 @@ object Syntax:
     case App(f: Expr, as: List[Expr])
     case Lam(ps: List[Name], body: Expr)
     case Let(x: Name, value: Expr, body: Expr)
+    case Fix(go: Name, x: Name, body: Expr, arg: Expr)
 
     case Pair(fst: Expr, snd: Expr)
     case Fst(tm: Expr)
@@ -91,11 +92,12 @@ object Syntax:
     case If(cond: Expr, ifTrue: Expr, ifFalse: Expr)
 
     override def toString: String = this match
-      case Var(x)       => s"$x"
-      case Global(x)    => s"$x"
-      case App(f, as)   => s"$f(${as.mkString(", ")})"
-      case Lam(ps, b)   => s"(\\${ps.mkString(" ")}. $b)"
-      case Let(x, v, b) => s"(let $x = $v; $b)"
+      case Var(x)             => s"$x"
+      case Global(x)          => s"$x"
+      case App(f, as)         => s"$f(${as.mkString(", ")})"
+      case Lam(ps, b)         => s"(\\${ps.mkString(" ")}. $b)"
+      case Let(x, v, b)       => s"(let $x = $v; $b)"
+      case Fix(go, x, b, arg) => s"(fix ($go $x. $b) $arg)"
 
       case Pair(fst, snd) => s"($fst, $snd)"
       case Fst(t)         => s"$t.1"
