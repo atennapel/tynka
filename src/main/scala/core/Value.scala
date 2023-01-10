@@ -51,6 +51,8 @@ object Value:
     case VPair(fst: Val, snd: Val)
     case VPairTy(fst: VTy, snd: VTy)
 
+    case VIntLit(value: Int)
+
     case VLift(vf: VTy, tm: Val)
     case VQuote(tm: Val)
   export Val.*
@@ -162,3 +164,9 @@ object Value:
     def unapply(value: Val): Boolean = value match
       case VRigid(HPrim(PFalse), SId) => true
       case _                          => false
+
+  object VInt:
+    def apply(): Val = VRigid(HPrim(PInt), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PInt), SId) => true
+      case _                        => false

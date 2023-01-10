@@ -1,3 +1,1 @@
-def id {vf} {A : Ty vf} (x : A) = x
-
-def test := id True
+def test := \x. primIntAdd x 0

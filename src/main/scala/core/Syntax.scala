@@ -46,6 +46,8 @@ object Syntax:
     case Proj(tm: Tm, proj: ProjType)
     case PairTy(fst: Ty, snd: Ty)
 
+    case IntLit(value: Int)
+
     case Lift(vf: Ty, tm: Ty)
     case Quote(tm: Tm)
     case Splice(tm: Tm)
@@ -91,6 +93,8 @@ object Syntax:
       case Pair(a, b)            => s"($a, $b)"
       case Proj(t, p)            => s"$t$p"
       case PairTy(a, b)          => s"($a ** $b)"
+
+      case IntLit(n) => s"$n"
 
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"

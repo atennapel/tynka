@@ -188,6 +188,8 @@ object Unification:
       case VPair(fst, snd) => Pair(go(fst), go(snd))
       case VPairTy(fst, snd) => PairTy(go(fst), go(snd))
 
+      case VIntLit(n) => IntLit(n)
+
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => Quote(go(t))
     go(v)
@@ -337,7 +339,8 @@ object Unification:
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
         unify(vf1, vf2); unify(ty1, ty2)
-      case (VQuote(a), VQuote(b)) => unify(a, b)
+      case (VQuote(a), VQuote(b))             => unify(a, b)
+      case (VIntLit(a), VIntLit(b)) if a == b => ()
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)

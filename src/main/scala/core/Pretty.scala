@@ -62,6 +62,7 @@ object Pretty:
       case App(_, _, _) if app => pretty(tm)
       case U(S1)               => pretty(tm)
       case U(S0(_)) if app     => pretty(tm)
+      case IntLit(_)           => pretty(tm)
       case Wk(tm)              => prettyParen(tm, app)(ns.tail)
       case _                   => s"(${pretty(tm)})"
 
@@ -100,6 +101,8 @@ object Pretty:
       if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
       else s"(${es.map(pretty).mkString(", ")})"
     case Proj(t, p) => s"${prettyParen(t)}$p"
+
+    case IntLit(n) => s"$n"
 
     case Lift(_, t) => s"^${prettyParen(t)}"
     case Quote(t)   => s"`${prettyParen(t)}"

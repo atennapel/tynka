@@ -47,6 +47,7 @@ object Zonking:
     case Var(ix)            => t
     case Global(x)          => t
     case Prim(x)            => t
+    case IntLit(n)          => t
     case Let(x, t, s, v, b) => Let(x, zonk(t), zonk(s), zonk(v), zonkLift(b))
     case U(s)               => U(zonk(s))
 

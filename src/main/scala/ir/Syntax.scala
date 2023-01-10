@@ -16,12 +16,14 @@ object Syntax:
     case TVoid
     case TUnit
     case TBool
+    case TInt
     case TPair(fst: Type, snd: Type)
 
     override def toString: String = this match
       case TVoid           => "Void"
       case TUnit           => "()"
       case TBool           => "Bool"
+      case TInt            => "Int"
       case TPair(fst, snd) => s"($fst, $snd)"
   export Type.*
 
@@ -40,6 +42,33 @@ object Syntax:
       case DDef(x, t, v) => s"def $x : $t = $v"
   export Def.*
 
+  enum Op:
+    case BAdd
+    case BMul
+    case BSub
+    case BDiv
+    case BMod
+    case BEq
+    case BNeq
+    case BGt
+    case BLt
+    case BGeq
+    case BLeq
+
+    override def toString: String = this match
+      case BAdd => "+"
+      case BMul => "*"
+      case BSub => "-"
+      case BDiv => "/"
+      case BMod => "%"
+      case BEq  => "=="
+      case BNeq => "!="
+      case BGt  => ">"
+      case BLt  => "<"
+      case BGeq => ">="
+      case BLeq => "<="
+  export Op.*
+
   enum Expr:
     case Var(x: Name)
     case Global(x: GName)
@@ -50,6 +79,9 @@ object Syntax:
     case Pair(fst: Expr, snd: Expr)
     case Fst(tm: Expr)
     case Snd(tm: Expr)
+
+    case IntLit(value: Int)
+    case BinOp(op: Op, a: Expr, b: Expr)
 
     case Absurd
 
@@ -68,6 +100,9 @@ object Syntax:
       case Pair(fst, snd) => s"($fst, $snd)"
       case Fst(t)         => s"$t.1"
       case Snd(t)         => s"$t.2"
+
+      case IntLit(n)       => s"$n"
+      case BinOp(op, a, b) => s"($a $op $b)"
 
       case Absurd => s"absurd"
 

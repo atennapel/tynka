@@ -59,11 +59,7 @@ object Evaluation:
     case _                 => impossible()
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
-    println(s"vprimelim $x ${force(v)}")
     (x, force(v), as) match
-      case (PElimBool, VQuote(VTrue()), List(_, (t, _), _))  => t
-      case (PElimBool, VQuote(VFalse()), List(_, _, (f, _))) => f
-
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
       case (_, VGlobal(y, sp, v), _) =>
@@ -89,6 +85,7 @@ object Evaluation:
       case _                        => impossible()
 
   private def vprim(x: PrimName): Val = x match
+    /*
     // \{A} v. absurd {A} v
     case PAbsurd =>
       vlamI("A", a => vlam("v", v => vprimelim(PAbsurd, List((a, Impl)), v)))
@@ -115,6 +112,10 @@ object Evaluation:
               )
           )
       )
+    // \a b. primIntAdd a b
+    case PPrimIntAdd =>
+      vlam("a", a => vlam("b", b => vprimelim(PPrimIntAdd, List((b, Expl)), a)))
+     */
     case _ => VPrim(x)
 
   def eval(s: Stage[Ty])(implicit env: Env): Stage[VTy] = s match
@@ -137,6 +138,8 @@ object Evaluation:
     case PairTy(t, b)   => VPairTy(eval(t), eval(b))
     case Pair(a, b)     => VPair(eval(a), eval(b))
     case Proj(t, p)     => vproj(eval(t), p)
+
+    case IntLit(n) => VIntLit(n)
 
     case Lift(vf, t) => VLift(eval(vf), eval(t))
     case Quote(t)    => vquote(eval(t))
@@ -202,6 +205,8 @@ object Evaluation:
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPairTy(t, b) => PairTy(quote(t, unfold), quote(b, unfold))
 
+      case VIntLit(n) => IntLit(n)
+
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => Quote(quote(t, unfold))
 
@@ -248,3 +253,27 @@ object Evaluation:
         ),
         S1
       )
+
+    case PInt => (VTyV(), S1)
+    case PPrimIntAdd =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
+    case PPrimIntMul =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
+    case PPrimIntSub =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
+    case PPrimIntDiv =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
+    case PPrimIntMod =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
+    case PPrimIntEq =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
+    case PPrimIntNeq =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
+    case PPrimIntGt =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
+    case PPrimIntLt =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
+    case PPrimIntGeq =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
+    case PPrimIntLeq =>
+      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))

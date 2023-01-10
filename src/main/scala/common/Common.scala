@@ -119,6 +119,19 @@ object Common:
     case PFalse
     case PElimBool
 
+    case PInt
+    case PPrimIntAdd
+    case PPrimIntMul
+    case PPrimIntSub
+    case PPrimIntDiv
+    case PPrimIntMod
+    case PPrimIntEq
+    case PPrimIntNeq
+    case PPrimIntLt
+    case PPrimIntGt
+    case PPrimIntLeq
+    case PPrimIntGeq
+
     override def toString: String = this match
       case PVF => "VF"
       case PV  => "V"
@@ -134,6 +147,33 @@ object Common:
       case PTrue     => "True"
       case PFalse    => "False"
       case PElimBool => "elimBool"
+
+      case PInt        => "Int"
+      case PPrimIntAdd => "primIntAdd"
+      case PPrimIntMul => "primIntMul"
+      case PPrimIntSub => "primIntSub"
+      case PPrimIntDiv => "primIntDiv"
+      case PPrimIntMod => "primIntMod"
+      case PPrimIntEq  => "primIntEq"
+      case PPrimIntNeq => "primIntNeq"
+      case PPrimIntLt  => "primIntLt"
+      case PPrimIntGt  => "primIntGt"
+      case PPrimIntLeq => "primIntLeq"
+      case PPrimIntGeq => "primIntGeq"
+
+    def isBinOp: Boolean = this match
+      case PPrimIntAdd => true
+      case PPrimIntMul => true
+      case PPrimIntSub => true
+      case PPrimIntDiv => true
+      case PPrimIntMod => true
+      case PPrimIntEq  => true
+      case PPrimIntNeq => true
+      case PPrimIntLt  => true
+      case PPrimIntGt  => true
+      case PPrimIntLeq => true
+      case PPrimIntGeq => true
+      case _           => false
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
@@ -151,5 +191,18 @@ object Common:
       case "True"     => Some(PTrue)
       case "False"    => Some(PFalse)
       case "elimBool" => Some(PElimBool)
+
+      case "Int"        => Some(PInt)
+      case "primIntAdd" => Some(PPrimIntAdd)
+      case "primIntMul" => Some(PPrimIntMul)
+      case "primIntSub" => Some(PPrimIntSub)
+      case "primIntDiv" => Some(PPrimIntDiv)
+      case "primIntMod" => Some(PPrimIntMod)
+      case "primIntEq"  => Some(PPrimIntEq)
+      case "primIntNeq" => Some(PPrimIntNeq)
+      case "primIntLt"  => Some(PPrimIntLt)
+      case "primIntGt"  => Some(PPrimIntGt)
+      case "primIntLeq" => Some(PPrimIntLeq)
+      case "primIntGeq" => Some(PPrimIntGeq)
 
       case _ => None

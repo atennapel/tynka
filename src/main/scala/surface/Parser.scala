@@ -120,11 +120,7 @@ object Parser:
         )
       else ts.foldRight(unit)(Pair.apply)
 
-    private lazy val nat: Parsley[Tm] = natural.map(n =>
-      var c: Tm = nZ
-      for (_ <- 0.until(n)) c = App(nS, c, ArgIcit(Expl))
-      c
-    )
+    private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
 
     lazy val tm: Parsley[Tm] = positioned(
       attempt(piSigma) <|> let <|> lam <|> ifP <|>

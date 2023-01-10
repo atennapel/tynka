@@ -498,6 +498,7 @@ object Elaboration:
     if !tm.isPos then debug(s"infer $tm")
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
+      case S.IntLit(n)    => (IntLit(n), VInt(), S0(VV()))
       case S.U(S1)        => (U(S1), VU(S1), S1)
       case S.U(S0(vf)) =>
         val evf = check(vf, VVF(), S1)

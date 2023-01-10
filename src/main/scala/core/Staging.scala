@@ -35,16 +35,11 @@ object Staging:
     case VPrim0(x: PrimName)
     case VApp0(f: Val0, a: Val0)
     case VLam0(x: Bind, body: Val0 => Val0)
-    case VLet0(
-        x: Name,
-        ty: Val1,
-        vf: Stage[Val1],
-        value: Val0,
-        body: Val0 => Val0
-    )
+    case VLet0(x: Name, ty: Val1, value: Val0, body: Val0 => Val0)
     case VPair0(fst: Val0, snd: Val0)
     case VFst0(t: Val0)
     case VSnd0(t: Val0)
+    case VIntLit0(n: Int)
     case VSplicePrim0(x: PrimName, as: List[Val1])
   import Val0.*
 
@@ -94,6 +89,7 @@ object Staging:
     case Meta(_)          => impossible()
     case Splice(_)        => impossible()
     case AppPruning(_, _) => impossible()
+    case IntLit(_)        => impossible()
 
   private def vvar0(ix: Ix)(implicit env: Env): Val0 =
     def go(e: Env, i: Int): Val0 = (e, i) match
@@ -107,6 +103,41 @@ object Staging:
     case VQuote1(v)    => v
     case VPrim1(x, as) => VSplicePrim0(x, as)
     case _             => impossible()
+
+  private def vbool0(b: Boolean): Val0 =
+    if b then VPrim0(PTrue) else VPrim0(PFalse)
+
+  private def vbinop0(op: PrimName, a: Val0, b: Val0): Val0 = (op, a, b) match
+    case (PPrimIntAdd, VIntLit0(a), VIntLit0(b)) => VIntLit0(a + b)
+    case (PPrimIntMul, VIntLit0(a), VIntLit0(b)) => VIntLit0(a * b)
+    case (PPrimIntSub, VIntLit0(a), VIntLit0(b)) => VIntLit0(a - b)
+    case (PPrimIntDiv, VIntLit0(a), VIntLit0(b)) => VIntLit0(a / b)
+    case (PPrimIntMod, VIntLit0(a), VIntLit0(b)) => VIntLit0(a % b)
+    case (PPrimIntEq, VIntLit0(a), VIntLit0(b))  => vbool0(a == b)
+    case (PPrimIntNeq, VIntLit0(a), VIntLit0(b)) => vbool0(a != b)
+    case (PPrimIntLt, VIntLit0(a), VIntLit0(b))  => vbool0(a < b)
+    case (PPrimIntGt, VIntLit0(a), VIntLit0(b))  => vbool0(a > b)
+    case (PPrimIntLeq, VIntLit0(a), VIntLit0(b)) => vbool0(a <= b)
+    case (PPrimIntGeq, VIntLit0(a), VIntLit0(b)) => vbool0(a >= b)
+
+    case (PPrimIntAdd, VIntLit0(0), v) => v
+    case (PPrimIntAdd, v, VIntLit0(0)) => v
+
+    case (PPrimIntMul, VIntLit0(0), v) => VIntLit0(0)
+    case (PPrimIntMul, v, VIntLit0(0)) => VIntLit0(0)
+    case (PPrimIntMul, VIntLit0(1), v) => v
+    case (PPrimIntMul, v, VIntLit0(1)) => v
+
+    case (PPrimIntSub, v, VIntLit0(0)) => v
+    case (PPrimIntDiv, v, VIntLit0(1)) => v
+
+    case (op, a, b) => VApp0(VApp0(VPrim0(op), a), b)
+
+  private def vapp0(f: Val0, a: Val0): Val0 = f match
+    case VLam0(DontBind, b)               => b(a)
+    case VLam0(DoBind(x), b)              => VLet0(x, VType1, a, b)
+    case VApp0(VPrim0(p), b) if p.isBinOp => vbinop0(p, b, a)
+    case _                                => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType): Val0 = (v, p) match
     case (VPair0(fst, _), Fst)         => fst
@@ -126,13 +157,14 @@ object Staging:
     case Global(x)    => VGlobal0(x)
     case Prim(x)      => VPrim0(x)
     case Lam(x, _, b) => VLam0(x, clos0(b))
-    case App(f, a, _) => VApp0(eval0(f), eval0(a))
+    case App(f, a, _) => vapp0(eval0(f), eval0(a))
     case Proj(t, p)   => vproj0(eval0(t), p)
     case Let(x, t, vf, v, b) =>
-      VLet0(x, eval1(t), vf.map(eval1), eval0(v), clos0(b))
+      VLet0(x, eval1(t), eval0(v), clos0(b))
     case Pair(fst, snd) => VPair0(eval0(fst), eval0(snd))
     case Splice(t)      => vsplice0(eval1(t))
     case Wk(t)          => eval0(t)(env.tail)
+    case IntLit(n)      => VIntLit0(n)
 
     case FunTy(pt, vf, rt) => impossible()
     case PairTy(pt, rt)    => impossible()
@@ -148,6 +180,7 @@ object Staging:
     case VPrim1(PVoid, Nil)     => IR.TVoid
     case VPrim1(PUnitType, Nil) => IR.TUnit
     case VPrim1(PBool, Nil)     => IR.TBool
+    case VPrim1(PInt, Nil)      => IR.TInt
     case VPairTy1(fst, snd)     => IR.TPair(quoteType(fst), quoteType(snd))
     case _                      => impossible()
 
@@ -173,8 +206,19 @@ object Staging:
       l: Lvl,
       ns: List[IR.Name]
   ): IR.Expr = v match
-    case VApp0(f, a) => quoteApp(f, quoteExpr(a) :: as)
-    case f           => IR.App(quoteExpr(f), as)
+    case VApp0(f, a)         => quoteApp(f, quoteExpr(a) :: as)
+    case VPrim0(PPrimIntAdd) => IR.BinOp(IR.BAdd, as(0), as(1))
+    case VPrim0(PPrimIntMul) => IR.BinOp(IR.BMul, as(0), as(1))
+    case VPrim0(PPrimIntSub) => IR.BinOp(IR.BSub, as(0), as(1))
+    case VPrim0(PPrimIntDiv) => IR.BinOp(IR.BDiv, as(0), as(1))
+    case VPrim0(PPrimIntMod) => IR.BinOp(IR.BMod, as(0), as(1))
+    case VPrim0(PPrimIntEq)  => IR.BinOp(IR.BEq, as(0), as(1))
+    case VPrim0(PPrimIntNeq) => IR.BinOp(IR.BNeq, as(0), as(1))
+    case VPrim0(PPrimIntLt)  => IR.BinOp(IR.BLt, as(0), as(1))
+    case VPrim0(PPrimIntGt)  => IR.BinOp(IR.BGt, as(0), as(1))
+    case VPrim0(PPrimIntLeq) => IR.BinOp(IR.BLeq, as(0), as(1))
+    case VPrim0(PPrimIntGeq) => IR.BinOp(IR.BGeq, as(0), as(1))
+    case f                   => IR.App(quoteExpr(f), as)
 
   private def quoteExpr(
       v: Val0
@@ -183,7 +227,7 @@ object Staging:
     case VGlobal0(x) => IR.Global(x.expose)
     case VApp0(_, _) => quoteApp(v)
     case VLam0(_, _) => quoteLam(v)
-    case VLet0(_, ty, vf, v, b) =>
+    case VLet0(_, ty, v, b) =>
       val x = IR.Name.fresh
       IR.Let(x, quoteExpr(v), quoteExpr(b(VVar0(l)))(l + 1, x :: ns))
 
@@ -191,18 +235,24 @@ object Staging:
     case VFst0(t)         => IR.Fst(quoteExpr(t))
     case VSnd0(t)         => IR.Snd(quoteExpr(t))
 
+    case VIntLit0(n) => IR.IntLit(n)
+
     case VPrim0(PUnit)  => IR.Unit
     case VPrim0(PTrue)  => IR.BoolLit(true)
     case VPrim0(PFalse) => IR.BoolLit(false)
 
     case VSplicePrim0(PAbsurd, List(_, _)) => IR.Absurd
+    case VSplicePrim0(PElimBool, List(_, t, _, VQuote1(VPrim0(PTrue)))) =>
+      quoteExpr(vsplice0(t))
+    case VSplicePrim0(PElimBool, List(_, _, f, VQuote1(VPrim0(PFalse)))) =>
+      quoteExpr(vsplice0(f))
     case VSplicePrim0(PElimBool, List(_, t, f, b)) =>
       val cond = quoteExpr(vsplice0(b))
       val ifTrue = quoteExpr(vsplice0(t))
       val ifFalse = quoteExpr(vsplice0(f))
       IR.If(cond, ifTrue, ifFalse)
 
-    case _ => println(v); impossible()
+    case _ => impossible()
 
   private def stageExpr(t: Tm): IR.Expr = quoteExpr(eval0(t)(Empty))(lvl0, Nil)
   private def stageTDef(t: Ty): IR.TDef = quoteTDef(eval1(t)(Empty))(lvl0)
