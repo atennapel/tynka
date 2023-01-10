@@ -1,1 +1,19 @@
-def f (v : Void) : Bool := absurd v
+def oops (v : Void) : Bool := absurd v
+
+def (!) b := if b then False else True
+def (&&) a b := if a then b else False
+def (||) a b := if a then True else b
+
+def test {vf} (P : Bool -> Ty vf) (t : P True) (f : P False) (b : Bool) : P b =
+  elimBool P t f b
+
+def Bool1 = ^Bool
+def True1 : Bool1 = True
+def False1 : Bool1 = False
+
+def elimBool1 (P : Bool1 -> Meta) (t : P True1) (f : P False1) (b : Bool1) : P b =
+  elimBool P t f b
+
+def Sum1 A B = (tag : Bool1) ** elimBool1 (\_. Meta) A B tag
+def Left1 {A B} (x : A) : Sum1 A B = (True, x)
+def Right1 {A B} (x : B) : Sum1 A B = (False, x)

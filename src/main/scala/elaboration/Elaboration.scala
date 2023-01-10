@@ -55,7 +55,6 @@ object Elaboration:
   ) match
     case VUnitType() => Prim(PUnit)
     case _ =>
-      debug(s"===newMeta ${ctx.pretty(ty)} : ${ctx.pretty(s)}")
       val closed = ctx.closeVTy(ty)
       val m = freshMeta(closed, s)
       debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
@@ -392,9 +391,7 @@ object Elaboration:
       case (t, VLift(vf, a))          => check(t, a, S0(vf)).quote
 
       case (S.Let(x, m, t, v, b), _) =>
-        val vf = newMeta(VVF(), S1)
-        val vvf = ctx.eval(vf)
-        unify(if m then S1 else S0(vvf), stage)
+        unify(if m then S1 else S0(ctx.eval(newMeta(VVF(), S1))), stage)
         val vs = if m then S1 else S0(ctx.eval(newMeta(VVF(), S1)))
         val qvs = ctx.quote(vs)
         val (ev, et, vt) = check(v, t, vs)

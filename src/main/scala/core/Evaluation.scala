@@ -59,9 +59,10 @@ object Evaluation:
     case _                 => impossible()
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
+    println(s"vprimelim $x ${force(v)}")
     (x, force(v), as) match
-      // case (PElimBool, VTrue(), List(_, (t, _), _))  => t
-      // case (PElimBool, VFalse(), List(_, _, (f, _))) => f
+      case (PElimBool, VQuote(VTrue()), List(_, (t, _), _))  => t
+      case (PElimBool, VQuote(VFalse()), List(_, _, (f, _))) => f
 
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
@@ -89,7 +90,7 @@ object Evaluation:
 
   private def vprim(x: PrimName): Val = x match
     // \{A} v. absurd {A} v
-    /*case PAbsurd =>
+    case PAbsurd =>
       vlamI("A", a => vlam("v", v => vprimelim(PAbsurd, List((a, Impl)), v)))
     // \P t f b. elimBool P t f b
     case PElimBool =>
@@ -113,7 +114,7 @@ object Evaluation:
                   )
               )
           )
-      )*/
+      )
     case _ => VPrim(x)
 
   def eval(s: Stage[Ty])(implicit env: Env): Stage[VTy] = s match
@@ -213,18 +214,13 @@ object Evaluation:
     case PF  => (VVF(), S1)
 
     case PVoid => (VTyV(), S1)
-    // {vf : VF} {A : Ty vf} -> ^Void -> ^A
+    // {A : Meta} -> ^Void -> A
     case PAbsurd =>
       (
         vpiI(
-          "vf",
-          VVF(),
-          vf =>
-            vpiI(
-              "A",
-              VU(S0(vf)),
-              a => vpi("_", VLift(VV(), VVoid()), _ => VLift(vf, a))
-            )
+          "A",
+          VU(S1),
+          a => vpi("_", VLift(VV(), VVoid()), _ => a)
         ),
         S1
       )
@@ -235,14 +231,20 @@ object Evaluation:
     case PBool  => (VTyV(), S1)
     case PTrue  => (VBool(), S0(VV()))
     case PFalse => (VBool(), S0(VV()))
-    // (P : Bool -> Type) -> P True -> P False -> (b : bool) -> P b
-    /*case PElimBool =>
-      vpi(
-        "P",
-        vfun(VBool(), VType()),
-        p =>
-          vfun(
-            vappE(p, VTrue()),
-            vfun(vappE(p, VFalse()), vpi("b", VBool(), b => vappE(p, b)))
-          )
-      )*/
+    // (P : ^Bool -> Meta) -> P `True -> P `False -> (b : ^Bool) -> P b
+    case PElimBool =>
+      (
+        vpi(
+          "P",
+          vfun(VLift(VV(), VBool()), VU(S1)),
+          p =>
+            vfun(
+              vappE(p, VQuote(VTrue())),
+              vfun(
+                vappE(p, VQuote(VFalse())),
+                vpi("b", VLift(VV(), VBool()), b => vappE(p, b))
+              )
+            )
+        ),
+        S1
+      )

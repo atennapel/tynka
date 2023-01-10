@@ -1,1 +1,3 @@
-def a (v : Void) : Bool := absurd v
+def id {vf} {A : Ty vf} (x : A) = x
+
+def test := id True

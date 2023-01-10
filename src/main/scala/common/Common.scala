@@ -117,7 +117,7 @@ object Common:
     case PBool
     case PTrue
     case PFalse
-    // case PElimBool
+    case PElimBool
 
     override def toString: String = this match
       case PVF => "VF"
@@ -130,10 +130,10 @@ object Common:
       case PUnitType => "()"
       case PUnit     => "[]"
 
-      case PBool  => "Bool"
-      case PTrue  => "True"
-      case PFalse => "False"
-      // case PElimBool => "elimBool"
+      case PBool     => "Bool"
+      case PTrue     => "True"
+      case PFalse    => "False"
+      case PElimBool => "elimBool"
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
@@ -147,9 +147,9 @@ object Common:
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)
 
-      case "Bool"  => Some(PBool)
-      case "True"  => Some(PTrue)
-      case "False" => Some(PFalse)
-      // case "elimBool" => Some(PElimBool)
+      case "Bool"     => Some(PBool)
+      case "True"     => Some(PTrue)
+      case "False"    => Some(PFalse)
+      case "elimBool" => Some(PElimBool)
 
       case _ => None
