@@ -42,3 +42,13 @@ def foldInt {A : Ty V} (n : Int) (z : A) (s : Int -> A -> A) : A =
 def facTR2 (n : Int) : Int := foldInt n 1 (\n r. n * r)
 
 def test := \n. pow (S (S (S Z))) n
+
+def head {A} (l : List A) (d : A) =
+  caseList l d (\hd _. hd)
+
+def xxx := head #[1, 2, 3] 0
+
+def map {A B} (f : ^A -> ^B) (l : List A) : List B =
+  fix (go l. caseList l Nil (\hd tl. f hd :: go tl)) l
+
+def testmap := map ((+) 1) #[1, 2, 3]

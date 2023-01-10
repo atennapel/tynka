@@ -1,0 +1,19 @@
+def Unit : Meta = (A : Meta) -> A -> A
+def unit : Unit = \A x. x
+
+def Step : Ty V -> Ty V -> Meta =
+  \A S. (vf : VF) (R : Ty vf) -> R -> (A -> S -> R) -> R
+
+def Pull : Ty V -> Meta =
+  \A. (S : Ty V) ** (step : S -> Step A S) ** (value : S) ** Unit
+
+def fromList : {A : Ty V} -> List A -> Pull A =
+  \{A} as. (List A, \as vf R stop yield. caseList as stop (\hd tl. yield hd tl), as, unit)
+
+def map : {A B : Ty V} -> (A -> B) -> Pull A -> Pull B =
+  \{A} f p. (p.S, \as vf R stop yield. p.step as vf R stop (\a s. yield (f a) s), p.value, unit)
+
+def Push : Ty V -> Meta = \A. (vf: VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
+
+def toPush : {A : Ty V} -> Pull A -> Push A =
+  \{A} p vf B c n. fix (go s. p.step s vf B n (\a s. c a (go s))) (p.value)

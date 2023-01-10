@@ -1,0 +1,33 @@
+def Type = Ty V
+
+def foldr : {A : Type} {vf : VF} {B : Ty vf} -> (A -> B -> B) -> B -> List A -> B =
+  \cons nil l. fix (go l. caseList l nil (\hd tl. cons hd (go tl))) l
+
+def Push : Type -> Meta = \A. (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
+
+def up : {A : Type} -> List A -> Push A = \as vf B f b. foldr f b as
+
+def down : {A : Type} -> Push A -> List A = \{A} as. as V _ (::) Nil
+
+def map : {A B : Type} -> (A -> B) -> Push A -> Push B =
+  \f as vf R c n. as vf R (\a bs. c (f a) bs) n
+
+def foldl : {A B : Type} -> (B -> A -> B) -> B -> Push A -> B =
+  \{A} {B} f b as. $(as F (B -> B) (\a rec acc. $rec (f acc a)) (\acc. acc)) b
+
+def (+) a b = primIntAdd a b
+def (*) a b = primIntMul a b
+def (-) a b = primIntSub a b
+
+def sum : Push Int -> Int = foldl (\x y. x + y) 0
+
+def list : List Int := 1 :: 2 :: 3 :: Nil
+
+def (|>) : {A B : Meta} -> A -> (A -> B) -> B = \x f. f x
+
+def main : Int -> Int := \_.
+  up list
+  |> map (\x. x + 1)
+  |> map (\x. let y := x; y * y)
+  |> map (\x. x - 1)
+  |> sum

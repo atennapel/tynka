@@ -507,7 +507,7 @@ object Elaboration:
         (Fix(go, x, eb, ea), rt)
 
       case _ =>
-        val (t, a, si) = infer(tm)
+        val (t, a, si) = insert(infer(tm))
         debug(
           s"inferred $t : ${ctx.pretty(a)} : ${ctx.pretty(si)} to ${ctx.pretty(s)}"
         )

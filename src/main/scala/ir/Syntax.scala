@@ -18,6 +18,7 @@ object Syntax:
     case TBool
     case TInt
     case TPair(fst: Type, snd: Type)
+    case TList(ty: Type)
 
     override def toString: String = this match
       case TVoid           => "Void"
@@ -25,6 +26,7 @@ object Syntax:
       case TBool           => "Bool"
       case TInt            => "Int"
       case TPair(fst, snd) => s"($fst, $snd)"
+      case TList(t)        => s"List($t)"
   export Type.*
 
   final case class TDef(ps: List[Type], rt: Type):
@@ -91,6 +93,10 @@ object Syntax:
     case BoolLit(bool: Boolean)
     case If(cond: Expr, ifTrue: Expr, ifFalse: Expr)
 
+    case Nil
+    case Cons(hd: Expr, tl: Expr)
+    case CaseList(l: Expr, n: Expr, hd: Name, tl: Name, c: Expr)
+
     override def toString: String = this match
       case Var(x)             => s"$x"
       case Global(x)          => s"$x"
@@ -113,4 +119,8 @@ object Syntax:
       case BoolLit(true)  => "True"
       case BoolLit(false) => "False"
       case If(c, a, b)    => s"(if $c then $a else $b)"
+
+      case Nil                       => "Nil"
+      case Cons(hd, tl)              => s"($hd :: $tl)"
+      case CaseList(l, n, hd, tl, c) => s"(caseList $l $n ($hd $tl. $c))"
   export Expr.*

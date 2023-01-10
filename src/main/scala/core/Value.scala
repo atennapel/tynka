@@ -176,3 +176,9 @@ object Value:
     def unapply(value: Val): Boolean = value match
       case VRigid(HPrim(PInt), SId) => true
       case _                        => false
+
+  object VList:
+    def apply(t: Val): Val = VRigid(HPrim(PList), SApp(SId, t, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PList), SApp(SId, t, Expl)) => Some(t)
+      case _                                        => None

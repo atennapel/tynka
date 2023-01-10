@@ -185,6 +185,7 @@ object Staging:
     case VPrim1(PUnitType, Nil) => IR.TUnit
     case VPrim1(PBool, Nil)     => IR.TBool
     case VPrim1(PInt, Nil)      => IR.TInt
+    case VPrim1(PList, List(t)) => IR.TList(quoteType(t))
     case VPairTy1(fst, snd)     => IR.TPair(quoteType(fst), quoteType(snd))
     case _                      => impossible()
 
@@ -264,6 +265,16 @@ object Staging:
       val ifTrue = quoteExpr(vsplice0(t))
       val ifFalse = quoteExpr(vsplice0(f))
       IR.If(cond, ifTrue, ifFalse)
+
+    case VSplicePrim0(PNil, List(_)) => IR.Nil
+    case VSplicePrim0(PCons, List(_, hd, tl)) =>
+      IR.Cons(quoteExpr(vsplice0(hd)), quoteExpr(vsplice0(tl)))
+    case VSplicePrim0(PCaseList, List(_, _, _, lst, n, c)) =>
+      val hd = IR.Name.fresh
+      val tl = IR.Name.fresh(hd :: ns)
+      val cc = vapp1(vapp1(c, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
+      val cr = quoteExpr(vsplice0(cc))(l + 2, tl :: hd :: ns)
+      IR.CaseList(quoteExpr(vsplice0(lst)), quoteExpr(vsplice0(n)), hd, tl, cr)
 
     case _ => impossible()
 

@@ -136,6 +136,11 @@ object Common:
     case PPrimIntLeq
     case PPrimIntGeq
 
+    case PList
+    case PNil
+    case PCons
+    case PCaseList
+
     override def toString: String = this match
       case PVF => "VF"
       case PV  => "V"
@@ -164,6 +169,11 @@ object Common:
       case PPrimIntGt  => "primIntGt"
       case PPrimIntLeq => "primIntLeq"
       case PPrimIntGeq => "primIntGeq"
+
+      case PList     => "List"
+      case PNil      => "Nil"
+      case PCons     => "::"
+      case PCaseList => "caseList"
 
     def isBinOp: Boolean = this match
       case PPrimIntAdd => true
@@ -208,5 +218,10 @@ object Common:
       case "primIntGt"  => Some(PPrimIntGt)
       case "primIntLeq" => Some(PPrimIntLeq)
       case "primIntGeq" => Some(PPrimIntGeq)
+
+      case "List"     => Some(PList)
+      case "Nil"      => Some(PNil)
+      case "::"       => Some(PCons)
+      case "caseList" => Some(PCaseList)
 
       case _ => None

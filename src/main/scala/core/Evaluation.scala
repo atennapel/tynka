@@ -290,3 +290,55 @@ object Evaluation:
       (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
     case PPrimIntLeq =>
       (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
+
+    // Ty V -> Ty V
+    case PList => (vfun(VU(S0(VV())), VU(S0(VV()))), S1)
+    // {A : Ty V} -> ^(List A)
+    case PNil => (vpiI("A", VU(S0(VV())), a => VLift(VV(), VList(a))), S1)
+    // {A : Ty V} -> ^A -> ^(List A) -> ^(List A)
+    case PCons =>
+      (
+        vpiI(
+          "A",
+          VU(S0(VV())),
+          a =>
+            vfun(
+              VLift(VV(), a),
+              vfun(VLift(VV(), VList(a)), VLift(VV(), VList(a)))
+            )
+        ),
+        S1
+      )
+    // {A : Ty V} {vf : VF} {R : Ty vf} -> ^(List A) -> ^R -> (^A -> ^(List A) -> ^R) -> ^R
+    case PCaseList =>
+      (
+        vpiI(
+          "A",
+          VU(S0(VV())),
+          a =>
+            vpiI(
+              "vf",
+              VVF(),
+              vf =>
+                vpiI(
+                  "R",
+                  VU(S0(vf)),
+                  r =>
+                    vfun(
+                      VLift(VV(), VList(a)),
+                      vfun(
+                        VLift(vf, r),
+                        vfun(
+                          vfun(
+                            VLift(VV(), a),
+                            vfun(VLift(VV(), VList(a)), VLift(vf, r))
+                          ),
+                          VLift(vf, r)
+                        )
+                      )
+                    )
+                )
+            )
+        ),
+        S1
+      )
