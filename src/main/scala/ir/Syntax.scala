@@ -100,7 +100,7 @@ object Syntax:
     override def toString: String = this match
       case Var(x)             => s"$x"
       case Global(x)          => s"$x"
-      case App(f, as)         => s"$f(${as.mkString(", ")})"
+      case App(f, as)         => s"($f ${as.mkString(" ")})"
       case Lam(ps, b)         => s"(\\${ps.mkString(" ")}. $b)"
       case Let(x, v, b)       => s"(let $x = $v; $b)"
       case Fix(go, x, b, arg) => s"(fix ($go $x. $b) $arg)"

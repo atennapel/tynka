@@ -195,56 +195,24 @@ object Parser:
           }
       )
 
-    private val elimBoolVar: Tm = Var(Name("elimBool"))
+    private val caseBoolVar: Tm = Var(Name("caseBool"))
     private val tyName = Name("ty")
     private lazy val ifP: Parsley[Tm] =
-      ("if" *> tm <~> option(":" *> tm) <~> "then" *> tm <~> "else" *> tm)
-        .map { case (((c, ty), t), f) =>
-          ty match
-            // elimBool (let t = _; \_. t) t f c
-            case None =>
+      ("if" *> tm <~> "then" *> tm <~> "else" *> tm)
+        .map { case ((c, t), f) =>
+          App(
+            App(
               App(
-                App(
-                  App(
-                    App(
-                      elimBoolVar,
-                      Let(
-                        tyName,
-                        true,
-                        None,
-                        hole,
-                        Lam(DontBind, ArgIcit(Expl), None, Var(tyName))
-                      ),
-                      ArgIcit(Expl)
-                    ),
-                    t,
-                    ArgIcit(Expl)
-                  ),
-                  f,
-                  ArgIcit(Expl)
-                ),
+                caseBoolVar,
                 c,
                 ArgIcit(Expl)
-              )
-            // elimBool ty t f c
-            case Some(ty) =>
-              App(
-                App(
-                  App(
-                    App(
-                      elimBoolVar,
-                      ty,
-                      ArgIcit(Expl)
-                    ),
-                    t,
-                    ArgIcit(Expl)
-                  ),
-                  f,
-                  ArgIcit(Expl)
-                ),
-                c,
-                ArgIcit(Expl)
-              )
+              ),
+              t,
+              ArgIcit(Expl)
+            ),
+            f,
+            ArgIcit(Expl)
+          )
         }
 
     private lazy val app: Parsley[Tm] =

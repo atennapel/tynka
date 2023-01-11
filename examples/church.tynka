@@ -18,19 +18,19 @@ def foldNat {A} (n : Nat) (z : A) (s : A -> A) : A = n A z s
 
 def (+) a b = foldNat a b S
 
-def test = 1 + 2
+def test = (S Z) + (S (S Z))
 
 -- lists
-def List A = (R : Meta) -> R -> (A -> R -> R) -> R
-def Nil {A} : List A = \R n c. n
-def (::) {A} (hd : A) (tl : List A) : List A = \R n c. c hd (tl R n c)
+def CList A = (R : Meta) -> R -> (A -> R -> R) -> R
+def CNil {A} : CList A = \R n c. n
+def CCons {A} (hd : A) (tl : CList A) : CList A = \R n c. c hd (tl R n c)
 
-def foldr {A R} (n : R) (c : A -> R -> R) (l : List A) : R = l R n c
+def foldr {A R} (n : R) (c : A -> R -> R) (l : CList A) : R = l R n c
 
-def map {A B} (f : A -> B) (l : List A) : List B =
-  foldr Nil (\hd tl. f hd :: tl) l
+def map {A B} (f : A -> B) (l : CList A) : CList B =
+  foldr CNil (\hd tl. CCons (f hd) tl) l
 
-def test2 = map ((+) 1) #[1, 2, 3]
+def test2 = map ((+) (S Z)) (CCons (S Z) (CCons (S (S Z)) (CCons (S (S (S Z))) CNil)))
 
 -- identity
 def (~) {A} (x y : A) = (P : A -> Meta) -> P x -> P y
@@ -38,7 +38,7 @@ def Refl {A} {x : A} : x ~ x = \P x. x
 
 def rewrite {A x y} (P : A -> Meta) (p : x ~ y) (x : P x) : P y = p P x
 
-def p1 : 1 + 2 ~ 3 = Refl
+def p1 : (S Z) + (S (S Z)) ~ (S (S (S Z))) = Refl
 def p2 : !CTrue ~ CFalse = Refl
 
 -- unit
@@ -57,4 +57,4 @@ def NatM : NatS = (Nat, Z, S, foldNat, Unit)
 def addM (m : NatS) (a : m.Nat) (b : m.Nat) : m.Nat =
   m.fold a b m.S
 
-def testM = addM NatM 1 2
+def testM = addM NatM (S Z) (S (S Z))

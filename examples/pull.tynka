@@ -1,19 +1,19 @@
-def Unit : Meta = (A : Meta) -> A -> A
+def Unit = (A : Meta) -> A -> A
 def unit : Unit = \A x. x
 
-def Step : Ty V -> Ty V -> Meta =
-  \A S. (vf : VF) (R : Ty vf) -> R -> (A -> S -> R) -> R
+def Val = Ty V
 
-def Pull : Ty V -> Meta =
-  \A. (S : Ty V) ** (step : S -> Step A S) ** (value : S) ** Unit
+def Step A S = (vf : VF) (R : Val) -> R -> (A -> S -> R) -> R
 
-def fromList : {A : Ty V} -> List A -> Pull A =
-  \{A} as. (List A, \as vf R stop yield. caseList as stop (\hd tl. yield hd tl), as, unit)
+def Pull A = (S : Val) ** (step : S -> Step A S) ** (value : S) ** Unit
 
-def map : {A B : Ty V} -> (A -> B) -> Pull A -> Pull B =
-  \{A} f p. (p.S, \as vf R stop yield. p.step as vf R stop (\a s. yield (f a) s), p.value, unit)
+def fromList {A : Val} (as : List A) : Pull A =
+  (List A, \as vf R stop yield. caseList as stop (\hd tl. yield hd tl), as, unit)
 
-def Push : Ty V -> Meta = \A. (vf: VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
+def map {A B : Val} (f : A -> B) (p : Pull A) : Pull B =
+  (p.S, \as vf R stop yield. p.step as vf R stop (\a s. yield (f a) s), p.value, unit)
 
-def toPush : {A : Ty V} -> Pull A -> Push A =
-  \{A} p vf B c n. fix (go s. p.step s vf B n (\a s. c a (go s))) (p.value)
+def Push A = (vf: VF) (B : Val) -> (A -> B -> B) -> B -> B
+
+def toPush {A : Val} (p : Pull A) : Push A =
+  \vf B c n. fix (go s. p.step s vf B n (\a s. c a (go s))) (p.value)

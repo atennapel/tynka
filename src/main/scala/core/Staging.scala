@@ -256,11 +256,11 @@ object Staging:
     case VPrim0(PFalse) => IR.BoolLit(false)
 
     case VSplicePrim0(PAbsurd, List(_, _)) => IR.Absurd
-    case VSplicePrim0(PElimBool, List(_, t, _, VQuote1(VPrim0(PTrue)))) =>
+    case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PTrue)), t, _)) =>
       quoteExpr(vsplice0(t))
-    case VSplicePrim0(PElimBool, List(_, _, f, VQuote1(VPrim0(PFalse)))) =>
+    case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PFalse)), _, f)) =>
       quoteExpr(vsplice0(f))
-    case VSplicePrim0(PElimBool, List(_, t, f, b)) =>
+    case VSplicePrim0(PCaseBool, List(_, _, b, t, f)) =>
       val cond = quoteExpr(vsplice0(b))
       val ifTrue = quoteExpr(vsplice0(t))
       val ifFalse = quoteExpr(vsplice0(f))

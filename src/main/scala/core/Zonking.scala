@@ -25,7 +25,7 @@ object Zonking:
     t.fold(v => Left(vproj(v, p)), t => Right(Proj(t, p)))
 
   private def splice(t: VT): VT =
-    t.fold(v => Left(vsplice(v)), t => Right(Splice(t)))
+    t.fold(v => Left(vsplice(v)), t => Right(t.splice))
 
   private def meta(id: MetaId)(implicit l: Lvl, e: Env): VT =
     getMeta(id) match
@@ -64,7 +64,7 @@ object Zonking:
     case Proj(_, _)     => quoteVT(zonkSp(t))
 
     case Lift(vf, t) => Lift(zonk(vf), zonk(t))
-    case Quote(t)    => Quote(zonk(t))
+    case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
 
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))

@@ -88,7 +88,7 @@ object Unification:
               Bound(locals, x, quote(a)(lvl), quoteS(s)(lvl))
             )
           )
-        case VLift(vf, a) => Quote(go(a, S0(vf), lvl, p, locals))
+        case VLift(vf, a) => go(a, S0(vf), lvl, p, locals).quote
         case a =>
           val closed = eval(locals.closeTy(quote(a)(lvl)))(Nil)
           val m = freshMeta(closed, s)
@@ -198,7 +198,7 @@ object Unification:
       case VIntLit(n) => IntLit(n)
 
       case VLift(vf, t) => Lift(go(vf), go(t))
-      case VQuote(t)    => Quote(go(t))
+      case VQuote(t)    => go(t).quote
     go(v)
 
   private def lams(l: Lvl, a: VTy, t: Tm): Tm =
