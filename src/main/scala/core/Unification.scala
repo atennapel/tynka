@@ -202,6 +202,8 @@ object Unification:
 
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => go(t).quote
+
+      case VIrrelevant => Irrelevant
     go(v)
 
   private def lams(l: Lvl, a: VTy, t: Tm): Tm =
@@ -351,6 +353,7 @@ object Unification:
         unify(vf1, vf2); unify(ty1, ty2)
       case (VQuote(a), VQuote(b))             => unify(a, b)
       case (VIntLit(a), VIntLit(b)) if a == b => ()
+      case (VIrrelevant, VIrrelevant)         => ()
 
       case (VFix(_, _, _, b1, a1), VFix(_, _, _, b2, a2)) =>
         val v = VVar(l)

@@ -26,17 +26,20 @@ object Simplifier:
     case Var(_, _)    => None
     case Global(_, _) => None
 
-    case App(Let(x, t, v, b), a) if scope.contains(x.expose) =>
+    case App(Let(x, t, bt, v, b), a) if scope.contains(x.expose) =>
       val y = scope.max + 1
       val ny = Name(y)
-      Some(Let(ny, t, v, App(b.subst(Map(x -> Var(ny, t)), scope + y), a)))
-    case App(Let(x, t, v, b), a)   => Some(Let(x, t, v, App(b, a)))
-    case App(Lam(x, t1, t2, b), a) => Some(Let(x, TDef(t1), a, b))
+      Some(
+        Let(ny, t, bt.tail, v, App(b.subst(Map(x -> Var(ny, t)), scope + y), a))
+      )
+    case App(Let(x, t, bt, v, b), a) =>
+      Some(Let(x, t, bt.tail, v, App(b, a)))
+    case App(Lam(x, t1, t2, b), a) => Some(Let(x, TDef(t1), t2, a, b))
     case App(f, a)                 => go2(f, a).map(App.apply)
 
     case Lam(x, t1, t2, b) => go(b)(scope + x.expose).map(Lam(x, t1, t2, _))
 
-    case Let(y0, t2, Let(x, t1, v1, v2), b) =>
+    case Let(y0, t2, bt2, Let(x, t1, bt1, v1, v2), b) =>
       val nscope = scope + x.expose
       if nscope.contains(y0.expose) then
         val y = nscope.max + 1
@@ -45,22 +48,33 @@ object Simplifier:
           Let(
             x,
             t1,
+            bt2,
             v1,
-            Let(ny, t2, v2, b.subst(Map(y0 -> Var(ny, t2)), nscope + y))
+            Let(ny, t2, bt2, v2, b.subst(Map(y0 -> Var(ny, t2)), nscope + y))
           )
         )
-      else Some(Let(x, t1, v1, Let(y0, t2, v2, b)))
-    case Let(x, t, v, b) =>
-      // TODO: lift lambdas out of let body
+      else Some(Let(x, t1, bt2, v1, Let(y0, t2, bt2, v2, b)))
+    case Let(x, t, TDef(ps, rt), v, b) if ps.nonEmpty =>
+      val (vs, innerscope) =
+        ps.foldLeft[(List[(Name, Ty)], Set[Int])](
+          (Nil, scope + x.expose)
+        ) { case ((vs, scope), ty) =>
+          val y = fresh(scope)
+          (vs ++ List((Name(y), ty)), scope + y)
+        }
+      val spine = vs.map((x, t) => Var(x, TDef(t)))
+      val b2 = b.apps(spine)
+      Some(Let(x, t, TDef(rt), v, b2).lams(vs, TDef(rt)))
+    case Let(x, t, bt, v, b) =>
       val c = b.fvs.count((y, _) => x == y)
       if c == 0 then Some(b)
       else if c == 1 || isInlineable(v) then Some(b.subst(Map(x -> v), scope))
       else
         (go(v), go(b)(scope + x.expose)) match
           case (None, None)       => None
-          case (Some(v), None)    => Some(Let(x, t, v, b))
-          case (None, Some(b))    => Some(Let(x, t, v, b))
-          case (Some(v), Some(b)) => Some(Let(x, t, v, b))
+          case (Some(v), None)    => Some(Let(x, t, bt, v, b))
+          case (None, Some(b))    => Some(Let(x, t, bt, v, b))
+          case (Some(v), Some(b)) => Some(Let(x, t, bt, v, b))
 
     case Fix(g, x, t1, t2, b, arg) =>
       go(arg) match
@@ -112,8 +126,8 @@ object Simplifier:
     case LNil(_)                             => None
     case LCons(t, hd, tl)                    => go2(hd, tl).map(LCons(t, _, _))
     case CaseList(_, _, LNil(_), n, _, _, _) => Some(n)
-    case CaseList(_, _, LCons(t, hd, tl), _, xhd, xtl, c) =>
-      Some(Let(xhd, TDef(t), hd, Let(xtl, TDef(TList(t)), tl, c)))
+    case CaseList(_, bt, LCons(t, hd, tl), _, xhd, xtl, c) =>
+      Some(Let(xhd, TDef(t), bt, hd, Let(xtl, TDef(TList(t)), bt, tl, c)))
     case CaseList(et, TDef(ps, rt), s, nil, hd, tl, cons) if ps.nonEmpty =>
       val (vs, innerscope) =
         ps.foldLeft[(List[(Name, Ty)], Set[Int])](

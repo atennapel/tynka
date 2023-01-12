@@ -44,12 +44,14 @@ object Zonking:
   def zonk(s: Stage[Ty])(implicit l: Lvl, e: Env): Stage[Ty] = s.map(zonk)
 
   def zonk(t: Tm)(implicit l: Lvl, e: Env): Tm = t match
-    case Var(ix)            => t
-    case Global(x)          => t
-    case Prim(x)            => t
-    case IntLit(n)          => t
-    case Let(x, t, s, v, b) => Let(x, zonk(t), zonk(s), zonk(v), zonkLift(b))
-    case U(s)               => U(zonk(s))
+    case Var(ix)    => t
+    case Global(x)  => t
+    case Prim(x)    => t
+    case IntLit(n)  => t
+    case Irrelevant => t
+    case Let(x, t, s, bt, v, b) =>
+      Let(x, zonk(t), zonk(s), zonk(bt), zonk(v), zonkLift(b))
+    case U(s) => U(zonk(s))
 
     case Pi(x, i, t, b)   => Pi(x, i, zonk(t), zonkLift(b))
     case FunTy(t, vf, b)  => FunTy(zonk(t), zonk(vf), zonk(b))

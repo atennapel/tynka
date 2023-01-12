@@ -400,7 +400,7 @@ object Elaboration:
         val eb = check(b, ty, stage)(
           ctx.define(x, vt, et, vs, qvs, ctx.eval(ev), ev)
         )
-        Let(x, et, qvs, ev, eb)
+        Let(x, et, qvs, ctx.quote(ty), ev, eb)
 
       case (S.Fix(go, x, b, a), _) if stage.isS0 =>
         val (ea, ta) = infer(a, S0(VV()))
@@ -542,7 +542,7 @@ object Elaboration:
         val (ev, et, vt) = check(v, t, vs)
         val (eb, rt, st) =
           infer(b)(ctx.define(x, vt, et, vs, qvs, ctx.eval(ev), ev))
-        (Let(x, et, qvs, ev, eb), rt, st)
+        (Let(x, et, qvs, ctx.quote(rt), ev, eb), rt, st)
 
       case S.Fix(go, x, b, a) =>
         val (ea, ta) = infer(a, S0(VV()))

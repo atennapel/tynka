@@ -42,7 +42,7 @@ object Staging:
         body: (Val0, Val0) => Val0,
         arg: Val0
     )
-    case VLet0(x: Name, ty: Val1, value: Val0, body: Val0 => Val0)
+    case VLet0(x: Name, ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
     case VPair0(fst: Val0, snd: Val0)
     case VFst0(t: Val0)
     case VSnd0(t: Val0)
@@ -74,16 +74,16 @@ object Staging:
     v => eval1(t)(Def1(env, v))
 
   private def eval1(t: Tm)(implicit env: Env): Val1 = t match
-    case Var(x)             => vvar1(x)
-    case Global(x)          => eval1(getGlobal(x).get.tm)
-    case Prim(x)            => VPrim1(x, Nil)
-    case Lam(_, _, _, b)    => VLam1(clos1(b))
-    case App(f, a, _)       => vapp1(eval1(f), eval1(a))
-    case Proj(t, p)         => vproj1(eval1(t), p)
-    case Let(_, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
-    case Pair(fst, snd)     => VPair1(eval1(fst), eval1(snd))
-    case Quote(t)           => VQuote1(eval0(t))
-    case Wk(t)              => eval1(t)(env.tail)
+    case Var(x)                => vvar1(x)
+    case Global(x)             => eval1(getGlobal(x).get.tm)
+    case Prim(x)               => VPrim1(x, Nil)
+    case Lam(_, _, _, b)       => VLam1(clos1(b))
+    case App(f, a, _)          => vapp1(eval1(f), eval1(a))
+    case Proj(t, p)            => vproj1(eval1(t), p)
+    case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
+    case Pair(fst, snd)        => VPair1(eval1(fst), eval1(snd))
+    case Quote(t)              => VQuote1(eval0(t))
+    case Wk(t)                 => eval1(t)(env.tail)
 
     case FunTy(pt, vf, rt) => VFunTy1(eval1(pt), eval1(vf), eval1(rt))
     case PairTy(pt, rt)    => VPairTy1(eval1(pt), eval1(rt))
@@ -92,6 +92,7 @@ object Staging:
     case Pi(_, _, _, _) => VType1
     case Sigma(_, _, _) => VType1
     case Lift(_, _)     => VType1
+    case Irrelevant     => VType1
 
     case Meta(_)            => impossible()
     case Splice(_)          => impossible()
@@ -116,9 +117,8 @@ object Staging:
     if b then VPrim0(PTrue) else VPrim0(PFalse)
 
   private def vapp0(f: Val0, a: Val0): Val0 = f match
-    case VLam0(DontBind, _, b)   => b(a)
-    case VLam0(DoBind(x), ty, b) => VLet0(x, ty, a, b)
-    case _                       => VApp0(f, a)
+    case VLam0(DontBind, _, b) => b(a)
+    case _                     => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType): Val0 = (v, p) match
     case (VPair0(fst, _), Fst)         => fst
@@ -140,8 +140,8 @@ object Staging:
     case Lam(x, _, fnty, b) => VLam0(x, eval1(fnty), clos0(b))
     case App(f, a, _)       => vapp0(eval0(f), eval0(a))
     case Proj(t, p)         => vproj0(eval0(t), p)
-    case Let(x, t, vf, v, b) =>
-      VLet0(x, eval1(t), eval0(v), clos0(b))
+    case Let(x, t, vf, bt, v, b) =>
+      VLet0(x, eval1(t), eval1(bt), eval0(v), clos0(b))
     case Pair(fst, snd) => VPair0(eval0(fst), eval0(snd))
     case Splice(t)      => vsplice0(eval1(t))
     case Wk(t)          => eval0(t)(env.tail)
@@ -164,6 +164,7 @@ object Staging:
     case Meta(_)           => impossible()
     case Quote(_)          => impossible()
     case AppPruning(_, _)  => impossible()
+    case Irrelevant        => impossible()
 
   private def quoteTy(v: Val1)(implicit l: Lvl): IR.Ty = v match
     case VPrim1(PVoid, Nil)     => IR.TVoid
@@ -233,12 +234,13 @@ object Staging:
         IR.TDef(td.ps.tail, td.rt),
         quoteExpr(b(VVar0(l)))(l + 1, (x, IR.TDef(at)) :: ns)
       )
-    case VLet0(_, ty, v, b) =>
+    case VLet0(_, ty, bty, v, b) =>
       val x = fresh()
       val td = quoteTDef(ty)
       IR.Let(
         x,
         td,
+        quoteTDef(bty),
         quoteExpr(v),
         quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
       )

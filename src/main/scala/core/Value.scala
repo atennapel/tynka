@@ -61,6 +61,8 @@ object Value:
 
     case VLift(vf: VTy, tm: Val)
     case VQuote(tm: Val)
+
+    case VIrrelevant
   export Val.*
 
   private def name(x: String): Bind =

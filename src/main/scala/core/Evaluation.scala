@@ -97,11 +97,11 @@ object Evaluation:
     case S0(vf) => S0(eval(vf))
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
-    case Var(ix)            => env(ix.expose)
-    case Global(x)          => vglobal(x)
-    case Prim(x)            => vprim(x)
-    case Let(_, _, _, v, b) => eval(b)(eval(v) :: env)
-    case U(s)               => VU(eval(s))
+    case Var(ix)               => env(ix.expose)
+    case Global(x)             => vglobal(x)
+    case Prim(x)               => vprim(x)
+    case Let(_, _, _, _, v, b) => eval(b)(eval(v) :: env)
+    case U(s)                  => VU(eval(s))
 
     case Pi(x, i, t, b)      => VPi(x, i, eval(t), Clos(b))
     case FunTy(t, vf, b)     => VFunTy(eval(t), eval(vf), eval(b))
@@ -120,7 +120,8 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
-    case Wk(tm) => eval(tm)(env.tail)
+    case Wk(tm)     => eval(tm)(env.tail)
+    case Irrelevant => VIrrelevant
 
     case Meta(id)         => vmeta(id)
     case AppPruning(t, p) => vappPruning(eval(t), p)
@@ -193,6 +194,8 @@ object Evaluation:
 
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
+
+      case VIrrelevant => Irrelevant
 
   def nf(tm: Tm)(implicit l: Lvl = lvl0, env: Env = Nil): Tm =
     quote(eval(tm), UnfoldAll)

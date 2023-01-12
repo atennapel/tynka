@@ -31,6 +31,7 @@ object Syntax:
 
   final case class TDef(ps: List[Ty], rt: Ty):
     override def toString: String = s"(${ps.mkString(", ")}) -> $rt"
+    def tail: TDef = TDef(ps.tail, rt)
   object TDef:
     def apply(rt: Ty): TDef = TDef(Nil, rt)
     def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
@@ -89,7 +90,7 @@ object Syntax:
     case Global(x: GName, ty: TDef)
     case App(f: Expr, a: Expr)
     case Lam(x: Name, t1: Ty, t2: TDef, body: Expr)
-    case Let(x: Name, ty: TDef, value: Expr, body: Expr)
+    case Let(x: Name, ty: TDef, bt: TDef, value: Expr, body: Expr)
     case Fix(go: Name, x: Name, t1: Ty, t2: TDef, body: Expr, arg: Expr)
 
     case Pair(fst: Expr, snd: Expr)
@@ -123,7 +124,7 @@ object Syntax:
       case Global(x, _)             => s"$x"
       case App(f, a)                => s"($f $a)"
       case Lam(x, t, _, b)          => s"(\\($x : $t). $b)"
-      case Let(x, t, v, b)          => s"(let $x : $t = $v; $b)"
+      case Let(x, t, _, v, b)       => s"(let $x : $t = $v; $b)"
       case Fix(go, x, _, _, b, arg) => s"(fix ($go $x. $b) $arg)"
 
       case Pair(fst, snd) => s"($fst, $snd)"
@@ -171,7 +172,7 @@ object Syntax:
       case Global(x, _)             => 1
       case App(f, a)                => 1 + f.size + a.size
       case Lam(x, _, _, b)          => 1 + b.size
-      case Let(x, _, v, b)          => 1 + v.size + b.size
+      case Let(x, _, _, v, b)       => 1 + v.size + b.size
       case Fix(go, x, _, _, b, arg) => 1 + b.size + arg.size
 
       case Pair(fst, snd) => 1 + fst.size + snd.size
@@ -193,11 +194,11 @@ object Syntax:
       case CaseList(_, _, l, n, hd, tl, c) => 1 + l.size + n.size + c.size
 
     def fvs: List[(Name, TDef)] = this match
-      case Var(x, t)       => List((x, t))
-      case Global(x, _)    => Nil
-      case App(f, a)       => f.fvs ++ a.fvs
-      case Lam(x, _, _, b) => b.fvs.filterNot((y, _) => x == y)
-      case Let(x, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+      case Var(x, t)          => List((x, t))
+      case Global(x, _)       => Nil
+      case App(f, a)          => f.fvs ++ a.fvs
+      case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => x == y)
+      case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
       case Fix(go, x, _, _, b, arg) =>
         b.fvs.filterNot((y, _) => x == y || go == y) ++ arg.fvs
 
@@ -281,9 +282,9 @@ object Syntax:
         case Lam(x0, t1, t2, b0) =>
           val (x, b) = under(x0, TDef(t1), b0, sub, scope)
           Lam(x, t1, t2, b)
-        case Let(x0, t, v, b0) =>
+        case Let(x0, t, bt, v, b0) =>
           val (x, b) = under(x0, t, b0, sub, scope)
-          Let(x, t, v.subst(sub, scope), b)
+          Let(x, t, bt, v.subst(sub, scope), b)
         case Fix(go0, x0, t1, t2, b0, arg) =>
           val (go, x, b) =
             under2(go0, TDef(t1, t2), x0, TDef(t1), b0, sub, scope)

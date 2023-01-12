@@ -63,6 +63,7 @@ object Pretty:
       case U(S1)               => pretty(tm)
       case U(S0(_)) if app     => pretty(tm)
       case IntLit(_)           => pretty(tm)
+      case Irrelevant          => pretty(tm)
       case Wk(tm)              => prettyParen(tm, app)(ns.tail)
       case _                   => s"(${pretty(tm)})"
 
@@ -81,7 +82,7 @@ object Pretty:
     case Var(ix)   => s"${ns(ix.expose)}"
     case Global(x) => s"$x"
     case Prim(x)   => s"$x"
-    case Let(x0, t, s, v, b) =>
+    case Let(x0, t, s, _, v, b) =>
       val x = x0.fresh
       val ss = s match
         case S1    => ""
@@ -112,7 +113,8 @@ object Pretty:
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"
 
-    case Wk(tm) => pretty(tm)(ns.tail)
+    case Wk(tm)     => pretty(tm)(ns.tail)
+    case Irrelevant => "Ir"
 
     case Meta(id)         => s"?$id"
     case AppPruning(f, _) => s"?*${prettyParen(f)}"
