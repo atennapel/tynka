@@ -69,20 +69,19 @@ object Elaboration:
       implicit ctx: Ctx
   ): (Tm, VTy, Stage[VTy]) =
     @tailrec
-    def go(tm: Tm, ty: VTy, st: Stage[VTy]): (Tm, VTy, Stage[VTy]) = force(
-      ty
-    ) match
-      case VPi(y, Impl, a, b) =>
-        mode match
-          case Until(x) if x == y => (tm, ty, st)
-          case _ =>
-            val m = newMeta(a, st)
-            val mv = ctx.eval(m)
-            go(App(tm, m, Impl), b(mv), st)
-      case _ =>
-        mode match
-          case Until(x) => error(s"no implicit pi found with parameter $x")
-          case _        => (tm, ty, st)
+    def go(tm: Tm, ty: VTy, st: Stage[VTy]): (Tm, VTy, Stage[VTy]) =
+      force(ty) match
+        case VPi(y, Impl, a, b) =>
+          mode match
+            case Until(x) if DoBind(x) == y => (tm, ty, st)
+            case _ =>
+              val m = newMeta(a, st)
+              val mv = ctx.eval(m)
+              go(App(tm, m, Impl), b(mv), st)
+        case _ =>
+          mode match
+            case Until(x) => error(s"no implicit pi found with parameter $x")
+            case _        => (tm, ty, st)
     go(inp._1, inp._2, inp._3)
 
   private def insert(inp: (Tm, VTy, Stage[VTy]))(implicit
