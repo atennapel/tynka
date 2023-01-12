@@ -409,7 +409,7 @@ object Elaboration:
         val eb = check(b, ty, S0(vf))(
           ctx.bind(DoBind(go), fun, S0(VF())).bind(DoBind(x), ta, S0(VV()))
         )
-        Fix(go, x, eb, ea)
+        Fix(go, x, ctx.quote(fun), eb, ea)
 
       case (S.Hole(ox), _) =>
         val t = newMeta(ty, stage)
@@ -506,7 +506,7 @@ object Elaboration:
         val eb = check(b, rt, S0(vf))(
           ctx.bind(DoBind(go), fun, S0(VF())).bind(DoBind(x), ta, S0(VV()))
         )
-        (Fix(go, x, eb, ea), rt)
+        (Fix(go, x, ctx.quote(fun), eb, ea), rt)
 
       case _ =>
         val (t, a, si) = insert(infer(tm))
@@ -552,7 +552,7 @@ object Elaboration:
         val eb = check(b, rt, S0(vf))(
           ctx.bind(DoBind(go), fun, S0(VF())).bind(DoBind(x), ta, S0(VV()))
         )
-        (Fix(go, x, eb, ea), rt, S0(vf))
+        (Fix(go, x, ctx.quote(fun), eb, ea), rt, S0(vf))
 
       case S.Hole(ox) => error(s"cannot infer hole $tm")
 

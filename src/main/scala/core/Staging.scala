@@ -35,7 +35,13 @@ object Staging:
     case VPrim0(x: PrimName)
     case VApp0(f: Val0, a: Val0)
     case VLam0(x: Bind, fnty: Val1, body: Val0 => Val0)
-    case VFix0(go: Name, x: Name, body: (Val0, Val0) => Val0, arg: Val0)
+    case VFix0(
+        go: Name,
+        x: Name,
+        fnty: Val1,
+        body: (Val0, Val0) => Val0,
+        arg: Val0
+    )
     case VLet0(x: Name, ty: Val1, value: Val0, body: Val0 => Val0)
     case VPair0(fst: Val0, snd: Val0)
     case VFst0(t: Val0)
@@ -87,11 +93,11 @@ object Staging:
     case Sigma(_, _, _) => VType1
     case Lift(_, _)     => VType1
 
-    case Meta(_)          => impossible()
-    case Splice(_)        => impossible()
-    case AppPruning(_, _) => impossible()
-    case IntLit(_)        => impossible()
-    case Fix(_, _, _, _)  => impossible()
+    case Meta(_)            => impossible()
+    case Splice(_)          => impossible()
+    case AppPruning(_, _)   => impossible()
+    case IntLit(_)          => impossible()
+    case Fix(_, _, _, _, _) => impossible()
 
   private def vvar0(ix: Ix)(implicit env: Env): Val0 =
     def go(e: Env, i: Int): Val0 = (e, i) match
@@ -109,37 +115,10 @@ object Staging:
   private def vbool0(b: Boolean): Val0 =
     if b then VPrim0(PTrue) else VPrim0(PFalse)
 
-  private def vbinop0(op: PrimName, a: Val0, b: Val0): Val0 = (op, a, b) match
-    case (PPrimIntAdd, VIntLit0(a), VIntLit0(b)) => VIntLit0(a + b)
-    case (PPrimIntMul, VIntLit0(a), VIntLit0(b)) => VIntLit0(a * b)
-    case (PPrimIntSub, VIntLit0(a), VIntLit0(b)) => VIntLit0(a - b)
-    case (PPrimIntDiv, VIntLit0(a), VIntLit0(b)) => VIntLit0(a / b)
-    case (PPrimIntMod, VIntLit0(a), VIntLit0(b)) => VIntLit0(a % b)
-    case (PPrimIntEq, VIntLit0(a), VIntLit0(b))  => vbool0(a == b)
-    case (PPrimIntNeq, VIntLit0(a), VIntLit0(b)) => vbool0(a != b)
-    case (PPrimIntLt, VIntLit0(a), VIntLit0(b))  => vbool0(a < b)
-    case (PPrimIntGt, VIntLit0(a), VIntLit0(b))  => vbool0(a > b)
-    case (PPrimIntLeq, VIntLit0(a), VIntLit0(b)) => vbool0(a <= b)
-    case (PPrimIntGeq, VIntLit0(a), VIntLit0(b)) => vbool0(a >= b)
-
-    case (PPrimIntAdd, VIntLit0(0), v) => v
-    case (PPrimIntAdd, v, VIntLit0(0)) => v
-
-    case (PPrimIntMul, VIntLit0(0), v) => VIntLit0(0)
-    case (PPrimIntMul, v, VIntLit0(0)) => VIntLit0(0)
-    case (PPrimIntMul, VIntLit0(1), v) => v
-    case (PPrimIntMul, v, VIntLit0(1)) => v
-
-    case (PPrimIntSub, v, VIntLit0(0)) => v
-    case (PPrimIntDiv, v, VIntLit0(1)) => v
-
-    case (op, a, b) => VApp0(VApp0(VPrim0(op), a), b)
-
   private def vapp0(f: Val0, a: Val0): Val0 = f match
-    case VLam0(DontBind, _, b)            => b(a)
-    case VLam0(DoBind(x), ty, b)          => VLet0(x, ty, a, b)
-    case VApp0(VPrim0(p), b) if p.isBinOp => vbinop0(p, b, a)
-    case _                                => VApp0(f, a)
+    case VLam0(DontBind, _, b)   => b(a)
+    case VLam0(DoBind(x), ty, b) => VLet0(x, ty, a, b)
+    case _                       => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType): Val0 = (v, p) match
     case (VPair0(fst, _), Fst)         => fst
@@ -167,8 +146,14 @@ object Staging:
     case Splice(t)      => vsplice0(eval1(t))
     case Wk(t)          => eval0(t)(env.tail)
     case IntLit(n)      => VIntLit0(n)
-    case Fix(go, x, b, a) =>
-      VFix0(go, x, (v, w) => eval0(b)(Def0(Def0(env, v), w)), eval0(a))
+    case Fix(go, x, t, b, a) =>
+      VFix0(
+        go,
+        x,
+        eval1(t),
+        (v, w) => eval0(b)(Def0(Def0(env, v), w)),
+        eval0(a)
+      )
 
     case FunTy(pt, vf, rt) => impossible()
     case PairTy(pt, rt)    => impossible()
@@ -196,15 +181,23 @@ object Staging:
       case t                  => IR.TDef(ps, quoteTy(t))
     go(v, Nil)
 
+  private def fresh()(implicit ns: List[(IR.Name, IR.TDef)]): IR.Name =
+    IR.Name.fresh(ns.map(_._1))
+
   private def quoteApp(v: Val0, b: IR.Expr)(implicit
       l: Lvl,
-      ns: List[IR.Name]
+      ns: List[(IR.Name, IR.TDef)]
   ): IR.Expr = v match
     case VApp0(VPrim0(p), a) => IR.BinOp(quotePrim(p), quoteExpr(a), b)
     case VPrim0(p) =>
-      val x = IR.Name.fresh
+      val x = fresh()
       val op = quotePrim(p)
-      IR.Lam(x, IR.TInt, IR.TDef(op.returnTy), IR.BinOp(op, b, IR.Var(x)))
+      IR.Lam(
+        x,
+        IR.TInt,
+        IR.TDef(op.returnTy),
+        IR.BinOp(op, b, IR.Var(x, IR.TDef(IR.TInt)))
+      )
     case f => IR.App(quoteExpr(f), b)
 
   private def quotePrim(p: PrimName): IR.Op = p match
@@ -223,34 +216,44 @@ object Staging:
 
   private def quoteExpr(
       v: Val0
-  )(implicit l: Lvl, ns: List[IR.Name]): IR.Expr = v match
-    case VVar0(k)    => IR.Var(ns(k.toIx.expose))
-    case VGlobal0(x) => IR.Global(x.expose)
+  )(implicit l: Lvl, ns: List[(IR.Name, IR.TDef)]): IR.Expr = v match
+    case VVar0(k) =>
+      val (x, t) = ns(k.toIx.expose)
+      IR.Var(x, t)
+    case VGlobal0(x) =>
+      IR.Global(x.expose, quoteTDef(eval1(getGlobal(x).get.ty)(Empty)))
     case VApp0(f, a) => quoteApp(f, quoteExpr(a))
     case VLam0(_, fnty, b) =>
-      val x = IR.Name.fresh
+      val x = fresh()
       val td = quoteTDef(fnty)
+      val at = td.ps.head
       IR.Lam(
         x,
-        td.ps.head,
+        at,
         IR.TDef(td.ps.tail, td.rt),
-        quoteExpr(b(VVar0(l)))(l + 1, x :: ns)
+        quoteExpr(b(VVar0(l)))(l + 1, (x, IR.TDef(at)) :: ns)
       )
     case VLet0(_, ty, v, b) =>
-      val x = IR.Name.fresh
+      val x = fresh()
+      val td = quoteTDef(ty)
       IR.Let(
         x,
-        quoteTDef(ty),
+        td,
         quoteExpr(v),
-        quoteExpr(b(VVar0(l)))(l + 1, x :: ns)
+        quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
       )
-    case VFix0(_, _, b, a) =>
-      val go = IR.Name.fresh
-      val x = IR.Name.fresh(go :: ns)
+    case VFix0(_, _, t, b, a) =>
+      val go = fresh()
+      val td = quoteTDef(t)
+      val at = td.ps.head
+      val atd = IR.TDef(at)
+      val x = fresh()((go, atd) :: ns)
       IR.Fix(
         go,
         x,
-        quoteExpr(b(VVar0(l), VVar0(l + 1)))(l + 2, x :: go :: ns),
+        at,
+        IR.TDef(td.ps.tail, td.rt),
+        quoteExpr(b(VVar0(l), VVar0(l + 1)))(l + 2, (x, atd) :: (go, td) :: ns),
         quoteExpr(a)
       )
 
@@ -269,25 +272,39 @@ object Staging:
       quoteExpr(vsplice0(t))
     case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PFalse)), _, f)) =>
       quoteExpr(vsplice0(f))
-    case VSplicePrim0(PCaseBool, List(_, _, b, t, f)) =>
+    case VSplicePrim0(PCaseBool, List(_, ty, b, t, f)) =>
       val cond = quoteExpr(vsplice0(b))
       val ifTrue = quoteExpr(vsplice0(t))
       val ifFalse = quoteExpr(vsplice0(f))
-      IR.If(cond, ifTrue, ifFalse)
+      IR.If(quoteTDef(ty), cond, ifTrue, ifFalse)
 
-    case VSplicePrim0(PNil, List(_)) => IR.LNil
-    case VSplicePrim0(PCons, List(_, hd, tl)) =>
-      IR.LCons(quoteExpr(vsplice0(hd)), quoteExpr(vsplice0(tl)))
-    case VSplicePrim0(PCaseList, List(_, _, _, lst, n, c)) =>
-      val hd = IR.Name.fresh
-      val tl = IR.Name.fresh(hd :: ns)
+    case VSplicePrim0(PNil, List(t)) => IR.LNil(quoteTy(t))
+    case VSplicePrim0(PCons, List(t, hd, tl)) =>
+      IR.LCons(quoteTy(t), quoteExpr(vsplice0(hd)), quoteExpr(vsplice0(tl)))
+    case VSplicePrim0(PCaseList, List(t1, _, t2, lst, n, c)) =>
+      val hd = fresh()
+      val et = quoteTy(t1)
+      val etd = IR.TDef(et)
+      val tl = fresh()((hd, etd) :: ns)
       val cc = vapp1(vapp1(c, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
-      val cr = quoteExpr(vsplice0(cc))(l + 2, tl :: hd :: ns)
-      IR.CaseList(quoteExpr(vsplice0(lst)), quoteExpr(vsplice0(n)), hd, tl, cr)
+      val cr = quoteExpr(vsplice0(cc))(
+        l + 2,
+        (tl, IR.TDef(IR.TList(et))) :: (hd, etd) :: ns
+      )
+      IR.CaseList(
+        et,
+        quoteTDef(t2),
+        quoteExpr(vsplice0(lst)),
+        quoteExpr(vsplice0(n)),
+        hd,
+        tl,
+        cr
+      )
 
     case VPrim0(p) =>
-      val x = IR.Name.fresh
-      val y = IR.Name.fresh(x :: ns)
+      val x = fresh()
+      val dty = IR.TDef(IR.TInt)
+      val y = fresh()((x, dty) :: ns)
       val op = quotePrim(p)
       IR.Lam(
         x,
@@ -297,7 +314,7 @@ object Staging:
           y,
           IR.TInt,
           IR.TDef(op.returnTy),
-          IR.BinOp(op, IR.Var(x), IR.Var(y))
+          IR.BinOp(op, IR.Var(x, dty), IR.Var(y, dty))
         )
       )
 

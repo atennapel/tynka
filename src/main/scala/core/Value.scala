@@ -51,7 +51,7 @@ object Value:
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
     case VFunTy(ty: VTy, vf: VTy, rt: VTy)
-    case VFix(go: Name, name: Name, body: Clos2, arg: Val)
+    case VFix(go: Name, name: Name, fnty: VTy, body: Clos2, arg: Val)
 
     case VSigma(name: Bind, ty: VTy, body: Clos)
     case VPair(fst: Val, snd: Val)

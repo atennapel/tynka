@@ -93,7 +93,7 @@ object Pretty:
     case FunTy(_, _, _)  => prettyPi(tm)
     case Lam(_, _, _, _) => prettyLam(tm)
     case App(_, _, _)    => prettyApp(tm)
-    case Fix(go0, x0, b, arg) =>
+    case Fix(go0, x0, _, b, arg) =>
       val go = go0.fresh
       val x = x0.fresh(go :: ns)
       s"fix ($go $x. ${pretty(b)(x :: go :: ns)}) ${prettyParen(arg)}"

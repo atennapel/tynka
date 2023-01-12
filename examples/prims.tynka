@@ -52,3 +52,14 @@ def map {A B} (f : ^A -> ^B) (l : List A) : List B =
   fix (go l. caseList l Nil (\hd tl. f hd :: go tl)) l
 
 def testmap := map ((+) 1) #[1, 2, 3]
+
+def testlift b :=
+  (if b then
+      \x. x + 1
+  else
+    \x. x * 2 
+  ) 42
+def testlift2 z :=
+  let f := (let x := z; \(y : Int). y + x + x); (f 0, f 1)
+
+def testlift3 x := let y := x * x; \(z : Int). z - y - y

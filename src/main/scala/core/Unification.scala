@@ -185,10 +185,11 @@ object Unification:
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
       case VFunTy(t, vf, b) => FunTy(go(t), go(vf), go(b))
-      case VFix(g, x, b, a) =>
+      case VFix(g, x, t, b, a) =>
         Fix(
           g,
           x,
+          go(t),
           go(b(VVar(psub.cod), VVar(psub.cod + 1)))(psub.lift.lift),
           go(a)
         )
@@ -351,7 +352,7 @@ object Unification:
       case (VQuote(a), VQuote(b))             => unify(a, b)
       case (VIntLit(a), VIntLit(b)) if a == b => ()
 
-      case (VFix(_, _, b1, a1), VFix(_, _, b2, a2)) =>
+      case (VFix(_, _, _, b1, a1), VFix(_, _, _, b2, a2)) =>
         val v = VVar(l)
         val w = VVar(l + 1)
         unify(b1(v, w), b2(v, w))(l + 2)

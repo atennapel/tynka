@@ -3,6 +3,7 @@ import core.Pretty.pretty
 import common.Debug.*
 import elaboration.Elaboration.{ElaborateError, elaborate}
 import core.Staging.stage
+import ir.Simplifier.simplify
 
 import java.io.File
 import scala.io.Source
@@ -26,7 +27,10 @@ object Main:
       )
       println(pretty(eds))
       println("staging:")
-      println(stage(eds))
+      val ids = stage(eds)
+      println(ids)
+      println("simplification:")
+      println(simplify(ids))
     catch
       case err: ElaborateError =>
         println(err.getMessage)

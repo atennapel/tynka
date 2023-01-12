@@ -103,11 +103,11 @@ object Evaluation:
     case Let(_, _, _, v, b) => eval(b)(eval(v) :: env)
     case U(s)               => VU(eval(s))
 
-    case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
-    case FunTy(t, vf, b)  => VFunTy(eval(t), eval(vf), eval(b))
-    case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
-    case App(f, a, i)     => vapp(eval(f), eval(a), i)
-    case Fix(go, x, b, a) => VFix(go, x, CClos2(env, b), eval(a))
+    case Pi(x, i, t, b)      => VPi(x, i, eval(t), Clos(b))
+    case FunTy(t, vf, b)     => VFunTy(eval(t), eval(vf), eval(b))
+    case Lam(x, i, ty, b)    => VLam(x, i, eval(ty), Clos(b))
+    case App(f, a, i)        => vapp(eval(f), eval(a), i)
+    case Fix(go, x, t, b, a) => VFix(go, x, eval(t), CClos2(env, b), eval(a))
 
     case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
     case PairTy(t, b)   => VPairTy(eval(t), eval(b))
@@ -175,10 +175,11 @@ object Evaluation:
         Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VFunTy(t, vf, b) =>
         FunTy(quote(t, unfold), quote(vf, unfold), quote(b, unfold))
-      case VFix(go, x, b, a) =>
+      case VFix(go, x, t, b, a) =>
         Fix(
           go,
           x,
+          quote(t, unfold),
           quote(b(VVar(l), VVar(l + 1)), unfold)(l + 2),
           quote(a, unfold)
         )
