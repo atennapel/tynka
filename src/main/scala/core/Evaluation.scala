@@ -25,9 +25,9 @@ object Evaluation:
     VGlobal(x, SId, () => value)
 
   def vapp(f: Val, a: Val, i: Icit): Val = f match
-    case VLam(_, _, b)  => b(a)
-    case VRigid(hd, sp) => VRigid(hd, SApp(sp, a, i))
-    case VFlex(hd, sp)  => VFlex(hd, SApp(sp, a, i))
+    case VLam(_, _, _, b) => b(a)
+    case VRigid(hd, sp)   => VRigid(hd, SApp(sp, a, i))
+    case VFlex(hd, sp)    => VFlex(hd, SApp(sp, a, i))
     case VGlobal(uri, sp, v) =>
       VGlobal(uri, SApp(sp, a, i), () => vapp(v(), a, i))
     case _ => impossible()
@@ -105,7 +105,7 @@ object Evaluation:
 
     case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
     case FunTy(t, vf, b)  => VFunTy(eval(t), eval(vf), eval(b))
-    case Lam(x, i, b)     => VLam(x, i, Clos(b))
+    case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
     case App(f, a, i)     => vapp(eval(f), eval(a), i)
     case Fix(go, x, b, a) => VFix(go, x, CClos2(env, b), eval(a))
 
@@ -169,7 +169,8 @@ object Evaluation:
       case VGlobal(x, sp, _) => quote(Global(x), sp, unfold)
       case VU(s)             => U(quoteS(s, unfold))
 
-      case VLam(x, i, b) => Lam(x, i, quote(b(VVar(l)), unfold)(l + 1))
+      case VLam(x, i, ty, b) =>
+        Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
         Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VFunTy(t, vf, b) =>

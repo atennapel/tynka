@@ -37,7 +37,7 @@ object Syntax:
     case U(stage: Stage[Ty])
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
-    case Lam(name: Bind, icit: Icit, body: Tm)
+    case Lam(name: Bind, icit: Icit, fnty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
     case FunTy(ty: Ty, vf: Ty, rt: Ty)
     case Fix(go: Name, name: Name, body: Tm, arg: Tm)
@@ -83,8 +83,8 @@ object Syntax:
 
       case Pi(DontBind, Expl, t, b) => s"($t -> $b)"
       case Pi(x, i, t, b)           => s"(${i.wrap(s"$x : $t")} -> $b)"
-      case Lam(x, Expl, b)          => s"(\\$x. $b)"
-      case Lam(x, Impl, b)          => s"(\\{$x}. $b)"
+      case Lam(x, Expl, _, b)       => s"(\\$x. $b)"
+      case Lam(x, Impl, _, b)       => s"(\\{$x}. $b)"
       case App(f, a, Expl)          => s"($f $a)"
       case App(f, a, Impl)          => s"($f {$a})"
       case FunTy(a, _, b)           => s"($a -> $b)"

@@ -89,8 +89,8 @@ object Elaboration:
       ctx: Ctx
   ): (Tm, VTy, Stage[VTy]) =
     inp._1 match
-      case Lam(_, Impl, _) => inp
-      case _               => insertPi(inp)
+      case Lam(_, Impl, _, _) => inp
+      case _                  => insertPi(inp)
 
   private def insert(s: Stage[VTy], inp: (Tm, VTy))(implicit
       ctx: Ctx
@@ -162,7 +162,7 @@ object Elaboration:
               val v = VVar(ctx.lvl)
               val body =
                 go(App(Wk(t), Var(ix0), i), r1(v), S1, r2(v), S1)(ctx2)
-              body.map(Lam(x, i, _))
+              body.map(Lam(x, i, ctx.quote(b), _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
@@ -171,8 +171,9 @@ object Elaboration:
                 r2(VVar(ctx.lvl)),
                 S1
               )(ctx2) match
-                case None => Some(Lam(pick(x, x2), i, App(Wk(t), coev0, i)))
-                case Some(body) => Some(Lam(pick(x, x2), i, body))
+                case None =>
+                  Some(Lam(pick(x, x2), i, ctx.quote(b), App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(pick(x, x2), i, ctx.quote(b), body))
 
         case (VSigma(x, p1, r1), VSigma(x2, p2, r2)) =>
           unify(st1, S1); unify(st2, S1)
@@ -195,11 +196,12 @@ object Elaboration:
             case None =>
               val body =
                 go(App(Wk(t), Var(ix0), Expl), r1, S0(vf1), r2, S0(vf2))(ctx2)
-              body.map(Lam(x, Expl, _))
+              body.map(Lam(x, Expl, ctx.quote(b), _))
             case Some(coev0) =>
               go(App(Wk(t), coev0, Expl), r1, S0(vf1), r2, S0(vf2))(ctx2) match
-                case None       => Some(Lam(x, Expl, App(Wk(t), coev0, Expl)))
-                case Some(body) => Some(Lam(x, Expl, body))
+                case None =>
+                  Some(Lam(x, Expl, ctx.quote(b), App(Wk(t), coev0, Expl)))
+                case Some(body) => Some(Lam(x, Expl, ctx.quote(b), body))
 
         case (VPairTy(p1, r1), VPairTy(p2, r2)) =>
           val fst = go(Proj(t, Fst), p1, S0(VV()), p2, S0(VV()))
@@ -220,7 +222,7 @@ object Elaboration:
                 go(App(Wk(t), Var(ix0), i), r1, S0(vf), r2(VVar(ctx.lvl)), S1)(
                   ctx2
                 )
-              body.map(Lam(x, i, _))
+              body.map(Lam(x, i, ctx.quote(b), _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
@@ -229,8 +231,8 @@ object Elaboration:
                 r2(VVar(ctx.lvl)),
                 S1
               )(ctx2) match
-                case None       => Some(Lam(x, i, App(Wk(t), coev0, i)))
-                case Some(body) => Some(Lam(x, i, body))
+                case None => Some(Lam(x, i, ctx.quote(b), App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(x, i, ctx.quote(b), body))
         case (VPi(x, i, p1, r1), VFunTy(p2, vf, r2)) =>
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
@@ -241,7 +243,7 @@ object Elaboration:
                 go(App(Wk(t), Var(ix0), i), r1(VVar(ctx.lvl)), S1, r2, S0(vf))(
                   ctx2
                 )
-              body.map(Lam(x, i, _))
+              body.map(Lam(x, i, ctx.quote(b), _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
@@ -250,8 +252,8 @@ object Elaboration:
                 r2,
                 S0(vf)
               )(ctx2) match
-                case None       => Some(Lam(x, i, App(Wk(t), coev0, i)))
-                case Some(body) => Some(Lam(x, i, body))
+                case None => Some(Lam(x, i, ctx.quote(b), App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(x, i, ctx.quote(b), body))
 
         case (VPairTy(p1, r1), VSigma(_, p2, r2)) =>
           val fst = go(Proj(t, Fst), p1, S0(VV()), p2, S1)
@@ -333,7 +335,7 @@ object Elaboration:
           unify(ctx.eval(ety), a)
         })
         val eb = check(b, ctx.inst(rt), S1)(ctx.bind(x, a, S1))
-        Lam(x, i2, eb)
+        Lam(x, i2, ctx.quote(ty), eb)
       case (S.Lam(x, S.ArgIcit(Expl), ot, b), VFunTy(a, vf, rt)) =>
         unify(stage, S0(VF()))
         ot.foreach(t0 => {
@@ -341,14 +343,14 @@ object Elaboration:
           unify(ctx.eval(ety), a)
         })
         val eb = check(b, rt, S0(vf))(ctx.bind(x, a, S0(VV())))
-        Lam(x, Expl, eb)
+        Lam(x, Expl, ctx.quote(ty), eb)
       case (S.Var(x), VPi(_, Impl, _, _)) if hasMetaType(x) =>
         val Some((ix, varty, S1)) = ctx.lookup(x): @unchecked
         unify(varty, ty)
         Var(ix)
       case (tm, VPi(x, Impl, a, b)) =>
         val etm = check(tm, ctx.inst(b), S1)(ctx.bind(x, a, S1, true))
-        Lam(x, Impl, etm)
+        Lam(x, Impl, ctx.quote(ty), etm)
 
       case (S.Pair(fst, snd), VSigma(_, a, b)) =>
         val efst = check(fst, a, S1)
@@ -476,7 +478,7 @@ object Elaboration:
         val fun = sb match
           case S1     => VPi(x, i, va, ctx.close(rt))
           case S0(vf) => VFunTy(va, vf, rt)
-        (Lam(x, i, eb), fun)
+        (Lam(x, i, ctx.quote(fun), eb), fun)
       case S.Lam(x, S.ArgNamed(_), _, _) => error(s"cannot infer $tm")
 
       case S.Pair(fst, snd) =>
@@ -610,7 +612,8 @@ object Elaboration:
             ctx.eval(m)
         val ctx2 = ctx.bind(x, pty, S1)
         val (eb, rty) = insert(S1, infer(b, S1)(ctx2))(ctx2)
-        (Lam(x, Impl, eb), VPi(x, Impl, pty, ctx.close(rty)), S1)
+        val fty = VPi(x, Impl, pty, ctx.close(rty))
+        (Lam(x, Impl, ctx.quote(fty), eb), fty, S1)
       case S.Lam(x, S.ArgIcit(Expl), mty, b) =>
         val (pty, s) = mty match
           case Some(ty) =>
@@ -621,13 +624,15 @@ object Elaboration:
           case S1 =>
             val ctx2 = ctx.bind(x, pty, S1)
             val (eb, rty) = insert(S1, infer(b, S1)(ctx2))(ctx2)
-            (Lam(x, Expl, eb), VPi(x, Expl, pty, ctx.close(rty)), S1)
+            val fty = VPi(x, Expl, pty, ctx.close(rty))
+            (Lam(x, Expl, ctx.quote(fty), eb), fty, S1)
           case S0(vf) =>
             unify(vf, VV())
             val ctx2 = ctx.bind(x, pty, s)
             val vf2 = ctx.eval(newMeta(VVF(), S1))
             val (eb, rty) = insert(S0(vf2), infer(b, S0(vf2))(ctx2))(ctx2)
-            (Lam(x, Expl, eb), VFunTy(pty, vf2, rty), S0(VF()))
+            val fty = VFunTy(pty, vf2, rty)
+            (Lam(x, Expl, ctx.quote(fty), eb), fty, S0(VF()))
       case S.Lam(_, S.ArgNamed(_), _, _) => error(s"cannot infer: $tm")
 
       case S.App(f, a, i) =>

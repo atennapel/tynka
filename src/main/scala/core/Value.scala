@@ -49,7 +49,7 @@ object Value:
     case VU(stage: Stage[VTy])
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
-    case VLam(name: Bind, icit: Icit, body: Clos)
+    case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
     case VFunTy(ty: VTy, vf: VTy, rt: VTy)
     case VFix(go: Name, name: Name, body: Clos2, arg: Val)
 
@@ -65,8 +65,10 @@ object Value:
 
   private def name(x: String): Bind =
     if x == "_" then DontBind else DoBind(Name(x))
-  def vlam(x: String, f: Val => Val): Val = VLam(name(x), Expl, CFun(f))
-  def vlamI(x: String, f: Val => Val): Val = VLam(name(x), Impl, CFun(f))
+  def vlam(x: String, ty: VTy, f: Val => Val): Val =
+    VLam(name(x), Expl, ty, CFun(f))
+  def vlamI(x: String, ty: VTy, f: Val => Val): Val =
+    VLam(name(x), Impl, ty, CFun(f))
   def vpi(x: String, t: Val, f: Val => Val): Val =
     VPi(name(x), Expl, t, CFun(f))
   def vpiI(x: String, t: Val, f: Val => Val): Val =

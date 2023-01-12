@@ -35,10 +35,10 @@ object Pretty:
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =
     def go(tm: Tm, first: Boolean = false)(implicit ns: List[Name]): String =
       tm match
-        case Lam(x0, Expl, b) =>
+        case Lam(x0, Expl, _, b) =>
           val x = x0.fresh
           s"${if first then "" else " "}$x${go(b)(x.toName :: ns)}"
-        case Lam(x0, Impl, b) =>
+        case Lam(x0, Impl, _, b) =>
           val x = x0.fresh
           s"${if first then "" else " "}{$x}${go(b)(x.toName :: ns)}"
         case rest => s". ${pretty(rest)}"
@@ -89,10 +89,10 @@ object Pretty:
       s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
     case U(s) => pretty(s)
 
-    case Pi(_, _, _, _) => prettyPi(tm)
-    case FunTy(_, _, _) => prettyPi(tm)
-    case Lam(_, _, _)   => prettyLam(tm)
-    case App(_, _, _)   => prettyApp(tm)
+    case Pi(_, _, _, _)  => prettyPi(tm)
+    case FunTy(_, _, _)  => prettyPi(tm)
+    case Lam(_, _, _, _) => prettyLam(tm)
+    case App(_, _, _)    => prettyApp(tm)
     case Fix(go0, x0, b, arg) =>
       val go = go0.fresh
       val x = x0.fresh(go :: ns)

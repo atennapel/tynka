@@ -80,6 +80,7 @@ object Unification:
           Lam(
             x,
             i,
+            quote(a)(lvl),
             go(
               b(VVar(lvl)),
               s,
@@ -180,8 +181,9 @@ object Unification:
 
       case VGlobal(x, sp, _) => goSp(Global(x), sp)
 
-      case VPi(x, i, t, b)  => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
-      case VLam(x, i, b)    => Lam(x, i, go(b(VVar(psub.cod)))(psub.lift))
+      case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
+      case VLam(x, i, ty, b) =>
+        Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
       case VFunTy(t, vf, b) => FunTy(go(t), go(vf), go(b))
       case VFix(g, x, b, a) =>
         Fix(
@@ -210,7 +212,7 @@ object Unification:
             val y = x match
               case DontBind => DoBind(Name(s"x$l2"))
               case _        => x
-            Lam(y, i, go(b(VVar(l2)), l2 + 1))
+            Lam(y, i, quote(a)(l2), go(b(VVar(l2)), l2 + 1))
           case _ => impossible()
     go(a, lvl0)
 
@@ -341,8 +343,8 @@ object Unification:
       case (VFunTy(a1, vf1, b1), VFunTy(a2, vf2, b2)) =>
         unify(a1, a2); unify(vf1, vf2); unify(b1, b2)
       case (VPairTy(a1, b1), VPairTy(a2, b2)) => unify(a1, a2); unify(b1, b2)
-      case (VLam(_, _, b1), VLam(_, _, b2))   => unify(b1, b2)
-      case (VPair(a1, b1), VPair(a2, b2))     => unify(a1, a2); unify(b1, b2)
+      case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
+      case (VPair(a1, b1), VPair(a2, b2)) => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
         unify(vf1, vf2); unify(ty1, ty2)
@@ -358,9 +360,9 @@ object Unification:
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)
 
-      case (VLam(_, i, b), w) =>
+      case (VLam(_, i, _, b), w) =>
         val v = VVar(l); unify(b(v), vapp(w, v, i))(l + 1)
-      case (w, VLam(_, i, b)) =>
+      case (w, VLam(_, i, _, b)) =>
         val v = VVar(l); unify(vapp(w, v, i), b(v))(l + 1)
       case (VPair(a, b), w) => unify(a, vfst(w)); unify(b, vsnd(w))
       case (w, VPair(a, b)) => unify(vfst(w), a); unify(vsnd(w), b)
