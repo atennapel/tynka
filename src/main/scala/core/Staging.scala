@@ -43,9 +43,9 @@ object Staging:
         arg: Val0
     )
     case VLet0(x: Name, ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
-    case VPair0(fst: Val0, snd: Val0)
-    case VFst0(t: Val0)
-    case VSnd0(t: Val0)
+    case VPair0(fst: Val0, snd: Val0, ty: Val1)
+    case VFst0(ty: Val1, t: Val0)
+    case VSnd0(ty: Val1, t: Val0)
     case VIntLit0(n: Int)
     case VSplicePrim0(x: PrimName, as: List[Val1])
   import Val0.*
@@ -79,9 +79,9 @@ object Staging:
     case Prim(x)               => VPrim1(x, Nil)
     case Lam(_, _, _, b)       => VLam1(clos1(b))
     case App(f, a, _)          => vapp1(eval1(f), eval1(a))
-    case Proj(t, p)            => vproj1(eval1(t), p)
+    case Proj(t, p, _)         => vproj1(eval1(t), p)
     case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
-    case Pair(fst, snd)        => VPair1(eval1(fst), eval1(snd))
+    case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
     case Quote(t)              => VQuote1(eval0(t))
     case Wk(t)                 => eval1(t)(env.tail)
 
@@ -120,15 +120,12 @@ object Staging:
     case VLam0(DontBind, _, b) => b(a)
     case _                     => VApp0(f, a)
 
-  private def vproj0(v: Val0, p: ProjType): Val0 = (v, p) match
-    case (VPair0(fst, _), Fst)         => fst
-    case (VPair0(_, snd), Snd)         => snd
-    case (VPair0(fst, _), Named(_, 0)) => fst
-    case (VPair0(_, snd), Named(x, i)) => vproj0(snd, Named(x, i - 1))
-    case (p, Fst)                      => VFst0(p)
-    case (p, Snd)                      => VSnd0(p)
-    case (p, Named(_, 0))              => VFst0(p)
-    case (p, Named(x, i))              => vproj0(VSnd0(p), Named(x, i - 1))
+  private def vproj0(v: Val0, p: ProjType, t: Val1): Val0 = (v, p) match
+    case (VPair0(fst, _, _), Fst) => fst
+    case (VPair0(_, snd, _), Snd) => snd
+    case (p, Fst)                 => VFst0(t, p)
+    case (p, Snd)                 => VSnd0(t, p)
+    case _                        => impossible()
 
   private def clos0(t: Tm)(implicit env: Env): Val0 => Val0 =
     v => eval0(t)(Def0(env, v))
@@ -139,13 +136,13 @@ object Staging:
     case Prim(x)            => VPrim0(x)
     case Lam(x, _, fnty, b) => VLam0(x, eval1(fnty), clos0(b))
     case App(f, a, _)       => vapp0(eval0(f), eval0(a))
-    case Proj(t, p)         => vproj0(eval0(t), p)
+    case Proj(t, p, ty)     => vproj0(eval0(t), p, eval1(ty))
     case Let(x, t, vf, bt, v, b) =>
       VLet0(x, eval1(t), eval1(bt), eval0(v), clos0(b))
-    case Pair(fst, snd) => VPair0(eval0(fst), eval0(snd))
-    case Splice(t)      => vsplice0(eval1(t))
-    case Wk(t)          => eval0(t)(env.tail)
-    case IntLit(n)      => VIntLit0(n)
+    case Pair(fst, snd, ty) => VPair0(eval0(fst), eval0(snd), eval1(ty))
+    case Splice(t)          => vsplice0(eval1(t))
+    case Wk(t)              => eval0(t)(env.tail)
+    case IntLit(n)          => VIntLit0(n)
     case Fix(go, x, t, b, a) =>
       VFix0(
         go,
@@ -259,9 +256,12 @@ object Staging:
         quoteExpr(a)
       )
 
-    case VPair0(fst, snd) => IR.Pair(quoteExpr(fst), quoteExpr(snd))
-    case VFst0(t)         => IR.Fst(quoteExpr(t))
-    case VSnd0(t)         => IR.Snd(quoteExpr(t))
+    case VPair0(fst, snd, ty) =>
+      quoteTy(ty) match
+        case IR.TPair(t1, t2) => IR.Pair(t1, t2, quoteExpr(fst), quoteExpr(snd))
+        case _                => impossible()
+    case VFst0(ty, t) => IR.Fst(quoteTy(ty), quoteExpr(t))
+    case VSnd0(ty, t) => IR.Snd(quoteTy(ty), quoteExpr(t))
 
     case VIntLit0(n) => IR.IntLit(n)
 
@@ -269,7 +269,7 @@ object Staging:
     case VPrim0(PTrue)  => IR.BoolLit(true)
     case VPrim0(PFalse) => IR.BoolLit(false)
 
-    case VSplicePrim0(PAbsurd, List(_, _)) => IR.Absurd
+    case VSplicePrim0(PAbsurd, List(_, t, _)) => IR.Absurd(quoteTDef(t))
     case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PTrue)), t, _)) =>
       quoteExpr(vsplice0(t))
     case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PFalse)), _, f)) =>

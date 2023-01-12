@@ -43,8 +43,8 @@ object Syntax:
     case Fix(go: Name, name: Name, fnty: Ty, body: Tm, arg: Tm)
 
     case Sigma(name: Bind, ty: Ty, body: Ty)
-    case Pair(fst: Tm, snd: Tm)
-    case Proj(tm: Tm, proj: ProjType)
+    case Pair(fst: Tm, snd: Tm, ty: Ty)
+    case Proj(tm: Tm, proj: ProjType, ty: Ty)
     case PairTy(fst: Ty, snd: Ty)
 
     case IntLit(value: Int)
@@ -93,8 +93,8 @@ object Syntax:
 
       case Sigma(DontBind, t, b) => s"($t ** $b)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
-      case Pair(a, b)            => s"($a, $b)"
-      case Proj(t, p)            => s"$t$p"
+      case Pair(a, b, _)         => s"($a, $b)"
+      case Proj(t, p, _)         => s"$t$p"
       case PairTy(a, b)          => s"($a ** $b)"
 
       case IntLit(n) => s"$n"

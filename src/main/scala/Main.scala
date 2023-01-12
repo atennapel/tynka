@@ -4,13 +4,18 @@ import common.Debug.*
 import elaboration.Elaboration.{ElaborateError, elaborate}
 import core.Staging.stage
 import ir.Simplifier.simplify
+import ir.Compiler.compile
+import jvmir.Generator.generate
 
 import java.io.File
 import scala.io.Source
 import parsley.io.given
 
 object Main:
-  @main def run(filename: String): Unit =
+  @main def run(filename0: String): Unit =
+    var filename = filename0
+    if !filename.endsWith(".tynka") then filename = s"$filename0.tynka"
+    val moduleName = filename.dropRight(6).split("/").last
     try
       setDebug(false)
       val ptimeStart = System.nanoTime()
@@ -30,7 +35,13 @@ object Main:
       val ids = stage(eds)
       println(ids)
       println("simplification:")
-      println(simplify(ids))
+      val simp = simplify(ids)
+      println(simp)
+      println("compile to jvm ir:")
+      val jvmir = compile(simp)
+      println(jvmir)
+      println("generate JVM bytecode")
+      generate(moduleName, jvmir)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

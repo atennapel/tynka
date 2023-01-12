@@ -52,8 +52,8 @@ object Pretty:
       case Var(_)              => pretty(tm)
       case Global(_)           => pretty(tm)
       case Prim(_)             => pretty(tm)
-      case Pair(_, _)          => pretty(tm)
-      case Proj(_, _)          => pretty(tm)
+      case Pair(_, _, _)       => pretty(tm)
+      case Proj(_, _, _)       => pretty(tm)
       case Meta(_)             => pretty(tm)
       case Lift(_, _)          => pretty(tm)
       case Quote(_)            => pretty(tm)
@@ -68,8 +68,8 @@ object Pretty:
       case _                   => s"(${pretty(tm)})"
 
   private def flattenPair(tm: Tm): List[Tm] = tm match
-    case Pair(fst, snd) => fst :: flattenPair(snd)
-    case tm             => List(tm)
+    case Pair(fst, snd, _) => fst :: flattenPair(snd)
+    case tm                => List(tm)
 
   private def prettyLift(x: Name, tm: Tm)(implicit ns: List[Name]): String =
     pretty(tm)(x :: ns)
@@ -101,11 +101,11 @@ object Pretty:
 
     case Sigma(_, _, _) => prettySigma(tm)
     case PairTy(_, _)   => prettySigma(tm)
-    case Pair(_, _) =>
+    case Pair(_, _, _) =>
       val es = flattenPair(tm)
       if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
       else s"(${es.map(pretty).mkString(", ")})"
-    case Proj(t, p) => s"${prettyParen(t)}$p"
+    case Proj(t, p, _) => s"${prettyParen(t)}$p"
 
     case IntLit(n) => s"$n"
 

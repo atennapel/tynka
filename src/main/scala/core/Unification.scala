@@ -159,7 +159,7 @@ object Unification:
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SSplice(sp)      => Splice(goSp(t, sp))
-      case SProj(hd, proj)  => Proj(goSp(t, hd), proj)
+      case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant)
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
@@ -195,8 +195,8 @@ object Unification:
         )
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
-      case VPair(fst, snd) => Pair(go(fst), go(snd))
-      case VPairTy(fst, snd) => PairTy(go(fst), go(snd))
+      case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
+      case VPairTy(fst, snd)  => PairTy(go(fst), go(snd))
 
       case VIntLit(n) => IntLit(n)
 
@@ -347,7 +347,7 @@ object Unification:
         unify(a1, a2); unify(vf1, vf2); unify(b1, b2)
       case (VPairTy(a1, b1), VPairTy(a2, b2)) => unify(a1, a2); unify(b1, b2)
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
-      case (VPair(a1, b1), VPair(a2, b2)) => unify(a1, a2); unify(b1, b2)
+      case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
         unify(vf1, vf2); unify(ty1, ty2)
@@ -368,8 +368,8 @@ object Unification:
         val v = VVar(l); unify(b(v), vapp(w, v, i))(l + 1)
       case (w, VLam(_, i, _, b)) =>
         val v = VVar(l); unify(vapp(w, v, i), b(v))(l + 1)
-      case (VPair(a, b), w) => unify(a, vfst(w)); unify(b, vsnd(w))
-      case (w, VPair(a, b)) => unify(vfst(w), a); unify(vsnd(w), b)
+      case (VPair(a, b, _), w) => unify(a, vfst(w)); unify(b, vsnd(w))
+      case (w, VPair(a, b, _)) => unify(vfst(w), a); unify(vsnd(w), b)
 
       case (VFlex(m, sp), v) => solve(m, sp, v)
       case (v, VFlex(m, sp)) => solve(m, sp, v)

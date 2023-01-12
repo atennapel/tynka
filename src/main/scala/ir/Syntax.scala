@@ -30,7 +30,9 @@ object Syntax:
   export Ty.*
 
   final case class TDef(ps: List[Ty], rt: Ty):
-    override def toString: String = s"(${ps.mkString(", ")}) -> $rt"
+    override def toString: String = ps match
+      case Nil => rt.toString
+      case _   => s"(${ps.mkString(", ")}) -> $rt"
     def tail: TDef = TDef(ps.tail, rt)
   object TDef:
     def apply(rt: Ty): TDef = TDef(Nil, rt)
@@ -93,14 +95,14 @@ object Syntax:
     case Let(x: Name, ty: TDef, bt: TDef, value: Expr, body: Expr)
     case Fix(go: Name, x: Name, t1: Ty, t2: TDef, body: Expr, arg: Expr)
 
-    case Pair(fst: Expr, snd: Expr)
-    case Fst(tm: Expr)
-    case Snd(tm: Expr)
+    case Pair(t1: Ty, t2: Ty, fst: Expr, snd: Expr)
+    case Fst(ty: Ty, tm: Expr)
+    case Snd(ty: Ty, tm: Expr)
 
     case IntLit(value: Int)
     case BinOp(op: Op, a: Expr, b: Expr)
 
-    case Absurd
+    case Absurd(ty: TDef)
 
     case Unit
 
@@ -127,14 +129,14 @@ object Syntax:
       case Let(x, t, _, v, b)       => s"(let $x : $t = $v; $b)"
       case Fix(go, x, _, _, b, arg) => s"(fix ($go $x. $b) $arg)"
 
-      case Pair(fst, snd) => s"($fst, $snd)"
-      case Fst(t)         => s"$t.1"
-      case Snd(t)         => s"$t.2"
+      case Pair(_, _, fst, snd) => s"($fst, $snd)"
+      case Fst(_, t)            => s"$t.1"
+      case Snd(_, t)            => s"$t.2"
 
       case IntLit(n)       => s"$n"
       case BinOp(op, a, b) => s"($a $op $b)"
 
-      case Absurd => s"absurd"
+      case Absurd(_) => s"absurd"
 
       case Unit => "()"
 
@@ -175,14 +177,14 @@ object Syntax:
       case Let(x, _, _, v, b)       => 1 + v.size + b.size
       case Fix(go, x, _, _, b, arg) => 1 + b.size + arg.size
 
-      case Pair(fst, snd) => 1 + fst.size + snd.size
-      case Fst(t)         => 1 + t.size
-      case Snd(t)         => 1 + t.size
+      case Pair(_, _, fst, snd) => 1 + fst.size + snd.size
+      case Fst(_, t)            => 1 + t.size
+      case Snd(_, t)            => 1 + t.size
 
       case IntLit(n)       => 1
       case BinOp(op, a, b) => 1 + a.size + b.size
 
-      case Absurd => 1
+      case Absurd(_) => 1
 
       case Unit => 1
 
@@ -202,14 +204,14 @@ object Syntax:
       case Fix(go, x, _, _, b, arg) =>
         b.fvs.filterNot((y, _) => x == y || go == y) ++ arg.fvs
 
-      case Pair(fst, snd) => fst.fvs ++ snd.fvs
-      case Fst(t)         => t.fvs
-      case Snd(t)         => t.fvs
+      case Pair(_, _, fst, snd) => fst.fvs ++ snd.fvs
+      case Fst(_, t)            => t.fvs
+      case Snd(_, t)            => t.fvs
 
       case IntLit(n)       => Nil
       case BinOp(op, a, b) => a.fvs ++ b.fvs
 
-      case Absurd => Nil
+      case Absurd(_) => Nil
 
       case Unit => Nil
 
@@ -290,16 +292,16 @@ object Syntax:
             under2(go0, TDef(t1, t2), x0, TDef(t1), b0, sub, scope)
           Fix(go, x, t1, t2, b, arg.subst(sub, scope))
 
-        case Pair(fst, snd) =>
-          Pair(fst.subst(sub, scope), snd.subst(sub, scope))
-        case Fst(t) => Fst(t.subst(sub, scope))
-        case Snd(t) => Snd(t.subst(sub, scope))
+        case Pair(t1, t2, fst, snd) =>
+          Pair(t1, t2, fst.subst(sub, scope), snd.subst(sub, scope))
+        case Fst(ty, t) => Fst(ty, t.subst(sub, scope))
+        case Snd(ty, t) => Snd(ty, t.subst(sub, scope))
 
         case IntLit(n) => this
         case BinOp(op, a, b) =>
           BinOp(op, a.subst(sub, scope), b.subst(sub, scope))
 
-        case Absurd => this
+        case Absurd(_) => this
 
         case Unit => this
 

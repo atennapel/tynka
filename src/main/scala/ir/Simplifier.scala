@@ -26,6 +26,7 @@ object Simplifier:
     case Var(_, _)    => None
     case Global(_, _) => None
 
+    case App(Absurd(t), _) => Some(Absurd(t.tail))
     case App(Let(x, t, bt, v, b), a) if scope.contains(x.expose) =>
       val y = scope.max + 1
       val ny = Name(y)
@@ -85,11 +86,11 @@ object Simplifier:
         case None =>
           go(b)(scope + g.expose + x.expose).map(Fix(g, x, t1, t2, _, arg))
 
-    case Pair(fst, snd)    => go2(fst, snd).map(Pair(_, _))
-    case Fst(Pair(fst, _)) => Some(fst)
-    case Snd(Pair(_, snd)) => Some(snd)
-    case Fst(t)            => go(t).map(Fst.apply)
-    case Snd(t)            => go(t).map(Snd.apply)
+    case Pair(t1, t2, fst, snd)     => go2(fst, snd).map(Pair(t1, t2, _, _))
+    case Fst(_, Pair(_, _, fst, _)) => Some(fst)
+    case Snd(_, Pair(_, _, _, snd)) => Some(snd)
+    case Fst(ty, t)                 => go(t).map(Fst(ty, _))
+    case Snd(ty, t)                 => go(t).map(Snd(ty, _))
 
     case IntLit(n) => None
     case BinOp(op, a, b) =>
@@ -97,11 +98,12 @@ object Simplifier:
         case Some(t) => Some(t)
         case None    => go2(a, b).map(BinOp(op, _, _))
 
-    case Absurd => None
+    case Absurd(_) => None
 
     case Unit => None
 
-    case BoolLit(_)                  => None
+    case BoolLit(_) => None
+
     case If(_, BoolLit(true), a, _)  => Some(a)
     case If(_, BoolLit(false), _, b) => Some(b)
     case If(TDef(ps, rt), c, a, b) if ps.nonEmpty =>
@@ -123,8 +125,9 @@ object Simplifier:
             case None         => Some(If(t, c, a, b))
         case None => go2(a, b).map(If(t, c, _, _))
 
-    case LNil(_)                             => None
-    case LCons(t, hd, tl)                    => go2(hd, tl).map(LCons(t, _, _))
+    case LNil(_)          => None
+    case LCons(t, hd, tl) => go2(hd, tl).map(LCons(t, _, _))
+
     case CaseList(_, _, LNil(_), n, _, _, _) => Some(n)
     case CaseList(_, bt, LCons(t, hd, tl), _, xhd, xtl, c) =>
       Some(Let(xhd, TDef(t), bt, hd, Let(xtl, TDef(TList(t)), bt, tl, c)))

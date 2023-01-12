@@ -36,16 +36,17 @@ object Evaluation:
   def vappI(f: Val, a: Val): Val = vapp(f, a, Impl)
 
   def vproj(v: Val, p: ProjType): Val = v match
-    case VPair(fst, snd) =>
+    case VPair(fst, snd, _) =>
       p match
         case Fst         => fst
         case Snd         => snd
         case Named(_, 0) => fst
         case Named(x, i) => vproj(snd, Named(x, i - 1))
-    case VRigid(hd, sp)      => VRigid(hd, SProj(sp, p))
-    case VFlex(hd, sp)       => VFlex(hd, SProj(sp, p))
-    case VGlobal(uri, sp, v) => VGlobal(uri, SProj(sp, p), () => vproj(v(), p))
-    case _                   => impossible()
+    case VRigid(hd, sp) => VRigid(hd, SProj(sp, p))
+    case VFlex(hd, sp)  => VFlex(hd, SProj(sp, p))
+    case VGlobal(uri, sp, v) =>
+      VGlobal(uri, SProj(sp, p), () => vproj(v(), p))
+    case _ => impossible()
 
   def vfst(v: Val): Val = vproj(v, Fst)
   def vsnd(v: Val): Val = vproj(v, Snd)
@@ -111,8 +112,8 @@ object Evaluation:
 
     case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
     case PairTy(t, b)   => VPairTy(eval(t), eval(b))
-    case Pair(a, b)     => VPair(eval(a), eval(b))
-    case Proj(t, p)     => vproj(eval(t), p)
+    case Pair(a, b, ty) => VPair(eval(a), eval(b), eval(ty))
+    case Proj(t, p, _)  => vproj(eval(t), p)
 
     case IntLit(n) => VIntLit(n)
 
@@ -145,7 +146,7 @@ object Evaluation:
     sp match
       case SId              => hd
       case SApp(fn, arg, i) => App(quote(hd, fn, unfold), quote(arg, unfold), i)
-      case SProj(tm, proj)  => Proj(quote(hd, tm, unfold), proj)
+      case SProj(tm, proj)  => Proj(quote(hd, tm, unfold), proj, Irrelevant)
       case SSplice(tm)      => quote(hd, tm, unfold).splice
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) =>
@@ -185,7 +186,8 @@ object Evaluation:
           quote(a, unfold)
         )
 
-      case VPair(fst, snd) => Pair(quote(fst, unfold), quote(snd, unfold))
+      case VPair(fst, snd, t) =>
+        Pair(quote(fst, unfold), quote(snd, unfold), quote(t, unfold))
       case VSigma(x, t, b) =>
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPairTy(t, b) => PairTy(quote(t, unfold), quote(b, unfold))
@@ -206,13 +208,14 @@ object Evaluation:
     case PF  => (VVF(), S1)
 
     case PVoid => (VTyV(), S1)
-    // {A : Meta} -> ^Void -> A
+    // {vf : VF} {A : Ty vf} -> ^Void -> A
     case PAbsurd =>
       (
         vpiI(
-          "A",
-          VU(S1),
-          a => vpi("_", VLift(VV(), VVoid()), _ => a)
+          "vf",
+          VVF(),
+          vf =>
+            vpiI("A", VU(S0(vf)), a => vpi("_", VLift(VV(), VVoid()), _ => a))
         ),
         S1
       )

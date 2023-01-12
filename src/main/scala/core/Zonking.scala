@@ -21,8 +21,8 @@ object Zonking:
   private def app(f: VT, a: Tm, i: Icit)(implicit l: Lvl, e: Env): VT =
     f.fold(v => Left(vapp(v, eval(a), i)), t => Right(App(t, zonk(a), i)))
 
-  private def proj(t: VT, p: ProjType): VT =
-    t.fold(v => Left(vproj(v, p)), t => Right(Proj(t, p)))
+  private def proj(t: VT, p: ProjType, ty: Tm): VT =
+    t.fold(v => Left(vproj(v, p)), t => Right(Proj(t, p, ty)))
 
   private def splice(t: VT): VT =
     t.fold(v => Left(vsplice(v)), t => Right(t.splice))
@@ -36,7 +36,7 @@ object Zonking:
     case Meta(id)         => meta(id)
     case AppPruning(t, p) => Left(vappPruning(eval(t), p))
     case App(f, a, i)     => app(zonkSp(f), a, i)
-    case Proj(t, p)       => proj(zonkSp(t), p)
+    case Proj(t, p, ty)   => proj(zonkSp(t), p, ty)
     case Splice(t)        => splice(zonkSp(t))
     case Wk(t)            => zonkSp(t)(l - 1, e.tail).map(Wk(_))
     case t                => Right(zonk(t))
@@ -68,8 +68,11 @@ object Zonking:
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
     case PairTy(t, b)   => PairTy(zonk(t), zonk(b))
-    case Pair(a, b)     => Pair(zonk(a), zonk(b))
-    case Proj(_, _)     => quoteVT(zonkSp(t))
+    case Pair(a, b, t)  => Pair(zonk(a), zonk(b), zonk(t))
+    case Proj(_, _, _) =>
+      quoteVT(zonkSp(t)) match
+        case Proj(t, p, ty) => Proj(t, p, zonk(ty))
+        case t              => t
 
     case Lift(vf, t) => Lift(zonk(vf), zonk(t))
     case Quote(t)    => zonk(t).quote

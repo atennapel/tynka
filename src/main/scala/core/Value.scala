@@ -54,7 +54,7 @@ object Value:
     case VFix(go: Name, name: Name, fnty: VTy, body: Clos2, arg: Val)
 
     case VSigma(name: Bind, ty: VTy, body: Clos)
-    case VPair(fst: Val, snd: Val)
+    case VPair(fst: Val, snd: Val, ty: VTy)
     case VPairTy(fst: VTy, snd: VTy)
 
     case VIntLit(value: Int)
