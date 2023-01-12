@@ -89,8 +89,36 @@ object Simplifier:
     case Pair(t1, t2, fst, snd)     => go2(fst, snd).map(Pair(t1, t2, _, _))
     case Fst(_, Pair(_, _, fst, _)) => Some(fst)
     case Snd(_, Pair(_, _, _, snd)) => Some(snd)
-    case Fst(ty, t)                 => go(t).map(Fst(ty, _))
-    case Snd(ty, t)                 => go(t).map(Snd(ty, _))
+    case Fst(rt, Let(x, t, _, v, b)) if scope.contains(x.expose) =>
+      val y = scope.max + 1
+      val ny = Name(y)
+      Some(
+        Let(
+          ny,
+          t,
+          TDef(rt),
+          v,
+          Fst(rt, b.subst(Map(x -> Var(ny, t)), scope + y))
+        )
+      )
+    case Fst(rt, Let(x, t, _, v, b)) =>
+      Some(Let(x, t, TDef(rt), v, Fst(rt, b)))
+    case Snd(rt, Let(x, t, _, v, b)) if scope.contains(x.expose) =>
+      val y = scope.max + 1
+      val ny = Name(y)
+      Some(
+        Let(
+          ny,
+          t,
+          TDef(rt),
+          v,
+          Snd(rt, b.subst(Map(x -> Var(ny, t)), scope + y))
+        )
+      )
+    case Snd(rt, Let(x, t, _, v, b)) =>
+      Some(Let(x, t, TDef(rt), v, Snd(rt, b)))
+    case Fst(ty, t) => go(t).map(Fst(ty, _))
+    case Snd(ty, t) => go(t).map(Snd(ty, _))
 
     case IntLit(n) => None
     case BinOp(op, a, b) =>
@@ -104,6 +132,7 @@ object Simplifier:
 
     case BoolLit(_) => None
 
+    // TODO: push if down in lets
     case If(_, BoolLit(true), a, _)  => Some(a)
     case If(_, BoolLit(false), _, b) => Some(b)
     case If(TDef(ps, rt), c, a, b) if ps.nonEmpty =>
@@ -128,6 +157,7 @@ object Simplifier:
     case LNil(_)          => None
     case LCons(t, hd, tl) => go2(hd, tl).map(LCons(t, _, _))
 
+    // TODO: push caseList down in lets
     case CaseList(_, _, LNil(_), n, _, _, _) => Some(n)
     case CaseList(_, bt, LCons(t, hd, tl), _, xhd, xtl, c) =>
       Some(Let(xhd, TDef(t), bt, hd, Let(xtl, TDef(TList(t)), bt, tl, c)))
@@ -156,6 +186,7 @@ object Simplifier:
     case ELeft(t1, t2, v)  => go(v).map(ELeft(t1, t2, _))
     case ERight(t1, t2, v) => go(v).map(ERight(t1, t2, _))
 
+    // TODO: push caseEither down in lets
     case CaseEither(t1, t2, rt, ELeft(_, _, v), x, l, _, _) =>
       Some(Let(x, TDef(t1), rt, v, l))
     case CaseEither(t1, t2, rt, ERight(_, _, v), _, _, y, r) =>

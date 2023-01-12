@@ -1,0 +1,32 @@
+def (+) a b = primIntAdd a b
+
+def Reader (R : Ty V) {vf : VF} (A : Ty vf) = R -> A 
+def return {R : Ty V} {vf : VF} {A : Ty vf} (x : A) : Reader R A = \_. x
+def (>>=) {R : Ty V} {vf1 : VF} {A : Ty vf1} {vf2 : VF} {B : Ty vf2}
+  (f : Reader R A) (g : A -> Reader R B) : Reader R B =
+  \r. g (f r) r
+def ask {R : Ty V} : Reader R R = \r. r
+def runReader {R : Ty V} {vf : VF} {A : Ty vf} (f : Reader R A) (r : R) : A = f r
+
+def foo (b : Bool) : Reader Int Int :=
+  if b then
+    return 10
+  else
+    ask >>= (\n. return (n + 10))
+
+-----
+
+def State (S A : Ty V) = S -> (A ** S)
+def returnS {S A : Ty V} (x : A) : State S A = \s. (x, s)
+def bindS {S A B : Ty V} (f : State S A) (g : A -> State S B) : State S B =
+  \s. let p := f s; g p.1 p.2
+def get {S : Ty V} : State S S = \s. (s, s)
+def put {S : Ty V} (s : S) : State S () = \_. ([], s)
+def runState {S A : Ty V} (s : S) (p : State S A) : A = ($p $s).1
+
+def postInc : State Int Int =
+  bindS get \x.
+  bindS (put (x + 1)) \_.
+  returnS x
+
+def test := runState 42 postInc
