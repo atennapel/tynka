@@ -32,4 +32,4 @@ metals.sbt
 /.worksheet/
 
 *.txt
-
+*.class

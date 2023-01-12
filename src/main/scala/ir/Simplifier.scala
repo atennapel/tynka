@@ -153,6 +153,42 @@ object Simplifier:
           go(c)(scope + hd.expose + tl.expose)
             .map(CaseList(t1, t2, l, n, hd, tl, _))
 
+    case ELeft(t1, t2, v)  => go(v).map(ELeft(t1, t2, _))
+    case ERight(t1, t2, v) => go(v).map(ERight(t1, t2, _))
+
+    case CaseEither(t1, t2, rt, ELeft(_, _, v), x, l, _, _) =>
+      Some(Let(x, TDef(t1), rt, v, l))
+    case CaseEither(t1, t2, rt, ERight(_, _, v), _, _, y, r) =>
+      Some(Let(y, TDef(t2), rt, v, r))
+    case CaseEither(t1, t2, TDef(ps, rt), v, x, l, y, r) if ps.nonEmpty =>
+      val (vs, innerscope) =
+        ps.foldLeft[(List[(Name, Ty)], Set[Int])](
+          (Nil, scope + x.expose + y.expose)
+        ) { case ((vs, scope), ty) =>
+          val x = fresh(scope)
+          (vs ++ List((Name(x), ty)), scope + x)
+        }
+      val spine = vs.map((x, t) => Var(x, TDef(t)))
+      val el = l.apps(spine)
+      val er = r.apps(spine)
+      Some(CaseEither(t1, t2, TDef(rt), v, x, el, y, er).lams(vs, TDef(rt)))
+    case CaseEither(t1, t2, rt, v, x, l, y, r) =>
+      go(v) match
+        case Some(v) =>
+          (go(l)(scope + x.expose), go(r)(scope + y.expose)) match
+            case (None, None)    => Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+            case (Some(l), None) => Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+            case (None, Some(r)) => Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+            case (Some(l), Some(r)) =>
+              Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+        case None =>
+          (go(l)(scope + x.expose), go(r)(scope + y.expose)) match
+            case (None, None)    => None
+            case (Some(l), None) => Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+            case (None, Some(r)) => Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+            case (Some(l), Some(r)) =>
+              Some(CaseEither(t1, t2, rt, v, x, l, y, r))
+
   private def isInlineable(v: Expr): Boolean = v match
     case BoolLit(_)   => true
     case IntLit(_)    => true

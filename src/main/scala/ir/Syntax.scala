@@ -18,6 +18,7 @@ object Syntax:
     case TBool
     case TInt
     case TPair(fst: Ty, snd: Ty)
+    case TEither(a: Ty, b: Ty)
     case TList(ty: Ty)
 
     override def toString: String = this match
@@ -26,7 +27,8 @@ object Syntax:
       case TBool           => "Bool"
       case TInt            => "Int"
       case TPair(fst, snd) => s"($fst, $snd)"
-      case TList(t)        => s"List($t)"
+      case TEither(a, b)   => s"Either $a $b"
+      case TList(t)        => s"List $t"
   export Ty.*
 
   final case class TDef(ps: List[Ty], rt: Ty):
@@ -121,6 +123,19 @@ object Syntax:
         c: Expr
     )
 
+    case ELeft(t1: Ty, t2: Ty, v: Expr)
+    case ERight(t1: Ty, t2: Ty, v: Expr)
+    case CaseEither(
+        t1: Ty,
+        t2: Ty,
+        rt: TDef,
+        v: Expr,
+        x: Name,
+        l: Expr,
+        y: Name,
+        r: Expr
+    )
+
     override def toString: String = this match
       case Var(x, _)                => s"$x"
       case Global(x, _)             => s"$x"
@@ -147,6 +162,11 @@ object Syntax:
       case LNil(_)                         => "Nil"
       case LCons(_, hd, tl)                => s"($hd :: $tl)"
       case CaseList(_, _, l, n, hd, tl, c) => s"(caseList $l $n ($hd $tl. $c))"
+
+      case ELeft(_, _, v)  => s"(Left $v)"
+      case ERight(_, _, v) => s"(Right $v)"
+      case CaseEither(_, _, _, v, x, l, y, r) =>
+        s"(caseEither $v ($x. $l) ($y. $r))"
 
     def flattenLams: (List[(Name, Ty)], Option[Ty], Expr) =
       def go(t: Expr): (List[(Name, Ty)], Option[Ty], Expr) = t match
@@ -195,6 +215,10 @@ object Syntax:
       case LCons(_, hd, tl)                => 1 + hd.size + tl.size
       case CaseList(_, _, l, n, hd, tl, c) => 1 + l.size + n.size + c.size
 
+      case ELeft(_, _, v)                     => 1 + v.size
+      case ERight(_, _, v)                    => 1 + v.size
+      case CaseEither(_, _, _, v, _, l, _, r) => 1 + v.size + l.size + r.size
+
     def fvs: List[(Name, TDef)] = this match
       case Var(x, t)          => List((x, t))
       case Global(x, _)       => Nil
@@ -222,6 +246,12 @@ object Syntax:
       case LCons(_, hd, tl) => hd.fvs ++ tl.fvs
       case CaseList(_, _, l, n, hd, tl, c) =>
         l.fvs ++ n.fvs ++ c.fvs.filterNot((y, _) => y == hd || y == tl)
+
+      case ELeft(_, _, v)  => v.fvs
+      case ERight(_, _, v) => v.fvs
+      case CaseEither(_, _, _, v, x, l, y, r) =>
+        v.fvs ++ l.fvs.filterNot((z, _) => z == x) ++ r.fvs
+          .filterNot((z, _) => z == y)
 
     def subst(sub: Map[Name, Expr]): Expr =
       subst(
@@ -315,6 +345,13 @@ object Syntax:
         case CaseList(t1, t2, l, n, hd0, tl0, c0) =>
           val (hd, tl, c) = under2(hd0, TDef(t1), tl0, t2, c0, sub, scope)
           CaseList(t1, t2, l.subst(sub, scope), n.subst(sub, scope), hd, tl, c)
+
+        case ELeft(t1, t2, v)  => ELeft(t1, t2, v.subst(sub, scope))
+        case ERight(t1, t2, v) => ERight(t1, t2, v.subst(sub, scope))
+        case CaseEither(t1, t2, rt, v, x0, l0, y0, r0) =>
+          val (x, l) = under(x0, TDef(t1), l0, sub, scope)
+          val (y, r) = under(y0, TDef(t2), r0, sub, scope)
+          CaseEither(t1, t2, rt, v.subst(sub, scope), x, l, y, r)
   export Expr.*
   object Expr:
     def fromBool(b: Boolean): Expr = BoolLit(b)

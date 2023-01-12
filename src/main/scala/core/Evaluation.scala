@@ -321,3 +321,70 @@ object Evaluation:
         ),
         S1
       )
+
+    // Ty V -> Ty V -> Ty V
+    case PEither => (vfun(VU(S0(VV())), vfun(VU(S0(VV())), VU(S0(VV())))), S1)
+    // {A : Ty V} {B : Ty V} -> ^A -> ^(Either A B)
+    case PLeft =>
+      (
+        vpiI(
+          "A",
+          VU(S0(VV())),
+          a =>
+            vpiI(
+              "B",
+              VU(S0(VV())),
+              b => vfun(VLift(VV(), a), VLift(VV(), VEither(a, b)))
+            )
+        ),
+        S1
+      )
+    // {A : Ty V} {B : Ty V} -> ^B -> ^(Either A B)
+    case PRight =>
+      (
+        vpiI(
+          "A",
+          VU(S0(VV())),
+          a =>
+            vpiI(
+              "B",
+              VU(S0(VV())),
+              b => vfun(VLift(VV(), b), VLift(VV(), VEither(a, b)))
+            )
+        ),
+        S1
+      )
+    // {A : Ty V} {B : Ty V} {vf : VF} {R : Ty vf} -> ^(Either A B) -> (^A -> ^R) -> (^B -> ^R) -> ^R
+    case PCaseEither =>
+      val tv = VU(S0(VV()))
+      def l(v: VTy): VTy = VLift(VV(), v)
+      (
+        vpiI(
+          "A",
+          tv,
+          a =>
+            vpiI(
+              "B",
+              tv,
+              b =>
+                vpiI(
+                  "vf",
+                  VVF(),
+                  vf =>
+                    vpiI(
+                      "R",
+                      VU(S0(vf)),
+                      r =>
+                        vfun(
+                          l(VEither(a, b)),
+                          vfun(
+                            vfun(l(a), VLift(vf, r)),
+                            vfun(vfun(l(b), VLift(vf, r)), VLift(vf, r))
+                          )
+                        )
+                    )
+                )
+            )
+        ),
+        S1
+      )

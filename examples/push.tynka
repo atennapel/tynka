@@ -7,13 +7,13 @@ def Push A = (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
 
 def up {A : Val} (as : List A) : Push A = \vf B f b. foldr f b as
 
-def down {A : Val} (as : Push A) = as V _ (::) Nil
+def down {A : Val} (as : Push A) = as _ _ (::) Nil
 
 def map {A B : Val} (f : A -> B) (as : Push A) : Push B =
   \vf R c n. as vf R (\a bs. c (f a) bs) n
 
 def foldl {A B : Val} (f : B -> A -> B) (b : B) (as : Push A) : B =
-  as F (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
+  as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
 
 def (+) a b = primIntAdd a b
 def (*) a b = primIntMul a b

@@ -186,3 +186,11 @@ object Value:
     def unapply(value: Val): Option[Val] = value match
       case VRigid(HPrim(PList), SApp(SId, t, Expl)) => Some(t)
       case _                                        => None
+
+  object VEither:
+    def apply(a: Val, b: Val): Val =
+      VRigid(HPrim(PEither), SApp(SApp(SId, a, Expl), b, Expl))
+    def unapply(value: Val): Option[(Val, Val)] = value match
+      case VRigid(HPrim(PEither), SApp(SApp(SId, a, Expl), b, Expl)) =>
+        Some((a, b))
+      case _ => None

@@ -129,7 +129,6 @@ object Compiler:
       case LNil(t) => IR.NilL(go(t))
       case LCons(t, hd, tl) =>
         IR.ConsL(go(t), box(t, go(hd, false)), go(tl, false))
-
       case CaseList(et, TDef(Nil, t), s, nil, hd, tl, cons) =>
         IR.CaseL(
           go(s, false),
@@ -140,13 +139,27 @@ object Compiler:
           go(cons, tr)(name, args - hd - tl, defs, uniq)
         )
 
+      case ELeft(t1, t2, v)  => IR.LeftE(go(t1), go(t2), box(t1, go(v, false)))
+      case ERight(t1, t2, v) => IR.RightE(go(t1), go(t2), box(t2, go(v, false)))
+      case CaseEither(t1, t2, TDef(Nil, t), s, x, l, y, r) =>
+        IR.CaseE(
+          go(t1),
+          go(t2),
+          go(s, false),
+          x.expose,
+          go(l, tr)(name, args - x, defs, uniq),
+          y.expose,
+          go(r, tr)(name, args - y, defs, uniq)
+        )
+
       case Absurd(TDef(Nil, rt)) => IR.Absurd(go(rt))
 
       case _ => impossible()
 
   private def box(ty: Ty, tm: IR.Tm): IR.Tm = ty match
-    case TPair(_, _) => tm
-    case TList(_)    => tm
+    case TPair(_, _)   => tm
+    case TEither(_, _) => tm
+    case TList(_)      => tm
     case _ =>
       val ct = go(ty)
       tm match
@@ -155,8 +168,9 @@ object Compiler:
         case _               => IR.Box(ct, tm)
 
   private def unbox(ty: Ty, tm: IR.Tm): IR.Tm = ty match
-    case TPair(_, _) => tm
-    case TList(_)    => tm
+    case TPair(_, _)   => tm
+    case TEither(_, _) => tm
+    case TList(_)      => tm
     case _ =>
       val ct = go(ty)
       tm match
@@ -165,12 +179,13 @@ object Compiler:
         case _               => IR.Unbox(ct, tm)
 
   private def go(t: Ty): IR.Ty = t match
-    case TVoid       => IR.TBool
-    case TUnit       => IR.TBool
-    case TBool       => IR.TBool
-    case TInt        => IR.TInt
-    case TPair(_, _) => IR.TPair
-    case TList(_)    => IR.TList
+    case TVoid         => IR.TBool
+    case TUnit         => IR.TBool
+    case TBool         => IR.TBool
+    case TInt          => IR.TInt
+    case TPair(_, _)   => IR.TPair
+    case TEither(_, _) => IR.TEither
+    case TList(_)      => IR.TList
 
   private def go(t: TDef): IR.TDef = t match
     case TDef(ps, rt) => IR.TDef(ps.map(go), go(rt))

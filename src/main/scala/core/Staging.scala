@@ -164,13 +164,14 @@ object Staging:
     case Irrelevant        => impossible()
 
   private def quoteTy(v: Val1)(implicit l: Lvl): IR.Ty = v match
-    case VPrim1(PVoid, Nil)     => IR.TVoid
-    case VPrim1(PUnitType, Nil) => IR.TUnit
-    case VPrim1(PBool, Nil)     => IR.TBool
-    case VPrim1(PInt, Nil)      => IR.TInt
-    case VPrim1(PList, List(t)) => IR.TList(quoteTy(t))
-    case VPairTy1(fst, snd)     => IR.TPair(quoteTy(fst), quoteTy(snd))
-    case _                      => impossible()
+    case VPrim1(PVoid, Nil)          => IR.TVoid
+    case VPrim1(PUnitType, Nil)      => IR.TUnit
+    case VPrim1(PBool, Nil)          => IR.TBool
+    case VPrim1(PInt, Nil)           => IR.TInt
+    case VPrim1(PList, List(t))      => IR.TList(quoteTy(t))
+    case VPrim1(PEither, List(a, b)) => IR.TEither(quoteTy(a), quoteTy(b))
+    case VPairTy1(fst, snd)          => IR.TPair(quoteTy(fst), quoteTy(snd))
+    case _                           => impossible()
 
   private def quoteTDef(v: Val1)(implicit l: Lvl): IR.TDef =
     @tailrec
@@ -301,6 +302,33 @@ object Staging:
         hd,
         tl,
         cr
+      )
+
+    case VSplicePrim0(PLeft, List(t1, t2, v)) =>
+      IR.ELeft(quoteTy(t1), quoteTy(t2), quoteExpr(vsplice0(v)))
+    case VSplicePrim0(PRight, List(t1, t2, v)) =>
+      IR.ERight(quoteTy(t1), quoteTy(t2), quoteExpr(vsplice0(v)))
+    case VSplicePrim0(PCaseEither, List(t1q, t2q, _, rtq, v, lc, rc)) =>
+      val t1 = quoteTy(t1q)
+      val t1d = IR.TDef(t1)
+      val t2 = quoteTy(t2q)
+      val t2d = IR.TDef(t2)
+      val rt = quoteTDef(rtq)
+
+      val x = fresh()
+      val clc = vapp1(lc, VQuote1(VVar0(l)))
+      val clcq = quoteExpr(vsplice0(clc))(l + 1, (x, t1d) :: ns)
+      val crc = vapp1(rc, VQuote1(VVar0(l)))
+      val crcq = quoteExpr(vsplice0(crc))(l + 1, (x, t2d) :: ns)
+      IR.CaseEither(
+        t1,
+        t2,
+        rt,
+        quoteExpr(vsplice0(v)),
+        x,
+        clcq,
+        x,
+        crcq
       )
 
     case VPrim0(p) =>

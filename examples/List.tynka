@@ -1,0 +1,10 @@
+def Maybe A = Either () A
+def Nothing {A} : Maybe A = Left []
+def Just {A} (x : ^A) : Maybe A = Right x
+
+def maybe {A : Ty V} {vf} {R : Ty vf} (x : Maybe A) (n : R) (j : A -> R) : R =
+  caseEither x (\_. n) j
+
+def f m := maybe m 0 (\x. x)
+
+def main : Int -> Int := \_. f (Just 42)

@@ -141,6 +141,11 @@ object Common:
     case PCons
     case PCaseList
 
+    case PEither
+    case PLeft
+    case PRight
+    case PCaseEither
+
     override def toString: String = this match
       case PVF => "VF"
       case PV  => "V"
@@ -174,6 +179,11 @@ object Common:
       case PNil      => "Nil"
       case PCons     => "::"
       case PCaseList => "caseList"
+
+      case PEither     => "Either"
+      case PLeft       => "Left"
+      case PRight      => "Right"
+      case PCaseEither => "caseEither"
 
     def isBinOp: Boolean = this match
       case PPrimIntAdd => true
@@ -223,5 +233,10 @@ object Common:
       case "Nil"      => Some(PNil)
       case "::"       => Some(PCons)
       case "caseList" => Some(PCaseList)
+
+      case "Either"     => Some(PEither)
+      case "Left"       => Some(PLeft)
+      case "Right"      => Some(PRight)
+      case "caseEither" => Some(PCaseEither)
 
       case _ => None

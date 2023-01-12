@@ -7,13 +7,15 @@ object Syntax:
     case TBool
     case TInt
     case TPair
+    case TEither
     case TList
 
     override def toString: String = this match
-      case TBool => "Bool"
-      case TInt  => "Int"
-      case TPair => "Pair"
-      case TList => "List"
+      case TBool   => "Bool"
+      case TInt    => "Int"
+      case TPair   => "Pair"
+      case TEither => "Either"
+      case TList   => "List"
   export Ty.*
 
   final case class TDef(params: List[Ty], retrn: Ty):
@@ -44,6 +46,10 @@ object Syntax:
     case ConsL(ty: Ty, head: Tm, tail: Tm)
     case CaseL(scrut: Tm, et: Ty, nil: Tm, hd: Int, tl: Int, cons: Tm)
 
+    case LeftE(t1: Ty, t2: Ty, v: Tm)
+    case RightE(t1: Ty, t2: Ty, v: Tm)
+    case CaseE(t1: Ty, t2: Ty, scut: Tm, x: Int, l: Tm, y: Int, r: Tm)
+
     case Box(ty: Ty, tm: Tm)
     case Unbox(ty: Ty, tm: Tm)
 
@@ -72,7 +78,12 @@ object Syntax:
       case NilL(_)          => "Nil"
       case ConsL(_, hd, tl) => s"(Cons $hd $tl)"
       case CaseL(scrut, _, nil, hd, tl, cons) =>
-        s"(case $scrut $nil ($hd $tl. $cons))"
+        s"(caseList $scrut $nil ($hd $tl. $cons))"
+
+      case LeftE(_, _, v)  => s"(Left $v)"
+      case RightE(_, _, v) => s"(Right $v)"
+      case CaseE(_, _, scrut, x, l, y, r) =>
+        s"(caseEither $scrut ($x. $l) ($y. $r))"
 
       case Box(ty, tm)   => s"(box {$ty} $tm)"
       case Unbox(ty, tm) => s"(unbox {$ty} $tm)"

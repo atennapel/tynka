@@ -8,5 +8,6 @@ Try it out:
 sbt "run examples/Test"
 javac jvmstd/Pair.java
 javac jvmstd/List.java
+javac jvmstd/Either.java
 java Test
 ```

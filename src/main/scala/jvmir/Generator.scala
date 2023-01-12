@@ -122,15 +122,19 @@ object Generator:
     bos.close()
 
   private val PAIR_TYPE: Type = Type.getType("Ljvmstd/Pair;")
+  private val EITHER_TYPE: Type = Type.getType("Ljvmstd/Either;")
   private val LIST_TYPE: Type = Type.getType("Ljvmstd/List;")
   private val CONS_TYPE: Type = Type.getType("Ljvmstd/List$Cons;")
   private val OBJECT_TYPE: Type = Type.getType("Ljava/lang/Object;")
+  private val LEFT_TYPE: Type = Type.getType("Ljvmstd/Either$Left;")
+  private val RIGHT_TYPE: Type = Type.getType("Ljvmstd/Either$Right;")
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
-    case TBool => Type.BOOLEAN_TYPE
-    case TInt  => Type.INT_TYPE
-    case TPair => PAIR_TYPE
-    case TList => LIST_TYPE
+    case TBool   => Type.BOOLEAN_TYPE
+    case TInt    => Type.INT_TYPE
+    case TPair   => PAIR_TYPE
+    case TEither => EITHER_TYPE
+    case TList   => LIST_TYPE
 
   private def constantValue(e: Tm): Option[Any] = e match
     case True      => Some(true)
@@ -287,6 +291,58 @@ object Generator:
         mg.visitLabel(lElse)
         mg.pop()
         gen(nil)
+        mg.visitLabel(lEnd)
+
+      case LeftE(_, _, x) =>
+        mg.newInstance(LEFT_TYPE)
+        mg.dup()
+        gen(x)
+        mg.invokeConstructor(
+          LEFT_TYPE,
+          new Method(
+            "<init>",
+            Type.VOID_TYPE,
+            List(OBJECT_TYPE).toArray
+          )
+        )
+      case RightE(_, _, x) =>
+        mg.newInstance(RIGHT_TYPE)
+        mg.dup()
+        gen(x)
+        mg.invokeConstructor(
+          RIGHT_TYPE,
+          new Method(
+            "<init>",
+            Type.VOID_TYPE,
+            List(OBJECT_TYPE).toArray
+          )
+        )
+      case CaseE(t1, t2, s, x, l, y, r) =>
+        val lEnd = mg.newLabel()
+        val lElse = mg.newLabel()
+        gen(s)
+        mg.dup()
+        mg.instanceOf(LEFT_TYPE)
+        mg.visitJumpInsn(IFEQ, lElse)
+
+        mg.checkCast(LEFT_TYPE)
+        mg.getField(LEFT_TYPE, "value", OBJECT_TYPE)
+        val get = gen(t1)
+        mg.unbox(get)
+        val lvalue = mg.newLocal(get)
+        mg.storeLocal(lvalue)
+        gen(l)(mg, ctx, locals + (x -> lvalue), methodStart)
+        mg.visitJumpInsn(GOTO, lEnd)
+
+        mg.visitLabel(lElse)
+        mg.checkCast(RIGHT_TYPE)
+        mg.getField(RIGHT_TYPE, "value", OBJECT_TYPE)
+        val get2 = gen(t2)
+        mg.unbox(get2)
+        val lvalue2 = mg.newLocal(get2)
+        mg.storeLocal(lvalue2)
+        gen(r)(mg, ctx, locals + (y -> lvalue2), methodStart)
+
         mg.visitLabel(lEnd)
 
       case True  => mg.push(true)

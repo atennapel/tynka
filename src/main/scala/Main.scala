@@ -31,16 +31,16 @@ object Main:
         s"total time: ${(ptime + etime) / 1000000}ms (${ptime + etime}ns)"
       )
       println(pretty(eds))
-      println("staging:")
+      println("\nstaging:")
       val ids = stage(eds)
       println(ids)
-      println("simplification:")
+      println("\nsimplification:")
       val simp = simplify(ids)
       println(simp)
-      println("compile to jvm ir:")
+      println("\ncompile to jvm ir:")
       val jvmir = compile(simp)
       println(jvmir)
-      println("generate JVM bytecode")
+      println("\ngenerate JVM bytecode")
       generate(moduleName, jvmir)
     catch
       case err: ElaborateError =>
