@@ -34,7 +34,7 @@ def facTR (n : Int) : Int :=
     if n < 2 then acc
     else go (n - 1) (acc * n)) n 1
 
-def foldInt {A : Ty V} (n : Int) (z : A) (s : Int -> A -> A) : A =
+def foldInt {A : Ty Val} (n : Int) (z : A) (s : Int -> A -> A) : A =
   fix (go n. \acc.
     if n <= 0 then acc
     else go (n - 1) (s n acc)) n z

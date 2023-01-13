@@ -1,11 +1,11 @@
 def (:+:) = Either
-def Val = Ty V
+def VTy = Ty Val
 
 def Maybe A = () :+: A
 def Nothing {A} : Maybe A = Left []
 def Just {A} (x : ^A) : Maybe A = Right x
 
-def maybe {A : Val} {vf} {R : Ty vf} (x : Maybe A) (n : R) (j : A -> R) : R =
+def maybe {A : VTy} {vf} {R : Ty vf} (x : Maybe A) (n : R) (j : A -> R) : R =
   caseEither x (\_. n) j
 
 def head {A} (l : List A) : Maybe A =
@@ -15,13 +15,13 @@ def tail {A} (l : List A) : Maybe (List A) =
 def uncons {A} (l : List A) : Maybe (A ** List A) =
   caseList l Nothing (\hd tl. Just (hd, tl))
 
-def foldr {A : Val} {vf : VF} {B : Ty vf} (nil : B) (cons : A -> B -> B) (l : List A) : B =
+def foldr {A : VTy} {vf : VF} {B : Ty vf} (nil : B) (cons : A -> B -> B) (l : List A) : B =
   fix (go l. caseList l nil (\hd tl. cons hd (go tl))) l
-def foldl {A B : Val} (nil : B) (cons : B -> A -> B) (l : List A) : B =
+def foldl {A B : VTy} (nil : B) (cons : B -> A -> B) (l : List A) : B =
   fix (go l. \acc. caseList l acc (\hd tl. go tl (cons acc hd))) l nil
-def map {A B : Val} (f : A -> B) (l : List A) : List B =
+def map {A B : VTy} (f : A -> B) (l : List A) : List B =
   foldr Nil (\hd tl. f hd :: tl) l
-def filter {A : Val} (f : A -> Bool) (l : List A) : List A =
+def filter {A : VTy} (f : A -> Bool) (l : List A) : List A =
   foldr Nil (\hd tl. if f hd then hd :: tl else tl) l
 
 def (&&) a b = if a then b else False

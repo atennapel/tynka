@@ -148,8 +148,8 @@ object Common:
 
     override def toString: String = this match
       case PVF => "VF"
-      case PV  => "V"
-      case PF  => "F"
+      case PV  => "Val"
+      case PF  => "Fun"
 
       case PVoid   => "Void"
       case PAbsurd => "absurd"
@@ -201,9 +201,9 @@ object Common:
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
-      case "VF" => Some(PVF)
-      case "V"  => Some(PV)
-      case "F"  => Some(PF)
+      case "VF"  => Some(PVF)
+      case "Val" => Some(PV)
+      case "Fun" => Some(PF)
 
       case "Void"   => Some(PVoid)
       case "absurd" => Some(PAbsurd)
