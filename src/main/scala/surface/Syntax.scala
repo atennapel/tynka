@@ -36,7 +36,7 @@ object Syntax:
   enum Tm:
     case Var(name: Name)
     case Let(name: Name, meta: Boolean, ty: Option[Ty], value: Tm, body: Tm)
-    case U(stage: Stage[Ty])
+    case U(stage: Stage)
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
@@ -66,8 +66,8 @@ object Syntax:
       case Let(x, m, None, v, b) => s"(let $x ${if m then "" else ":"}= $v; $b)"
       case Let(x, m, Some(t), v, b) =>
         s"(let $x : $t ${if m then "" else ":"}= $v; $b)"
-      case U(S0(vf)) => s"(Ty $vf)"
-      case U(S1)     => "Meta"
+      case U(STy)   => s"Ty"
+      case U(SMeta) => "Meta"
 
       case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
       case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"

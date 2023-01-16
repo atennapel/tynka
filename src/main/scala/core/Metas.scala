@@ -9,11 +9,11 @@ object Metas:
   private val metas: ArrayBuffer[MetaEntry] = ArrayBuffer.empty
 
   enum MetaEntry:
-    case Unsolved(ty: VTy, stage: Stage[VTy])
-    case Solved(value: Val, ty: VTy, stage: Stage[VTy])
+    case Unsolved(ty: VTy, stage: Stage)
+    case Solved(value: Val, ty: VTy, stage: Stage)
   export MetaEntry.*
 
-  def freshMeta(ty: VTy, stage: Stage[VTy]): MetaId =
+  def freshMeta(ty: VTy, stage: Stage): MetaId =
     val id = metaId(metas.size)
     metas.addOne(Unsolved(ty, stage))
     id
@@ -35,7 +35,7 @@ object Metas:
     val u = getMetaUnsolved(id)
     metas(id.expose) = Solved(v, u.ty, u.stage)
 
-  def unsolvedMetas(): List[(MetaId, VTy, Stage[VTy])] =
+  def unsolvedMetas(): List[(MetaId, VTy, Stage)] =
     metas.zipWithIndex.collect { case (Unsolved(ty, s), ix) =>
       (metaId(ix), ty, s)
     }.toList

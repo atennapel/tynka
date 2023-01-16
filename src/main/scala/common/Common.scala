@@ -93,24 +93,22 @@ object Common:
     inline def expose: Int = id
 
   // stages
-  enum Stage[+VF]:
-    case S0(vf: VF)
-    case S1 extends Stage[Nothing]
+  enum Stage:
+    case SMeta
+    case STy
+    case SValTy
 
-    def map[R](f: VF => R): Stage[R] = this match
-      case S0(x) => S0(f(x))
-      case S1    => S1
-
-    def isS0: Boolean = this match
-      case S0(_) => true
-      case _     => false
+    override def toString: String = this match
+      case SMeta  => "Meta"
+      case STy    => "Ty"
+      case SValTy => "ValTy"
   export Stage.*
 
   // primitives
   enum PrimName:
-    case PVF
-    case PV
-    case PF
+    case PVal
+    case PFun
+    case PPair
 
     case PVoid
     case PAbsurd
@@ -147,9 +145,9 @@ object Common:
     case PCaseEither
 
     override def toString: String = this match
-      case PVF => "VF"
-      case PV  => "Val"
-      case PF  => "Fun"
+      case PVal  => "Val"
+      case PFun  => "Fun"
+      case PPair => "Pair"
 
       case PVoid   => "Void"
       case PAbsurd => "absurd"
@@ -201,9 +199,9 @@ object Common:
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
-      case "VF"  => Some(PVF)
-      case "Val" => Some(PV)
-      case "Fun" => Some(PF)
+      case "Val"  => Some(PVal)
+      case "Fun"  => Some(PFun)
+      case "Pair" => Some(PPair)
 
       case "Void"   => Some(PVoid)
       case "absurd" => Some(PAbsurd)

@@ -74,7 +74,7 @@ object Unification:
   private def etaExpandMeta(m: MetaId): Val =
     val uns = getMetaUnsolved(m)
     val a = uns.ty
-    def go(a: VTy, s: Stage[VTy], lvl: Lvl, p: Pruning, locals: Locals): Tm =
+    def go(a: VTy, s: Stage, lvl: Lvl, p: Pruning, locals: Locals): Tm =
       force(a) match
         case VPi(x, i, a, b) =>
           Lam(
@@ -86,15 +86,15 @@ object Unification:
               s,
               lvl + 1,
               Some(Expl) :: p,
-              Bound(locals, x, quote(a)(lvl), quoteS(s)(lvl))
+              Bound(locals, x, quote(a)(lvl), s)
             )
           )
-        case VLift(vf, a) => go(a, S0(vf), lvl, p, locals).quote
+        case VLift(a) => go(a, STy, lvl, p, locals).quote
         case a =>
           val closed = eval(locals.closeTy(quote(a)(lvl)))(Nil)
           val m = freshMeta(closed, s)
           AppPruning(Meta(m), p)
-    val t = go(a, S1, lvl0, Nil, Empty)
+    val t = go(a, SMeta, lvl0, Nil, Empty)
     val v = eval(t)(Nil)
     solveMeta(m, v)
     v
@@ -169,7 +169,7 @@ object Unification:
           case None    => throw UnifyError(s"escaping variable '$x")
           case Some(w) => goSp(quote(w)(psub.dom), sp)
       case VRigid(HPrim(x), sp) => goSp(Prim(x), sp)
-      case VU(s)                => U(s.map(go))
+      case VU(s)                => U(s)
 
       case VFlex(m, _) if psub.occ.contains(m) =>
         throw UnifyError(s"occurs check failed ?$m")
@@ -184,7 +184,6 @@ object Unification:
       case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
-      case VFunTy(t, vf, b) => FunTy(go(t), go(vf), go(b))
       case VFix(g, x, t, b, a) =>
         Fix(
           g,
@@ -196,12 +195,11 @@ object Unification:
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
-      case VPairTy(fst, snd)  => PairTy(go(fst), go(snd))
 
       case VIntLit(n) => IntLit(n)
 
-      case VLift(vf, t) => Lift(go(vf), go(t))
-      case VQuote(t)    => go(t).quote
+      case VLift(t)  => Lift(go(t))
+      case VQuote(t) => go(t).quote
 
       case VIrrelevant => Irrelevant
     go(v)
@@ -330,30 +328,21 @@ object Unification:
     val v = VVar(l)
     unify(a(v), b(v))(l + 1)
 
-  def unify(a: Stage[VTy], b: Stage[VTy])(implicit l: Lvl): Unit = (a, b) match
-    case (S1, S1)       => ()
-    case (S0(a), S0(b)) => unify(a, b)
-    case _ => throw UnifyError(s"stage mismatch ${quoteS(a)} ~ ${quoteS(b)}")
-
   def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
-      case (VU(s1), VU(s2)) => unify(s1, s2)
+      case (VU(s1), VU(s2)) if s1 == s2 => ()
       case (VPi(_, i1, a1, b1), VPi(_, i2, a2, b2)) if i1 == i2 =>
         unify(a1, a2); unify(b1, b2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
         unify(a1, a2); unify(b1, b2)
-      case (VFunTy(a1, vf1, b1), VFunTy(a2, vf2, b2)) =>
-        unify(a1, a2); unify(vf1, vf2); unify(b1, b2)
-      case (VPairTy(a1, b1), VPairTy(a2, b2)) => unify(a1, a2); unify(b1, b2)
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
       case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
-      case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
-        unify(vf1, vf2); unify(ty1, ty2)
-      case (VQuote(a), VQuote(b))             => unify(a, b)
-      case (VIntLit(a), VIntLit(b)) if a == b => ()
-      case (VIrrelevant, VIrrelevant)         => ()
+      case (VLift(ty1), VLift(ty2))                     => unify(ty1, ty2)
+      case (VQuote(a), VQuote(b))                       => unify(a, b)
+      case (VIntLit(a), VIntLit(b)) if a == b           => ()
+      case (VIrrelevant, VIrrelevant)                   => ()
 
       case (VFix(_, _, _, b1, a1), VFix(_, _, _, b2, a2)) =>
         val v = VVar(l)

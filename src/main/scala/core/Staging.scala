@@ -85,13 +85,10 @@ object Staging:
     case Quote(t)              => VQuote1(eval0(t))
     case Wk(t)                 => eval1(t)(env.tail)
 
-    case FunTy(pt, vf, rt) => VFunTy1(eval1(pt), eval1(vf), eval1(rt))
-    case PairTy(pt, rt)    => VPairTy1(eval1(pt), eval1(rt))
-
     case U(_)           => VType1
     case Pi(_, _, _, _) => VType1
     case Sigma(_, _, _) => VType1
-    case Lift(_, _)     => VType1
+    case Lift(_)        => VType1
     case Irrelevant     => VType1
 
     case Meta(_)            => impossible()
@@ -152,16 +149,14 @@ object Staging:
         eval0(a)
       )
 
-    case FunTy(pt, vf, rt) => impossible()
-    case PairTy(pt, rt)    => impossible()
-    case U(_)              => impossible()
-    case Pi(_, _, _, _)    => impossible()
-    case Sigma(_, _, _)    => impossible()
-    case Lift(_, _)        => impossible()
-    case Meta(_)           => impossible()
-    case Quote(_)          => impossible()
-    case AppPruning(_, _)  => impossible()
-    case Irrelevant        => impossible()
+    case U(_)             => impossible()
+    case Pi(_, _, _, _)   => impossible()
+    case Sigma(_, _, _)   => impossible()
+    case Lift(_)          => impossible()
+    case Meta(_)          => impossible()
+    case Quote(_)         => impossible()
+    case AppPruning(_, _) => impossible()
+    case Irrelevant       => impossible()
 
   private def quoteTy(v: Val1)(implicit l: Lvl): IR.Ty = v match
     case VPrim1(PVoid, Nil)          => IR.TVoid
@@ -353,7 +348,7 @@ object Staging:
   private def stageExpr(t: Tm): IR.Expr = quoteExpr(eval0(t)(Empty))(lvl0, Nil)
   private def stageTDef(t: Ty): IR.TDef = quoteTDef(eval1(t)(Empty))(lvl0)
   private def stageDef(d: Def): Option[IR.Def] = d match
-    case DDef(x, t, S0(_), v) =>
+    case DDef(x, t, STy, v) =>
       Some(IR.DDef(x.expose, stageTDef(t), stageExpr(v)))
     case _ => None
 

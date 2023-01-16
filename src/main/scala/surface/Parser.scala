@@ -97,8 +97,8 @@ object Parser:
           .map(mkUnitPair)
         <|> holeP
         <|> nat
-        <|> ("Meta" #> U(S1))
-        <|> ("Ty" *> atom).map(t => U(S0(t)))
+        <|> ("Meta" #> U(SMeta))
+        <|> ("Ty" #> U(STy))
         <|> ident.map(Var.apply)
     )
 
