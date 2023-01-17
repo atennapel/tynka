@@ -66,6 +66,12 @@ object Evaluation:
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
     (x, force(v), as) match
+      // elimTy P v f (Val A) ~> v A
+      case (PElimTy, VVal(a), List(_, (v, _), _)) => vapp(v, a, Expl)
+      // elimTy P v f (Fun A B) ~> f A B (elimTy P v f B)
+      case (PElimTy, VFun(a, b), List(_, _, (f, _))) =>
+        vapp(vapp(vapp(f, a, Expl), b, Expl), vprimelim(PElimTy, as, b), Expl)
+
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
       case (_, VGlobal(y, sp, v), _) =>
@@ -91,6 +97,32 @@ object Evaluation:
       case _                        => impossible()
 
   private def vprim(x: PrimName): Val = x match
+    case PElimTy =>
+      vlam(
+        "P",
+        VIrrelevant,
+        p =>
+          vlam(
+            "v",
+            VIrrelevant,
+            v =>
+              vlam(
+                "f",
+                VIrrelevant,
+                f =>
+                  vlam(
+                    "t",
+                    VIrrelevant,
+                    t =>
+                      vprimelim(
+                        PElimTy,
+                        List((p, Expl), (v, Expl), (f, Expl)),
+                        t
+                      )
+                  )
+              )
+          )
+      )
     case _ => VPrim(x)
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
@@ -193,6 +225,33 @@ object Evaluation:
     case PVal => (vfun(VVTy(), VTy()), SMeta)
     // ValTy -> Ty -> Ty
     case PFun => (vfun(VVTy(), vfun(VTy(), VTy())), SMeta)
+    // (P : Ty -> Meta) -> ((A : VTy) -> P (Val A)) -> ((A : VTy) (B : Ty) -> P B -> P (Fun A B)) -> (t : Ty) -> P t
+    case PElimTy =>
+      (
+        vpi(
+          "P",
+          vfun(VTy(), VMetaTy()),
+          p =>
+            vfun(
+              vpi("A", VVTy(), a => vapp(p, VVal(a), Expl)),
+              vfun(
+                vpi(
+                  "A",
+                  VVTy(),
+                  a =>
+                    vpi(
+                      "B",
+                      VTy(),
+                      b => vfun(vapp(p, b, Expl), vapp(p, VFun(a, b), Expl))
+                    )
+                ),
+                vpi("t", VTy(), t => vapp(p, t, Expl))
+              )
+            )
+        ),
+        SMeta
+      )
+
     // VTy -> VTy -> VTy
     case PPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 

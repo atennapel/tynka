@@ -6,3 +6,15 @@ def head {A : VTy} (d : A) (l : List A) : A =
   caseList l d (\hd _. hd)
 
 def testhead := head 0 #[1, 2, 3]
+
+def (+) a b = primIntAdd a b
+
+def caseListTy {A : VTy} {B : Ty} : (l : List A) (n : B) (c : A -> List A -> B) -> B =
+  elimTy (\B. (l : List A) (n : B) (c : A -> List A -> B) -> B)
+    (\B l n c. caseList l n c)
+    (\X B rec l n c. \x. rec l (n x) (\hd tl. c hd tl x))
+    B
+
+def testL (l : List Int) : Int :=
+  let f : Int -> Int := caseListTy {Int} {Int -> Int} l (\x. x) (\hd tl x. x);
+  f 0

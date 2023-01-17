@@ -108,6 +108,7 @@ object Common:
     case PVal
     case PFun
     case PPair
+    case PElimTy
 
     case PVoid
     case PAbsurd
@@ -144,10 +145,11 @@ object Common:
     case PCaseEither
 
     override def toString: String = this match
-      case PVTy  => "VTy"
-      case PVal  => "Val"
-      case PFun  => "Fun"
-      case PPair => "Pair"
+      case PVTy    => "VTy"
+      case PVal    => "Val"
+      case PFun    => "Fun"
+      case PPair   => "Pair"
+      case PElimTy => "elimTy"
 
       case PVoid   => "Void"
       case PAbsurd => "absurd"
@@ -199,10 +201,11 @@ object Common:
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
-      case "VTy"  => Some(PVTy)
-      case "Val"  => Some(PVal)
-      case "Fun"  => Some(PFun)
-      case "Pair" => Some(PPair)
+      case "VTy"    => Some(PVTy)
+      case "Val"    => Some(PVal)
+      case "Fun"    => Some(PFun)
+      case "elimTy" => Some(PElimTy)
+      case "Pair"   => Some(PPair)
 
       case "Void"   => Some(PVoid)
       case "absurd" => Some(PAbsurd)
