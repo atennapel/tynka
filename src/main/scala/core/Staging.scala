@@ -283,7 +283,7 @@ object Staging:
       val cond = quoteExpr(vsplice0(b))
       val ifTrue = quoteExpr(vsplice0(t))
       val ifFalse = quoteExpr(vsplice0(f))
-      IR.If(quoteTy(ty), cond, ifTrue, ifFalse)
+      IR.If(IR.TDef(quoteVTy(ty)), cond, ifTrue, ifFalse)
 
     case VSplicePrim0(PNil, List(t)) => IR.LNil(quoteVTy(t))
     case VSplicePrim0(PCons, List(t, hd, tl)) =>

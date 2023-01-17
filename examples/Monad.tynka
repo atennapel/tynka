@@ -1,13 +1,12 @@
 def (+) a b = primIntAdd a b
-def VTy = Ty Val
 
-def Reader (R : VTy) {vf : VF} (A : Ty vf) = R -> A 
-def return {R : VTy} {vf : VF} {A : Ty vf} (x : A) : Reader R A = \_. x
-def (>>=) {R : VTy} {vf1 : VF} {A : Ty vf1} {vf2 : VF} {B : Ty vf2}
+def Reader (R : VTy) (A : Ty) = Val R -> A 
+def return {R : VTy} {A : Ty} (x : A) : Reader R A = \_. x
+def (>>=) {R : VTy} {A : Ty} {B : Ty}
   (f : Reader R A) (g : A -> Reader R B) : Reader R B =
   \r. g (f r) r
 def ask {R : VTy} : Reader R R = \r. r
-def runReader {R : VTy} {vf : VF} {A : Ty vf} (f : Reader R A) (r : R) : A = f r
+def runReader {R : VTy} {A : Ty } (f : Reader R A) (r : R) : A = f r
 
 def foo (b : Bool) : Reader Int Int :=
   if b then

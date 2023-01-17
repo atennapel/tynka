@@ -12,7 +12,7 @@ def (>) a b = primIntGt a b
 def (<=) a b = primIntLeq a b
 def (>=) a b = primIntGeq a b
 
-def foldInt {A : Ty Val} (n : Int) (z : A) (s : Int -> A -> A) : A =
+def foldInt {A : VTy} (n : Int) (z : A) (s : Int -> A -> A) : A =
   fix (go n. \acc.
     if n <= 0 then acc
     else go (n - 1) (s n acc)) n z
