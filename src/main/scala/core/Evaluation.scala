@@ -252,6 +252,25 @@ object Evaluation:
         SMeta
       )
 
+    // {A : VTy} {B : Ty} -> ((^(Val A) -> ^B) -> ^(Val A) -> ^B) -> ^(Val A) -> ^B
+    case PFix =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "B",
+              VTy(),
+              b =>
+                val ta = VLift(VVal(a))
+                val tb = VLift(b)
+                vfun(vfun(vfun(ta, tb), vfun(ta, tb)), vfun(ta, tb))
+            )
+        ),
+        SMeta
+      )
+
     // VTy -> VTy -> VTy
     case PPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 

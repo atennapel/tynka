@@ -30,3 +30,19 @@ def caseListTyMeta {A : VTy} {B : Ty} : (l : List A) (n : ^*B) (c : A -> List A 
 def testL2 (l : List Int) : Int :=
   let f : Int -> Int := caseListTyMeta {Int} {Int -> Int} l (\x. x) (\hd tl x. x);
   f 0
+
+def foldr {A : VTy} {B : Ty} : ^*B -> (A -> ^*B -> ^*B) -> List A -> ^*B =
+  elimTy (\B. ^*B -> (A -> ^*B -> ^*B) -> List A -> ^*B)
+    (\_ n c l. caseListTyMeta {A} {B} )
+    _f
+    B
+
+{-
+def foldrR {A : VTy} {B : Ty} : ^*B -> (A -> ^*B -> ^*B) -> (List A -> ^*B) -> List A -> ^*B =
+  elimTy (\B. ^*B -> (A -> ^*B -> ^*B) -> (List A -> ^*B) -> List A -> ^*B)
+    (\B n c g l. caseList l n (\hd tl. c hd (g tl)))
+    (\X B rec n c g l x. rec (n x) (\hd tl. c hd (\_. tl) x) (\l. g l x) l)
+    B
+def foldr {A : VTy} {B : Ty} (n : ^*B) (c : A -> ^*B -> ^*B) (l : List A) : ^*B =
+  fix (go l. foldrR n c go l) l
+-}

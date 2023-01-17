@@ -110,6 +110,8 @@ object Common:
     case PPair
     case PElimTy
 
+    case PFix
+
     case PVoid
     case PAbsurd
 
@@ -150,6 +152,8 @@ object Common:
       case PFun    => "Fun"
       case PPair   => "Pair"
       case PElimTy => "elimTy"
+
+      case PFix => "fix"
 
       case PVoid   => "Void"
       case PAbsurd => "absurd"
@@ -206,6 +210,8 @@ object Common:
       case "Fun"    => Some(PFun)
       case "elimTy" => Some(PElimTy)
       case "Pair"   => Some(PPair)
+
+      case "fix2" => Some(PFix)
 
       case "Void"   => Some(PVoid)
       case "absurd" => Some(PAbsurd)

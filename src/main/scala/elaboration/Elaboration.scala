@@ -421,6 +421,8 @@ object Elaboration:
         )
         Let(x, et, stage, ctx.quote(ty), ev, eb)
 
+      case (S.Fix(_, _, _, _), _) if stage == SMeta =>
+        check(S.Quote(tm), ty, SMeta)
       case (S.Fix(go, x, b, a), _) if stage == STy =>
         val ta = newMeta(VVTy(), SMeta)
         val vta = ctx.eval(ta)
@@ -483,20 +485,23 @@ object Elaboration:
       case S.Pos(pos, tm) => infer(tm, s)(ctx.enter(pos))
 
       case S.Lam(x, S.ArgIcit(i), ot, b) =>
-        val (sa, sb) = s match
-          case SMeta => (SMeta, SMeta)
+        s match
+          case SMeta =>
+            val a = ot match
+              case None     => newMeta(VU(SMeta), SMeta)
+              case Some(ty) => checkType(ty, SMeta)
+            val va = ctx.eval(a)
+            val (eb, rt) = infer(b, SMeta)(ctx.bind(x, va, SMeta))
+            (Lam(x, i, Irrelevant, eb), VPi(x, i, va, ctx.close(rt)))
           case STy =>
             if i == Impl then error(s"implicit lambda cannot be in Ty: $tm")
-            (STy, STy)
-        val a = ot match
-          case None     => newMeta(VU(sa), SMeta)
-          case Some(ty) => checkType(ty, sa)
-        val va = ctx.eval(a)
-        val (eb, rt) = infer(b, sb)(ctx.bind(x, va, sa))
-        val fun = sb match
-          case SMeta => VPi(x, i, va, ctx.close(rt))
-          case STy   => VFun(va, rt)
-        (Lam(x, i, ctx.quote(fun), eb), fun)
+            val a = ot match
+              case None     => newMeta(VVTy(), SMeta)
+              case Some(ty) => checkVTy(ty)
+            val va = ctx.eval(a)
+            val (eb, rt) = infer(b, STy)(ctx.bind(x, VVal(va), STy))
+            val fun = VFun(va, rt)
+            (Lam(x, i, ctx.quote(fun), eb), fun)
       case S.Lam(x, S.ArgNamed(_), _, _) => error(s"cannot infer $tm")
 
       case S.Pair(fst, snd) =>
@@ -513,6 +518,7 @@ object Elaboration:
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, ty, s))
         (t, ty)
 
+      case S.Fix(go, x, b, a) if s == SMeta => infer(S.Quote(tm), SMeta)
       case S.Fix(go, x, b, a) if s == STy =>
         val ta = newMeta(VVTy(), SMeta)
         val vta = ctx.eval(ta)
@@ -654,13 +660,12 @@ object Elaboration:
             val fty = VPi(x, Expl, pty, ctx.close(rty))
             (Lam(x, Expl, ctx.quote(fty), eb), fty, SMeta)
           case STy =>
-            pty match
-              case VVal(ta) =>
-                val ctx2 = ctx.bind(x, pty, s)
-                val (eb, rty) = insert(STy, infer(b, STy)(ctx2))(ctx2)
-                val fty = VFun(ta, rty)
-                (Lam(x, Expl, ctx.quote(fty), eb), fty, STy)
-              case _ => error(s"lambda parameter needs to be in VTy")
+            val ta = ctx.eval(newMeta(VVTy(), SMeta))
+            unify(pty, VVal(ta))
+            val ctx2 = ctx.bind(x, pty, s)
+            val (eb, rty) = insert(STy, infer(b, STy)(ctx2))(ctx2)
+            val fty = VFun(ta, rty)
+            (Lam(x, Expl, ctx.quote(fty), eb), fty, STy)
       case S.Lam(_, S.ArgNamed(_), _, _) => error(s"cannot infer: $tm")
 
       case S.App(f, a, i) =>
