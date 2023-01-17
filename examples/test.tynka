@@ -11,10 +11,22 @@ def (+) a b = primIntAdd a b
 
 def caseListTy {A : VTy} {B : Ty} : (l : List A) (n : B) (c : A -> List A -> B) -> B =
   elimTy (\B. (l : List A) (n : B) (c : A -> List A -> B) -> B)
-    (\B l n c. caseList l n c)
-    (\X B rec l n c. \x. rec l (n x) (\hd tl. c hd tl x))
+    (\_ l n c. caseList l n c)
+    (\X _ rec l n c. \x. rec l (n x) (\hd tl. c hd tl x))
     B
 
 def testL (l : List Int) : Int :=
   let f : Int -> Int := caseListTy {Int} {Int -> Int} l (\x. x) (\hd tl x. x);
+  f 0
+
+def (^*) : Ty -> Meta = elimTy (\_. Meta) (\A. A) (\A _ B. A -> B)
+
+def caseListTyMeta {A : VTy} {B : Ty} : (l : List A) (n : ^*B) (c : A -> List A -> ^*B) -> ^*B =
+  elimTy (\B. (l : List A) (n : ^*B) (c : A -> List A -> ^*B) -> ^*B)
+    (\_ l n c. caseList l n c)
+    (\_ _ rec l n c x. rec l (n x) (\hd tl. c hd tl x))
+    B
+
+def testL2 (l : List Int) : Int :=
+  let f : Int -> Int := caseListTyMeta {Int} {Int -> Int} l (\x. x) (\hd tl x. x);
   f 0

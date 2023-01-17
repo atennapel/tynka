@@ -758,7 +758,7 @@ object Elaboration:
         (et2, a2, STy)
 
   private def prettyHoles(implicit ctx0: Ctx): String =
-    holes
+    holes.toList.reverse
       .map((x, e) =>
         e match
           case HoleEntry(ctx, tm, vty, s) =>

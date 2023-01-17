@@ -94,7 +94,8 @@ object Parser:
       })
 
     private lazy val atom: Parsley[Tm] = positioned(
-      ("^" *> atom).map(Lift.apply)
+      attempt("^*" *> atom).map(t => App(Var(Name("^*")), t, ArgIcit(Expl)))
+        <|> ("^" *> atom).map(Lift.apply)
         <|> ("`" *> atom).map(Quote.apply)
         <|> ("$" *> atom).map(Splice.apply)
         <|> attempt("(" *> userOp.map(Var.apply) <* ")")
