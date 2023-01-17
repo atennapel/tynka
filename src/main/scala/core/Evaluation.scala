@@ -188,27 +188,30 @@ object Evaluation:
     quote(eval(tm), UnfoldAll)
 
   def primType(x: PrimName): (VTy, Stage) = x match
+    case PVTy => (VU(SMeta), SMeta)
     // ValTy -> Ty
-    case PVal => (vfun(VValTy(), VTy()), SMeta)
+    case PVal => (vfun(VVTy(), VTy()), SMeta)
     // ValTy -> Ty -> Ty
-    case PFun => (vfun(VValTy(), vfun(VTy(), VTy())), SMeta)
+    case PFun => (vfun(VVTy(), vfun(VTy(), VTy())), SMeta)
+    // VTy -> VTy -> VTy
+    case PPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 
-    case PVoid => (VValTy(), SMeta)
+    case PVoid => (VVTy(), SMeta)
     // {A : ValTy} -> ^(Val Void) -> ^(Val A)
     case PAbsurd =>
       (
         vpiI(
           "A",
-          VValTy(),
+          VVTy(),
           a => vpi("_", VLift(VVal(VVoid())), _ => VLift(VVal(a)))
         ),
         SMeta
       )
 
-    case PUnitType => (VValTy(), SMeta)
+    case PUnitType => (VVTy(), SMeta)
     case PUnit     => (VVal(VUnitType()), STy)
 
-    case PBool  => (VValTy(), SMeta)
+    case PBool  => (VVTy(), SMeta)
     case PTrue  => (VVal(VBool()), STy)
     case PFalse => (VVal(VBool()), STy)
     // {A : ValTy} -> ^(Val Bool) -> ^(Val A) -> ^(Val A) -> ^(Val A)
@@ -216,7 +219,7 @@ object Evaluation:
       (
         vpiI(
           "A",
-          VValTy(),
+          VVTy(),
           a =>
             vfun(
               VLift(VVal(VBool())),
@@ -226,7 +229,7 @@ object Evaluation:
         SMeta
       )
 
-    case PInt => (VValTy(), SMeta)
+    case PInt => (VVTy(), SMeta)
     // Fun Int (Fun Int (Val Int))
     case PPrimIntAdd => (VFun(VInt(), VFun(VInt(), VVal(VInt()))), STy)
     case PPrimIntMul => (VFun(VInt(), VFun(VInt(), VVal(VInt()))), STy)
@@ -242,15 +245,15 @@ object Evaluation:
     case PPrimIntLeq => (VFun(VInt(), VFun(VInt(), VVal(VBool()))), STy)
 
     // ValTy -> ValTy
-    case PList => (vfun(VValTy(), VValTy()), SMeta)
+    case PList => (vfun(VVTy(), VVTy()), SMeta)
     // {A : ValTy} -> ^(Val (List A))
-    case PNil => (vpiI("A", VValTy(), a => VLift(VVal(VList(a)))), SMeta)
+    case PNil => (vpiI("A", VVTy(), a => VLift(VVal(VList(a)))), SMeta)
     // {A : ValTy} -> ^(Val A) -> ^(Val (List A)) -> ^(Val (List A))
     case PCons =>
       (
         vpiI(
           "A",
-          VValTy(),
+          VVTy(),
           a =>
             vfun(
               VLift(VVal(a)),
@@ -264,11 +267,11 @@ object Evaluation:
       (
         vpiI(
           "A",
-          VValTy(),
+          VVTy(),
           a =>
             vpiI(
               "R",
-              VValTy(),
+              VVTy(),
               r =>
                 vfun(
                   VLift(VVal(VList(a))),
@@ -289,17 +292,17 @@ object Evaluation:
       )
 
     // ValTy -> ValTy -> ValTy
-    case PEither => (vfun(VValTy(), vfun(VValTy(), VValTy())), SMeta)
+    case PEither => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
     // {A : ValTy} {B : ValTy} -> ^(Val A) -> ^(Val (Either A B))
     case PLeft =>
       (
         vpiI(
           "A",
-          VValTy(),
+          VVTy(),
           a =>
             vpiI(
               "B",
-              VValTy(),
+              VVTy(),
               b => vfun(VLift(VVal(a)), VLift(VVal(VEither(a, b))))
             )
         ),
@@ -310,11 +313,11 @@ object Evaluation:
       (
         vpiI(
           "A",
-          VValTy(),
+          VVTy(),
           a =>
             vpiI(
               "B",
-              VValTy(),
+              VVTy(),
               b => vfun(VLift(VVal(b)), VLift(VVal(VEither(a, b))))
             )
         ),
@@ -322,7 +325,7 @@ object Evaluation:
       )
     // {A : ValTy} {B : ValTy} {R : ValTy} -> ^(Val (Either A B)) -> (^(Val A) -> ^(Val R)) -> (^(Val B) -> ^(Val R)) -> ^(Val R)
     case PCaseEither =>
-      val tv = VValTy()
+      val tv = VVTy()
       def l(v: VTy): VTy = VLift(VVal(v))
       (
         vpiI(

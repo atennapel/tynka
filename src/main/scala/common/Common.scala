@@ -96,16 +96,15 @@ object Common:
   enum Stage:
     case SMeta
     case STy
-    case SValTy
 
     override def toString: String = this match
-      case SMeta  => "Meta"
-      case STy    => "Ty"
-      case SValTy => "ValTy"
+      case SMeta => "Meta"
+      case STy   => "Ty"
   export Stage.*
 
   // primitives
   enum PrimName:
+    case PVTy
     case PVal
     case PFun
     case PPair
@@ -145,6 +144,7 @@ object Common:
     case PCaseEither
 
     override def toString: String = this match
+      case PVTy  => "VTy"
       case PVal  => "Val"
       case PFun  => "Fun"
       case PPair => "Pair"
@@ -199,6 +199,7 @@ object Common:
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
+      case "VTy"  => Some(PVTy)
       case "Val"  => Some(PVal)
       case "Fun"  => Some(PFun)
       case "Pair" => Some(PPair)

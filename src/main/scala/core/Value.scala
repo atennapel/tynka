@@ -107,11 +107,11 @@ object Value:
       case VU(STy) => true
       case _       => false
 
-  object VValTy:
-    def apply(): Val = VU(SValTy)
+  object VVTy:
+    def apply(): Val = VRigid(HPrim(PVTy), SId)
     def unapply(value: Val): Boolean = value match
-      case VU(SValTy) => true
-      case _          => false
+      case VRigid(HPrim(PVTy), SId) => true
+      case _                        => false
 
   object VVal:
     def apply(v: Val): Val = VRigid(HPrim(PVal), SApp(SId, v, Expl))

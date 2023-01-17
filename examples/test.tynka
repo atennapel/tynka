@@ -1,0 +1,8 @@
+def id {A} (x : ^A) : A = x
+
+def test (x y : Bool) := id x
+
+def head {A : VTy} (d : A) (l : List A) : A =
+  caseList l d (\hd _. hd)
+
+def testhead := head 0 #[1, 2, 3]

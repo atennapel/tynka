@@ -70,6 +70,7 @@ object Syntax:
     def splice: Tm = this match
       case Quote(t) => t
       case t        => Splice(t)
+    def embedVal: Tm = App(Prim(PVal), this, Expl)
 
     override def toString: String = this match
       case Var(x)                    => s"'$x"
@@ -105,3 +106,6 @@ object Syntax:
       case Meta(id)          => s"?$id"
       case AppPruning(t, sp) => s"($t [${sp.reverse.mkString(", ")}])"
   export Tm.*
+
+  def tFun(a: Ty, b: Ty): Ty = App(App(Prim(PFun), a, Expl), b, Expl)
+  def tPair(a: Ty, b: Ty): Ty = App(App(Prim(PPair), a, Expl), b, Expl)
