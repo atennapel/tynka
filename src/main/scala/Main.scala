@@ -13,11 +13,11 @@ import parsley.io.given
 
 object Main:
   @main def run(filename0: String): Unit =
+    setDebug(false)
     var filename = filename0
     if !filename.endsWith(".tynka") then filename = s"$filename0.tynka"
     val moduleName = filename.dropRight(6).split("/").last
     try
-      setDebug(false)
       val ptimeStart = System.nanoTime()
       val ds = defsParser.parseFromFile(new File(filename)).flatMap(_.toTry).get
       val ptime = System.nanoTime() - ptimeStart

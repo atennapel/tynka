@@ -45,7 +45,7 @@ object Parser:
         "`",
         "$"
       ),
-      identStart = Predicate(_.isLetter),
+      identStart = Predicate(c => c.isLetter || c == '_'),
       identLetter =
         Predicate(c => c.isLetterOrDigit || c == '_' || c == '\'' || c == '-'),
       opStart = Predicate(userOps.contains(_)),
@@ -85,7 +85,13 @@ object Parser:
     private lazy val bind: Parsley[Bind] =
       "_" #> DontBind <|> identOrOp.map(DoBind.apply)
 
-    private lazy val holeP: Parsley[Tm] = ("_" *> option(ident)).map(Hole.apply)
+    private lazy val holeP: Parsley[Tm] =
+      ident.flatMap(x0 => {
+        val x = x0.expose
+        if x.head == '_' then
+          pure(Hole(if x.size > 1 then Some(Name(x.tail)) else None))
+        else empty
+      })
 
     private lazy val atom: Parsley[Tm] = positioned(
       ("^" *> atom).map(Lift.apply)
@@ -95,7 +101,7 @@ object Parser:
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
           .map(mkUnitPair)
-        <|> holeP
+        <|> attempt(holeP)
         <|> nat
         <|> ("Meta" #> U(SMeta))
         <|> ("Ty" #> U(STy))
