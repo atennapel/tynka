@@ -1,0 +1,26 @@
+def (+) a b = primIntAdd a b
+def (*) a b = primIntMul a b
+def (-) a b = primIntSub a b
+def (/) a b = primIntDiv a b
+def (%) a b = primIntMod a b
+
+def (==) a b = primIntEq a b
+def (!=) a b = primIntNeq a b
+
+def (<) a b = primIntLt a b
+def (>) a b = primIntGt a b
+def (<=) a b = primIntLeq a b
+def (>=) a b = primIntGeq a b
+
+def foldInt {A : Ty Val} (n : Int) (z : A) (s : Int -> A -> A) : A =
+  fix (go n. \acc.
+    if n <= 0 then acc
+    else go (n - 1) (s n acc)) n z
+
+def UnitType = (A : Meta) -> A -> A
+def Unit : UnitType = \A x. x
+
+def export :
+  ((+) : ^Int -> ^Int -> ^Int) **
+  UnitType =
+  ((+), Unit)
