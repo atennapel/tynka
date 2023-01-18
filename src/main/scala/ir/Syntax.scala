@@ -40,6 +40,7 @@ object Syntax:
     def apply(rt: Ty): TDef = TDef(Nil, rt)
     def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
     def apply(t1: Ty, t2: TDef): TDef = TDef(t1 :: t2.ps, t2.rt)
+    def apply(ps: List[Ty], t2: TDef): TDef = TDef(ps ++ t2.ps, t2.rt)
 
   final case class Defs(defs: List[Def]):
     override def toString: String = defs.mkString("\n")
