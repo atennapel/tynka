@@ -126,7 +126,15 @@ object Staging:
 
   private def vapp0(f: Val0, a: Val0): Val0 = f match
     case VLam0(DontBind, _, b) => b(a)
-    case _                     => VApp0(f, a)
+    case VLam0(DoBind(x), f, b) =>
+      f match
+        case VPrim1(PFun, List(ta, tb)) => vlet0(x, ta, tb, a, b)
+        case _                          => impossible()
+    case VLet0(x, t1, t2, v, b) =>
+      t2 match
+        case VPrim1(PFun, List(_, tb)) => vlet0(x, t1, tb, v, w => vapp0(w, a))
+        case _                         => impossible()
+    case _ => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType, t: Val1): Val0 = (v, p) match
     case (VPair0(fst, _, _), Fst) => fst
@@ -138,6 +146,7 @@ object Staging:
   // flatten lets
   // let y : t2 ~> t3 = (let x : t1 ~> t2 = v; b1); b2
   // let x : t1 ~> t3 = v; let y = t2 ~> t3 = b1; b2
+  // inline simple literals
   private def vlet0(
       x: Name,
       t1: Val1,
@@ -146,8 +155,17 @@ object Staging:
       b: Val0 => Val0
   ): Val0 = v match
     case VLet0(y, t3, _, v2, b2) =>
-      vlet0(y, t3, t2, v2, w => VLet0(x, t1, t2, b2(w), b))
-    case _ => VLet0(x, t1, t2, v, b)
+      vlet0(y, t3, t2, v2, w => vlet0(x, t1, t2, b2(w), b))
+    case _ if isInlinable(v) => b(v)
+    case _                   => VLet0(x, t1, t2, v, b)
+
+  private def isInlinable(v: Val0): Boolean = v match
+    case VVar0(_)                    => true
+    case VGlobal0(_)                 => true
+    case VPrim0(_)                   => true
+    case VIntLit0(_)                 => true
+    case VSplicePrim0(PNil, List(_)) => true
+    case _                           => false
 
   private def clos0(t: Tm)(implicit env: Env): Val0 => Val0 =
     v => eval0(t)(Def0(env, v))
@@ -197,7 +215,7 @@ object Staging:
   private def quoteTy(v: Val1)(implicit l: Lvl): IR.TDef = v match
     case VPrim1(PVal, List(t))    => IR.TDef(quoteVTy(t))
     case VPrim1(PFun, List(a, b)) => IR.TDef(quoteVTy(a), quoteTy(b))
-    case _                        => impossible()
+    case _                        => IR.TDef(quoteVTy(v))
 
   private def fresh()(implicit ns: List[(IR.Name, IR.TDef)]): IR.Name =
     IR.Name.fresh(ns.map(_._1))
@@ -254,11 +272,20 @@ object Staging:
     case VLet0(_, ty, bty, v, b) =>
       val x = fresh()
       val td = quoteTy(ty)
+      def eta(t: Val1, v: Val0): Val0 =
+        def go(ps: List[Val1], as: List[Val0]): Val0 = ps match
+          case Nil => as.foldLeft(v)((v, a) => vapp0(v, a))
+          case ft :: ps =>
+            VLam0(DoBind(Name("x")), ft, a => go(ps, as ++ List(a)))
+        go(intermediateFunctionTypes(t), Nil)
+      def intermediateFunctionTypes(v: Val1): List[Val1] = v match
+        case VPrim1(PFun, List(ta, tb)) => v :: intermediateFunctionTypes(tb)
+        case _                          => Nil
       IR.Let(
         x,
         td,
         quoteTy(bty),
-        quoteExpr(v),
+        quoteExpr(eta(ty, v)),
         quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
       )
     case VFix0(_, _, t, b, a) =>
@@ -369,11 +396,38 @@ object Staging:
 
     case _ => impossible()
 
+  private def etaExpand(
+      ty: IR.TDef,
+      body: Tm
+  ): (List[(IR.Name, IR.Ty)], IR.Ty, IR.Expr) =
+    def go(
+        ps: List[IR.Ty],
+        ns: List[(IR.Name, IR.TDef)]
+    ): List[(IR.Name, IR.TDef)] =
+      ps match
+        case Nil => ns
+        case t :: ps =>
+          val x = fresh()(ns)
+          go(ps, ns ++ List((x, IR.TDef(t))))
+    val irns = go(ty.ps, Nil)
+    val irps = irns.map((x, t) => (x, t.rt))
+    val ns = irns.reverse
+    val env = (0 until ns.size).reverse.foldRight(Empty)((i, e) =>
+      Def0(e, VVar0(mkLvl(i)))
+    )
+    val body2 =
+      (0 until ns.size).foldRight(body)((i, b) => App(b, Var(mkIx(i)), Expl))
+    val v = eval0(body2)(env)
+    val qbody = quoteExpr(v)(mkLvl(ns.size), ns)
+    (irps, ty.rt, qbody)
+
   private def stageExpr(t: Tm): IR.Expr = quoteExpr(eval0(t)(Empty))(lvl0, Nil)
   private def stageTDef(t: Ty): IR.TDef = quoteTy(eval1(t)(Empty))(lvl0)
   private def stageDef(d: Def): Option[IR.Def] = d match
     case DDef(x, t, STy, v) =>
-      Some(IR.DDef(x.expose, stageTDef(t), stageExpr(v)))
+      val ty = stageTDef(t)
+      val (ps, rt, body) = etaExpand(ty, v)
+      Some(IR.DDef(x.expose, stageTDef(t), body.lams(ps, IR.TDef(rt))))
     case _ => None
 
   def stage(ds: Defs): IR.Defs = IR.Defs(ds.toList.flatMap(stageDef))

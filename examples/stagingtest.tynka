@@ -2,3 +2,14 @@ def (+) a b = primIntAdd a b
 
 def test (a : Int) :=
   let y := (let x := 1; x); y + a
+
+def test2 (a : Int) :=
+  let y := (let x := (let z := 1 + 2; z); x); y + a
+
+def f n := n + 1
+
+def g : Int -> Int := f
+
+def z : Int -> Int -> Int := \a b. a + b
+
+def f2 : Int -> Int := let f3 := z 1; f3
