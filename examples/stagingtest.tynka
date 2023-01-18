@@ -1,0 +1,4 @@
+def (+) a b = primIntAdd a b
+
+def test (a : Int) :=
+  let y := (let x := 1; x); y + a

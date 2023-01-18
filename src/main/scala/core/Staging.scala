@@ -135,6 +135,20 @@ object Staging:
     case (p, Snd)                 => VSnd0(t, p)
     case _                        => impossible()
 
+  // flatten lets
+  // let y : t2 ~> t3 = (let x : t1 ~> t2 = v; b1); b2
+  // let x : t1 ~> t3 = v; let y = t2 ~> t3 = b1; b2
+  private def vlet0(
+      x: Name,
+      t1: Val1,
+      t2: Val1,
+      v: Val0,
+      b: Val0 => Val0
+  ): Val0 = v match
+    case VLet0(y, t3, _, v2, b2) =>
+      vlet0(y, t3, t2, v2, w => VLet0(x, t1, t2, b2(w), b))
+    case _ => VLet0(x, t1, t2, v, b)
+
   private def clos0(t: Tm)(implicit env: Env): Val0 => Val0 =
     v => eval0(t)(Def0(env, v))
 
@@ -145,8 +159,8 @@ object Staging:
     case Lam(x, _, fnty, b) => VLam0(x, eval1(fnty), clos0(b))
     case App(f, a, _)       => vapp0(eval0(f), eval0(a))
     case Proj(t, p, ty)     => vproj0(eval0(t), p, eval1(ty))
-    case Let(x, t, vf, bt, v, b) =>
-      VLet0(x, eval1(t), eval1(bt), eval0(v), clos0(b))
+    case Let(x, t, STy, bt, v, b) =>
+      vlet0(x, eval1(t), eval1(bt), eval0(v), clos0(b))
     case Pair(fst, snd, ty) => VPair0(eval0(fst), eval0(snd), eval1(ty))
     case Splice(t)          => vsplice0(eval1(t))
     case Wk(t)              => eval0(t)(env.tail)
@@ -160,14 +174,15 @@ object Staging:
         eval0(a)
       )
 
-    case U(_)             => impossible()
-    case Pi(_, _, _, _)   => impossible()
-    case Sigma(_, _, _)   => impossible()
-    case Lift(_)          => impossible()
-    case Meta(_)          => impossible()
-    case Quote(_)         => impossible()
-    case AppPruning(_, _) => impossible()
-    case Irrelevant       => impossible()
+    case U(_)                  => impossible()
+    case Pi(_, _, _, _)        => impossible()
+    case Sigma(_, _, _)        => impossible()
+    case Lift(_)               => impossible()
+    case Meta(_)               => impossible()
+    case Quote(_)              => impossible()
+    case AppPruning(_, _)      => impossible()
+    case Irrelevant            => impossible()
+    case Let(_, _, _, _, _, _) => impossible()
 
   private def quoteVTy(v: Val1)(implicit l: Lvl): IR.Ty = v match
     case VPrim1(PVoid, Nil)          => IR.TVoid
