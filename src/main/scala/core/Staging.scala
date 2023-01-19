@@ -131,10 +131,11 @@ object Staging:
       f match
         case VPrim1(PFun, List(ta, tb)) => vlet0(x, ta, tb, a, b)
         case _                          => impossible()
-    case VLet0(x, t1, t2, v, b) =>
+    /* case VLet0(x, t1, t2, v, b) =>
       t2 match
-        case VPrim1(PFun, List(_, tb)) => vlet0(x, t1, tb, v, w => vapp0(w, a))
-        case _                         => impossible()
+        case VPrim1(PFun, List(_, tb)) =>
+          vlet0(Name("f"), t2, tb, f, f => vapp0(f, a))
+        case _ => impossible() */
     case _ => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType, t: Val1): Val0 = (v, p) match
@@ -223,8 +224,7 @@ object Staging:
 
   private def quoteApp(v: Val0, b: IR.Expr)(implicit
       l: Lvl,
-      ns: List[(IR.Name, IR.TDef)],
-      emitDef: EmitDef
+      ns: List[(IR.Name, IR.TDef)]
   ): IR.Expr = v match
     case VApp0(VPrim0(p), a) => IR.BinOp(quotePrim(p), quoteExpr(a), b)
     case VPrim0(p) =>
@@ -254,7 +254,7 @@ object Staging:
 
   private def quoteExpr(
       v: Val0
-  )(implicit l: Lvl, ns: List[(IR.Name, IR.TDef)], emitDef: EmitDef): IR.Expr =
+  )(implicit l: Lvl, ns: List[(IR.Name, IR.TDef)]): IR.Expr =
     v match
       case VVar0(k) =>
         val (x, t) = ns(k.toIx.expose)
@@ -269,7 +269,7 @@ object Staging:
           x,
           at,
           IR.TDef(td.ps.tail, td.rt),
-          quoteExpr(b(VVar0(l)))(l + 1, (x, IR.TDef(at)) :: ns, emitDef)
+          quoteExpr(b(VVar0(l)))(l + 1, (x, IR.TDef(at)) :: ns)
         )
       case VLet0(_, ty, bty, v, b) =>
         quoteTy(ty) match
@@ -277,10 +277,10 @@ object Staging:
             val x = fresh()
             IR.Let(
               x,
-              td,
+              rt,
               quoteTy(bty),
               quoteExpr(v),
-              quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns, emitDef)
+              quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
             )
           case td @ IR.TDef(ps, rt) =>
             def eta(t: Val1, v: Val0): Val0 =
@@ -293,22 +293,16 @@ object Staging:
               case VPrim1(PFun, List(ta, tb)) =>
                 v :: intermediateFunctionTypes(tb)
               case _ => Nil
-            val (x, emit) = emitDef()
-            val value = quoteExpr(eta(ty, v))
-            val free = value.fvs
-            free.foreach((_, t) => if t.ps.nonEmpty then impossible()) // TODO
-            val as = free.map((x, _) => l - ns.indexWhere((y, _) => x == y) - 1)
-            val vgty = ty
-            val global =
-              as.foldLeft(VGlobal0(Name(x), vgty))((f, l) => vapp0(f, VVar0(l)))
-            emit(
-              IR.DDef(
-                x,
-                IR.TDef(free.map((_, t) => t.rt), td),
-                value.lams(free.map((x, t) => (x, t.rt)), td)
-              )
+            val x = fresh()
+            val (ps, _, body) = quoteExpr(eta(ty, v)).flattenLams
+            IR.LetLift(
+              x,
+              td,
+              ps,
+              quoteTy(bty),
+              body,
+              quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
             )
-            quoteExpr(b(global))
       case VFix0(_, _, t, b, a) =>
         val go = fresh()
         val td = quoteTy(t)
@@ -322,8 +316,7 @@ object Staging:
           IR.TDef(td.ps.tail, td.rt),
           quoteExpr(b(VVar0(l), VVar0(l + 1)))(
             l + 2,
-            (x, atd) :: (go, td) :: ns,
-            emitDef
+            (x, atd) :: (go, td) :: ns
           ),
           quoteExpr(a)
         )
@@ -351,7 +344,7 @@ object Staging:
         val cond = quoteExpr(vsplice0(b))
         val ifTrue = quoteExpr(vsplice0(t))
         val ifFalse = quoteExpr(vsplice0(f))
-        IR.If(IR.TDef(quoteVTy(ty)), cond, ifTrue, ifFalse)
+        IR.If(quoteVTy(ty), cond, ifTrue, ifFalse)
 
       case VSplicePrim0(PNil, List(t)) => IR.LNil(quoteVTy(t))
       case VSplicePrim0(PCons, List(t, hd, tl)) =>
@@ -364,12 +357,11 @@ object Staging:
         val cc = vapp1(vapp1(c, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
         val cr = quoteExpr(vsplice0(cc))(
           l + 2,
-          (tl, IR.TDef(IR.TList(et))) :: (hd, etd) :: ns,
-          emitDef
+          (tl, IR.TDef(IR.TList(et))) :: (hd, etd) :: ns
         )
         IR.CaseList(
           et,
-          IR.TDef(quoteVTy(t2)),
+          quoteVTy(t2),
           quoteExpr(vsplice0(lst)),
           quoteExpr(vsplice0(n)),
           hd,
@@ -386,13 +378,13 @@ object Staging:
         val t1d = IR.TDef(t1)
         val t2 = quoteVTy(t2q)
         val t2d = IR.TDef(t2)
-        val rt = quoteTy(rtq)
+        val rt = quoteVTy(rtq)
 
         val x = fresh()
         val clc = vapp1(lc, VQuote1(VVar0(l)))
-        val clcq = quoteExpr(vsplice0(clc))(l + 1, (x, t1d) :: ns, emitDef)
+        val clcq = quoteExpr(vsplice0(clc))(l + 1, (x, t1d) :: ns)
         val crc = vapp1(rc, VQuote1(VVar0(l)))
-        val crcq = quoteExpr(vsplice0(crc))(l + 1, (x, t2d) :: ns, emitDef)
+        val crcq = quoteExpr(vsplice0(crc))(l + 1, (x, t2d) :: ns)
         IR.CaseEither(
           t1,
           t2,
@@ -426,7 +418,7 @@ object Staging:
   private def etaExpand(
       ty: IR.TDef,
       body: Tm
-  )(implicit emitDef: EmitDef): (List[(IR.Name, IR.Ty)], IR.Ty, IR.Expr) =
+  ): (List[(IR.Name, IR.Ty)], IR.Ty, IR.Expr) =
     def go(
         ps: List[IR.Ty],
         ns: List[(IR.Name, IR.TDef)]
@@ -445,32 +437,19 @@ object Staging:
     val body2 =
       (0 until ns.size).foldRight(body)((i, b) => App(b, Var(mkIx(i)), Expl))
     val v = eval0(body2)(env)
-    val qbody = quoteExpr(v)(mkLvl(ns.size), ns, emitDef)
+    val qbody = quoteExpr(v)(mkLvl(ns.size), ns)
     (irps, ty.rt, qbody)
 
-  private def stageExpr(t: Tm)(implicit emitDef: EmitDef): IR.Expr =
-    quoteExpr(eval0(t)(Empty))(lvl0, Nil, emitDef)
+  private def stageExpr(t: Tm): IR.Expr =
+    quoteExpr(eval0(t)(Empty))(lvl0, Nil)
   private def stageTDef(t: Ty): IR.TDef = quoteTy(eval1(t)(Empty))(lvl0)
 
-  private type EmitDef = () => (IR.GName, IR.Def => Unit)
-  private def stageDef(d: Def): List[IR.Def] = d match
+  private def stageDef(d: Def): Option[IR.Def] = d match
     case DDef(x, t, STy, v) =>
-      var i = 0
-      def next(): Int =
-        val c = i
-        i += 1
-        c
-      val ds = ArrayBuffer.empty[IR.Def]
-      implicit val emitDef: EmitDef = () =>
-        val y = s"${x.expose}$$${next()}"
-        (y, d => { ds.addOne(d); () })
-
       val ty = stageTDef(t)
       val (ps, rt, body) = etaExpand(ty, v)
 
-      ds.toList ++ List(
-        IR.DDef(x.expose, stageTDef(t), body.lams(ps, IR.TDef(rt)))
-      )
-    case _ => Nil
+      Some(IR.DDef(x.expose, ty, ps, body))
+    case _ => None
 
   def stage(ds: Defs): IR.Defs = IR.Defs(ds.toList.flatMap(stageDef))

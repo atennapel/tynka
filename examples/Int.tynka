@@ -20,7 +20,4 @@ def foldInt {A : VTy} (n : Int) (z : A) (s : Int -> A -> A) : A =
 def UnitType = (A : Meta) -> A -> A
 def Unit : UnitType = \A x. x
 
-def export :
-  ((+) : ^Int -> ^Int -> ^Int) **
-  UnitType =
-  ((+), Unit)
+def fac n : Int := foldInt n 1 (*)

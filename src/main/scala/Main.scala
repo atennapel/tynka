@@ -3,8 +3,6 @@ import core.Pretty.pretty
 import common.Debug.*
 import elaboration.Elaboration.{ElaborateError, elaborate}
 import core.Staging.stage
-import ir.Simplifier.simplify
-import ir.Compiler.compile
 import jvmir.Generator.generate
 
 import java.io.File
@@ -34,14 +32,6 @@ object Main:
       println("\nstaging:")
       val ids = stage(eds)
       println(ids)
-      println("\nsimplification:")
-      val simp = simplify(ids)
-      println(simp)
-      println("\ncompile to jvm ir:")
-      val jvmir = compile(simp)
-      println(jvmir)
-      println("\ngenerate JVM bytecode")
-      generate(moduleName, jvmir)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

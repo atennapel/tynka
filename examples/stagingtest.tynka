@@ -15,3 +15,9 @@ def z : Int -> Int -> Int := \a b. a + b
 def f2 : Int -> Int := let f3 := z 1; f3
 
 def test3 a : Int := let f n := n + a; f 0 
+
+def test4 : Int -> Int :=
+  let a := 1 + 2;
+  let b := 1 + 2;
+  let c := 1 + 2;
+  \x. x + c

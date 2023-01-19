@@ -48,10 +48,12 @@ object Syntax:
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: GName, ty: TDef, value: Expr)
+    case DDef(name: GName, ty: TDef, params: List[(Name, Ty)], value: Expr)
 
     override def toString: String = this match
-      case DDef(x, t, v) => s"def $x : $t = $v"
+      case DDef(x, t, Nil, v) => s"def $x : ${t.rt} = $v"
+      case DDef(x, t, ps, v) =>
+        s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
   export Def.*
 
   enum Op:
@@ -95,7 +97,17 @@ object Syntax:
     case Global(x: GName, ty: TDef)
     case App(f: Expr, a: Expr)
     case Lam(x: Name, t1: Ty, t2: TDef, body: Expr)
-    case Let(x: Name, ty: TDef, bt: TDef, value: Expr, body: Expr)
+
+    case Let(x: Name, ty: Ty, bt: TDef, value: Expr, body: Expr)
+    case LetLift(
+        x: Name,
+        ty: TDef,
+        ps: List[(Name, Ty)],
+        bt: TDef,
+        value: Expr,
+        body: Expr
+    )
+
     case Fix(go: Name, x: Name, t1: Ty, t2: TDef, body: Expr, arg: Expr)
 
     case Pair(t1: Ty, t2: Ty, fst: Expr, snd: Expr)
@@ -110,13 +122,13 @@ object Syntax:
     case Unit
 
     case BoolLit(bool: Boolean)
-    case If(ty: TDef, cond: Expr, ifTrue: Expr, ifFalse: Expr)
+    case If(ty: Ty, cond: Expr, ifTrue: Expr, ifFalse: Expr)
 
     case LNil(ty: Ty)
     case LCons(ty: Ty, hd: Expr, tl: Expr)
     case CaseList(
         t1: Ty,
-        t2: TDef,
+        t2: Ty,
         l: Expr,
         n: Expr,
         hd: Name,
@@ -129,7 +141,7 @@ object Syntax:
     case CaseEither(
         t1: Ty,
         t2: Ty,
-        rt: TDef,
+        rt: Ty,
         v: Expr,
         x: Name,
         l: Expr,
@@ -138,11 +150,13 @@ object Syntax:
     )
 
     override def toString: String = this match
-      case Var(x, _)                => s"$x"
-      case Global(x, _)             => s"$x"
-      case App(f, a)                => s"($f $a)"
-      case Lam(x, t, _, b)          => s"(\\($x : $t). $b)"
-      case Let(x, t, _, v, b)       => s"(let $x : $t = $v; $b)"
+      case Var(x, _)          => s"$x"
+      case Global(x, _)       => s"$x"
+      case App(f, a)          => s"($f $a)"
+      case Lam(x, t, _, b)    => s"(\\($x : $t). $b)"
+      case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
+      case LetLift(x, t, ps, _, v, b) =>
+        s"(^let $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v; $b)"
       case Fix(go, x, _, _, b, arg) => s"(fix ($go $x. $b) $arg)"
 
       case Pair(_, _, fst, snd) => s"($fst, $snd)"
@@ -191,12 +205,13 @@ object Syntax:
     def apps(args: List[Expr]) = args.foldLeft(this)(App.apply)
 
     def size: Int = this match
-      case Var(x, t)                => 1
-      case Global(x, _)             => 1
-      case App(f, a)                => 1 + f.size + a.size
-      case Lam(x, _, _, b)          => 1 + b.size
-      case Let(x, _, _, v, b)       => 1 + v.size + b.size
-      case Fix(go, x, _, _, b, arg) => 1 + b.size + arg.size
+      case Var(x, t)                 => 1
+      case Global(x, _)              => 1
+      case App(f, a)                 => 1 + f.size + a.size
+      case Lam(x, _, _, b)           => 1 + b.size
+      case Let(x, _, _, v, b)        => 1 + v.size + b.size
+      case LetLift(x, _, _, _, v, b) => 1 + v.size + b.size
+      case Fix(go, x, _, _, b, arg)  => 1 + b.size + arg.size
 
       case Pair(_, _, fst, snd) => 1 + fst.size + snd.size
       case Fst(_, t)            => 1 + t.size
@@ -226,6 +241,7 @@ object Syntax:
       case App(f, a)          => f.fvs ++ a.fvs
       case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => x == y)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+      case LetLift(_, _, _, _, _, _) => ???
       case Fix(go, x, _, _, b, arg) =>
         b.fvs.filterNot((y, _) => x == y || go == y) ++ arg.fvs
 
@@ -316,8 +332,9 @@ object Syntax:
           val (x, b) = under(x0, TDef(t1), b0, sub, scope)
           Lam(x, t1, t2, b)
         case Let(x0, t, bt, v, b0) =>
-          val (x, b) = under(x0, t, b0, sub, scope)
+          val (x, b) = under(x0, TDef(t), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)
+        case LetLift(_, _, _, _, _, _) => ???
         case Fix(go0, x0, t1, t2, b0, arg) =>
           val (go, x, b) =
             under2(go0, TDef(t1, t2), x0, TDef(t1), b0, sub, scope)
@@ -344,7 +361,7 @@ object Syntax:
         case LCons(t, hd, tl) =>
           LCons(t, hd.subst(sub, scope), tl.subst(sub, scope))
         case CaseList(t1, t2, l, n, hd0, tl0, c0) =>
-          val (hd, tl, c) = under2(hd0, TDef(t1), tl0, t2, c0, sub, scope)
+          val (hd, tl, c) = under2(hd0, TDef(t1), tl0, TDef(t2), c0, sub, scope)
           CaseList(t1, t2, l.subst(sub, scope), n.subst(sub, scope), hd, tl, c)
 
         case ELeft(t1, t2, v)  => ELeft(t1, t2, v.subst(sub, scope))
