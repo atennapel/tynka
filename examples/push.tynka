@@ -1,19 +1,23 @@
-def VTy = Ty Val
+def caseListTy {A : VTy} {B : Ty} : (l : List A) (n : B) (c : A -> List A -> B) -> B =
+  elimTy (\B. (l : List A) (n : B) (c : A -> List A -> B) -> B)
+    (\_ l n c. caseList l n c)
+    (\X _ rec l n c. \x. rec l (n x) (\hd tl. c hd tl x))
+    B
 
-def foldr {A : VTy} {vf : VF} {B : Ty vf} (cons : A -> B -> B) (nil : B) (l : List A) : B =
-  fix (go l. caseList l nil (\hd tl. cons hd (go tl))) l
+def foldr {A : VTy} {B : Ty} (n : B) (c : A -> B -> B) (l : List A) : B =
+  fix (go l. caseListTy l n (\hd tl. c hd (go tl))) l
 
-def Push A = (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
+def Push A = (B : Ty) -> (A -> B -> B) -> B -> B
 
-def up {A : VTy} (as : List A) : Push A = \vf B f b. foldr f b as
+def up {A : VTy} (as : List A) : Push A = \B f b. foldr b f as
 
-def down {A : VTy} (as : Push A) = as _ _ (::) Nil
+def down {A : VTy} (as : Push A) = as (List A) (::) Nil
 
 def map {A B : VTy} (f : A -> B) (as : Push A) : Push B =
-  \vf R c n. as vf R (\a bs. c (f a) bs) n
+  \R c n. as R (\a bs. c (f a) bs) n
 
 def foldl {A B : VTy} (f : B -> A -> B) (b : B) (as : Push A) : B =
-  as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
+  as (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
 
 def (+) a b = primIntAdd a b
 def (*) a b = primIntMul a b
@@ -25,7 +29,7 @@ def list := #[1, 2, 3]
 
 def (|>) {A B} (x : A) (f : A -> B) : B = f x
 
-def main : Int -> Int := \_.
+def test :=
   up list
   |> map (\x. x + 1)
   |> map (\x. let y := x; y * y)

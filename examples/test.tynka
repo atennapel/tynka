@@ -30,3 +30,14 @@ def foldl {A : VTy} {B : VTy} (n : B) (c : A -> B -> B) (l : List A) : B =
   foldr (\acc. acc) (\hd tl acc. tl (c hd acc)) l n
 
 def sum : List Int -> Int := foldl 0 (+)
+
+def foldrMeta {A : VTy} {B : Ty} : (n : ^*B) (c : A -> ^*B -> ^*B) (l : List A) -> ^*B =
+  elimTy (\B. (n : ^*B) (c : A -> ^*B -> ^*B) (l : List A) -> ^*B)
+    (\B n c l. fix (go l. caseList l n (\hd tl. c hd (go tl))) l)
+    (\X B rec n c l x. rec (n x) (\hd tl. c hd (\_. tl) x) l)
+    B
+
+def foldlMeta {A : VTy} {B : VTy} (n : B) (c : A -> B -> B) (l : List A) : B =
+  foldrMeta {B = B -> B} (\acc. acc) (\hd tl acc. tl (c hd acc)) l n
+
+def sumMeta : List Int -> Int := foldl 0 (+)

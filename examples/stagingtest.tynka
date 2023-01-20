@@ -21,3 +21,8 @@ def test4 : Int -> Int :=
   let b := 1 + 2;
   let c := 1 + 2;
   \x. x + c
+
+def test5 : Int :=
+  let f x := x + 1;
+  let g x := f x;
+  g 0

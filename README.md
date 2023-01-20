@@ -11,3 +11,8 @@ javac jvmstd/List.java
 javac jvmstd/Either.java
 java Test
 ```
+
+TODO:
+- [ ] IR fix with parameters
+- [ ] Remove lambdas from IR language
+- [ ] Eta expansion after staging?

@@ -131,11 +131,11 @@ object Staging:
       f match
         case VPrim1(PFun, List(ta, tb)) => vlet0(x, ta, tb, a, b)
         case _                          => impossible()
-    /* case VLet0(x, t1, t2, v, b) =>
+    case VLet0(x, t1, t2, v, b) =>
       t2 match
         case VPrim1(PFun, List(_, tb)) =>
           vlet0(Name("f"), t2, tb, f, f => vapp0(f, a))
-        case _ => impossible() */
+        case _ => impossible()
     case _ => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType, t: Val1): Val0 = (v, p) match
@@ -261,7 +261,7 @@ object Staging:
         IR.Var(x, t)
       case VGlobal0(x, t) => IR.Global(x.expose, quoteTy(t))
       case VApp0(f, a)    => quoteApp(f, quoteExpr(a))
-      case VLam0(_, fnty, b) =>
+      case VLam0(_, fnty, b) => // impossible()
         val x = fresh()
         val td = quoteTy(fnty)
         val at = td.ps.head
@@ -304,17 +304,31 @@ object Staging:
               quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
             )
       case VFix0(_, _, t, b, a) =>
+        def eta(t: Val1, v: Val0): Val0 =
+          def go(ps: List[Val1], as: List[Val0]): Val0 = ps match
+            case Nil => as.foldLeft(v)((v, a) => vapp0(v, a))
+            case ft :: ps =>
+              VLam0(DoBind(Name("x")), ft, a => go(ps, as ++ List(a)))
+          go(intermediateFunctionTypes(t), Nil)
+        def intermediateFunctionTypes(v: Val1): List[Val1] = v match
+          case VPrim1(PFun, List(ta, tb)) =>
+            v :: intermediateFunctionTypes(tb)
+          case _ => Nil
+        def drop1(v: Val1): Val1 = v match
+          case VPrim1(PFun, List(_, tb)) => tb
+          case _                         => impossible()
         val go = fresh()
         val td = quoteTy(t)
         val at = td.ps.head
         val atd = IR.TDef(at)
         val x = fresh()((go, atd) :: ns)
+        val rt = IR.TDef(td.ps.tail, td.rt)
         IR.Fix(
           go,
           x,
           at,
-          IR.TDef(td.ps.tail, td.rt),
-          quoteExpr(b(VVar0(l), VVar0(l + 1)))(
+          rt,
+          quoteExpr(eta(drop1(t), b(VVar0(l), VVar0(l + 1))))(
             l + 2,
             (x, atd) :: (go, td) :: ns
           ),
@@ -444,12 +458,96 @@ object Staging:
     quoteExpr(eval0(t)(Empty))(lvl0, Nil)
   private def stageTDef(t: Ty): IR.TDef = quoteTy(eval1(t)(Empty))(lvl0)
 
-  private def stageDef(d: Def): Option[IR.Def] = d match
+  private def stageDef(d: Def): List[IR.Def] = d match
     case DDef(x, t, STy, v) =>
       val ty = stageTDef(t)
       val (ps, rt, body) = etaExpand(ty, v)
-
-      Some(IR.DDef(x.expose, ty, ps, body))
-    case _ => None
+      val (lifted, nds) = lift(x.expose, body)
+      nds ++ List(IR.DDef(x.expose, ty, ps, lifted))
+    case _ => Nil
 
   def stage(ds: Defs): IR.Defs = IR.Defs(ds.toList.flatMap(stageDef))
+
+  // lifting
+  private def lift(dx: IR.GName, e: IR.Expr): (IR.Expr, List[IR.Def]) =
+    val ds = ArrayBuffer.empty[IR.Def]
+    var uniq = 0; def next: Int = { val u = uniq; uniq += 1; u }
+    def go(e: IR.Expr): IR.Expr = e match
+      case IR.LetLift(x, t, ps, bt, v0, b) =>
+        val v = go(v0)
+        val psnames = ps.map(_._1)
+        val name = s"$dx$$$next$$let${x.expose}"
+        val free = v.fvs
+          .filterNot((y, _) => psnames.contains(y))
+          .map((x, t) => {
+            if t.ps.nonEmpty then ???
+            (x, t.rt)
+          })
+          .distinctBy((y, _) => y)
+        ds += IR.DDef(name, IR.TDef(free.map(_._2), t), free ++ ps, v)
+        go(
+          b.subst(
+            Map(
+              x -> IR
+                .Global(name, t)
+                .apps(free.map((x, t) => IR.Var(x, IR.TDef(t))))
+            )
+          )
+        )
+      case IR.Fix(g, x, t1, t2, b0, arg) =>
+        val b = go(b0)
+        val name = s"$dx$$$next$$fix"
+        val free = b.fvs
+          .filterNot((y, _) => y == g || y == x)
+          .map((x, t) => {
+            if t.ps.nonEmpty then ???
+            (x, t.rt)
+          })
+          .distinctBy((y, _) => y)
+        val (ps, _, b1) = b.flattenLams
+        val rt = t2
+        val nps = free ++ List((x, t1)) ++ ps
+        val vv = b1
+        val gl = IR
+          .Global(name, IR.TDef(nps.map(_._2), rt))
+          .apps(free.map((x, t) => IR.Var(x, IR.TDef(t))))
+        val b2 = vv.subst(Map(g -> gl))
+        val newdef = IR.DDef(
+          name,
+          IR.TDef(nps.map((_, t) => t), rt),
+          nps,
+          b2
+        )
+        ds += newdef
+        IR.App(gl, go(arg))
+
+      case IR.Var(x, _)            => e
+      case IR.Global(x, _)         => e
+      case IR.App(f, a)            => IR.App(go(f), go(a))
+      case IR.Lam(x, t1, t2, b)    => IR.Lam(x, t1, t2, go(b))
+      case IR.Let(x, t1, t2, v, b) => IR.Let(x, t1, t2, go(v), go(b))
+
+      case IR.Pair(t1, t2, fst, snd) => IR.Pair(t1, t2, go(fst), go(snd))
+      case IR.Fst(ty, t)             => IR.Fst(ty, go(t))
+      case IR.Snd(ty, t)             => IR.Snd(ty, go(t))
+
+      case IR.IntLit(n)       => e
+      case IR.BinOp(op, a, b) => IR.BinOp(op, go(a), go(b))
+
+      case IR.Absurd(_) => e
+
+      case IR.Unit => e
+
+      case IR.BoolLit(_)     => e
+      case IR.If(t, c, a, b) => IR.If(t, go(c), go(a), go(b))
+
+      case IR.LNil(_)          => e
+      case IR.LCons(t, hd, tl) => IR.LCons(t, go(hd), go(tl))
+      case IR.CaseList(t1, t2, l, n, hd, tl, c) =>
+        IR.CaseList(t1, t2, go(l), go(n), hd, tl, go(c))
+
+      case IR.ELeft(t1, t2, v)  => IR.ELeft(t1, t2, go(v))
+      case IR.ERight(t1, t2, v) => IR.ERight(t1, t2, go(v))
+      case IR.CaseEither(t1, t2, rt, v, x, l, y, r) =>
+        IR.CaseEither(t1, t2, rt, go(v), x, go(l), y, go(r))
+    (go(e), ds.toList)

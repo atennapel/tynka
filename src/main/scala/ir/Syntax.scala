@@ -1,5 +1,7 @@
 package ir
 
+import common.Common.impossible
+
 object Syntax:
   type GName = String
 
@@ -241,7 +243,7 @@ object Syntax:
       case App(f, a)          => f.fvs ++ a.fvs
       case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => x == y)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
-      case LetLift(_, _, _, _, _, _) => ???
+      case LetLift(x, t, ps, bt, v, b) => impossible()
       case Fix(go, x, _, _, b, arg) =>
         b.fvs.filterNot((y, _) => x == y || go == y) ++ arg.fvs
 
@@ -324,6 +326,31 @@ object Syntax:
               scope + x + y
             )
           )
+      def underN(
+          ps: List[(Name, Ty)],
+          b: Expr,
+          sub: Map[Name, Expr],
+          scope: Set[Int]
+      ): (List[(Name, Ty)], Expr) =
+        def go(
+            ps: List[(Name, Ty)],
+            nps: List[(Name, Ty)],
+            sub: Map[Name, Expr],
+            scope: Set[Int]
+        ): (List[(Name, Ty)], Expr) = ps match
+          case Nil => (nps, b.subst(sub, scope))
+          case (x, t) :: ps =>
+            if scope.contains(x.expose) then
+              val y = scope.max
+              val ny = Name(y)
+              go(
+                ps,
+                nps ++ List((ny, t)),
+                sub + (x -> Var(ny, TDef(t))),
+                scope + y
+              )
+            else go(ps, nps ++ List((x, t)), sub - x, scope + x.expose)
+        go(ps, Nil, sub, scope)
       this match
         case Var(x, _)    => sub.get(x).getOrElse(this)
         case Global(_, _) => this
@@ -334,7 +361,11 @@ object Syntax:
         case Let(x0, t, bt, v, b0) =>
           val (x, b) = under(x0, TDef(t), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)
-        case LetLift(_, _, _, _, _, _) => ???
+
+        case LetLift(x, t, ps0, bt, v, b0) =>
+          val (ps, b) = underN(ps0, b0, sub, scope)
+          LetLift(x, t, ps, bt, v.subst(sub, scope), b)
+
         case Fix(go0, x0, t1, t2, b0, arg) =>
           val (go, x, b) =
             under2(go0, TDef(t1, t2), x0, TDef(t1), b0, sub, scope)
