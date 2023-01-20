@@ -11,7 +11,7 @@ import parsley.io.given
 
 object Main:
   @main def run(filename0: String): Unit =
-    setDebug(false)
+    setDebug(true)
     var filename = filename0
     if !filename.endsWith(".tynka") then filename = s"$filename0.tynka"
     val moduleName = filename.dropRight(6).split("/").last
