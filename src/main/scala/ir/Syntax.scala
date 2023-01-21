@@ -110,7 +110,15 @@ object Syntax:
         body: Expr
     )
 
-    case Fix(go: Name, x: Name, t1: Ty, t2: TDef, body: Expr, arg: Expr)
+    case Fix(
+        go: Name,
+        x: Name,
+        t1: Ty,
+        t2: TDef,
+        ps: List[(Name, Ty)],
+        body: Expr,
+        arg: Expr
+    )
 
     case Pair(t1: Ty, t2: Ty, fst: Expr, snd: Expr)
     case Fst(ty: Ty, tm: Expr)
@@ -159,7 +167,8 @@ object Syntax:
       case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
       case LetLift(x, t, ps, _, v, b) =>
         s"(^let $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v; $b)"
-      case Fix(go, x, _, _, b, arg) => s"(fix ($go $x. $b) $arg)"
+      case Fix(go, x, _, _, ps, b, arg) =>
+        s"(fix ($go $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")}. $b) $arg)"
 
       case Pair(_, _, fst, snd) => s"($fst, $snd)"
       case Fst(_, t)            => s"$t.1"
@@ -207,13 +216,13 @@ object Syntax:
     def apps(args: List[Expr]) = args.foldLeft(this)(App.apply)
 
     def size: Int = this match
-      case Var(x, t)                 => 1
-      case Global(x, _)              => 1
-      case App(f, a)                 => 1 + f.size + a.size
-      case Lam(x, _, _, b)           => 1 + b.size
-      case Let(x, _, _, v, b)        => 1 + v.size + b.size
-      case LetLift(x, _, _, _, v, b) => 1 + v.size + b.size
-      case Fix(go, x, _, _, b, arg)  => 1 + b.size + arg.size
+      case Var(x, t)                   => 1
+      case Global(x, _)                => 1
+      case App(f, a)                   => 1 + f.size + a.size
+      case Lam(x, _, _, b)             => 1 + b.size
+      case Let(x, _, _, v, b)          => 1 + v.size + b.size
+      case LetLift(x, _, _, _, v, b)   => 1 + v.size + b.size
+      case Fix(go, x, _, _, _, b, arg) => 1 + b.size + arg.size
 
       case Pair(_, _, fst, snd) => 1 + fst.size + snd.size
       case Fst(_, t)            => 1 + t.size
@@ -244,8 +253,10 @@ object Syntax:
       case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => x == y)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
       case LetLift(x, t, ps, bt, v, b) => impossible()
-      case Fix(go, x, _, _, b, arg) =>
-        b.fvs.filterNot((y, _) => x == y || go == y) ++ arg.fvs
+      case Fix(go, x, _, _, ps, b, arg) =>
+        b.fvs.filterNot((y, _) =>
+          x == y || go == y || ps.exists((z, _) => z == y)
+        ) ++ arg.fvs
 
       case Pair(_, _, fst, snd) => fst.fvs ++ snd.fvs
       case Fst(_, t)            => t.fvs
@@ -327,17 +338,17 @@ object Syntax:
             )
           )
       def underN(
-          ps: List[(Name, Ty)],
+          ps: List[(Name, TDef)],
           b: Expr,
           sub: Map[Name, Expr],
           scope: Set[Int]
-      ): (List[(Name, Ty)], Expr) =
+      ): (List[(Name, TDef)], Expr) =
         def go(
-            ps: List[(Name, Ty)],
-            nps: List[(Name, Ty)],
+            ps: List[(Name, TDef)],
+            nps: List[(Name, TDef)],
             sub: Map[Name, Expr],
             scope: Set[Int]
-        ): (List[(Name, Ty)], Expr) = ps match
+        ): (List[(Name, TDef)], Expr) = ps match
           case Nil => (nps, b.subst(sub, scope))
           case (x, t) :: ps =>
             if scope.contains(x.expose) then
@@ -346,7 +357,7 @@ object Syntax:
               go(
                 ps,
                 nps ++ List((ny, t)),
-                sub + (x -> Var(ny, TDef(t))),
+                sub + (x -> Var(ny, t)),
                 scope + y
               )
             else go(ps, nps ++ List((x, t)), sub - x, scope + x.expose)
@@ -363,13 +374,28 @@ object Syntax:
           Let(x, t, bt, v.subst(sub, scope), b)
 
         case LetLift(x, t, ps0, bt, v, b0) =>
-          val (ps, b) = underN(ps0, b0, sub, scope)
-          LetLift(x, t, ps, bt, v.subst(sub, scope), b)
+          val (ps, b) = underN(ps0.map((x, t) => (x, TDef(t))), b0, sub, scope)
+          LetLift(x, t, ps.map((x, t) => (x, t.rt)), bt, v.subst(sub, scope), b)
 
-        case Fix(go0, x0, t1, t2, b0, arg) =>
-          val (go, x, b) =
-            under2(go0, TDef(t1, t2), x0, TDef(t1), b0, sub, scope)
-          Fix(go, x, t1, t2, b, arg.subst(sub, scope))
+        case Fix(go0, x0, t1, t2, ps0, b0, arg) =>
+          val (ps, b) =
+            underN(
+              List((go0, TDef(t1, t2)), (x0, TDef(t1))) ++ ps0.map((x, t) =>
+                (x, TDef(t))
+              ),
+              b0,
+              sub,
+              scope
+            )
+          Fix(
+            ps(0)._1,
+            ps(1)._1,
+            t1,
+            t2,
+            ps.drop(2).map((x, t) => (x, t.rt)),
+            b,
+            arg.subst(sub, scope)
+          )
 
         case Pair(t1, t2, fst, snd) =>
           Pair(t1, t2, fst.subst(sub, scope), snd.subst(sub, scope))

@@ -227,7 +227,7 @@ object Staging:
       ns: List[(IR.Name, IR.TDef)]
   ): IR.Expr = v match
     case VApp0(VPrim0(p), a) => IR.BinOp(quotePrim(p), quoteExpr(a), b)
-    case VPrim0(p) =>
+    /*case VPrim0(p) =>
       val x = fresh()
       val op = quotePrim(p)
       IR.Lam(
@@ -235,7 +235,7 @@ object Staging:
         IR.TInt,
         IR.TDef(op.returnTy),
         IR.BinOp(op, b, IR.Var(x, IR.TDef(IR.TInt)))
-      )
+      )*/
     case f => IR.App(quoteExpr(f), b)
 
   private def quotePrim(p: PrimName): IR.Op = p match
@@ -259,9 +259,10 @@ object Staging:
       case VVar0(k) =>
         val (x, t) = ns(k.toIx.expose)
         IR.Var(x, t)
-      case VGlobal0(x, t) => IR.Global(x.expose, quoteTy(t))
-      case VApp0(f, a)    => quoteApp(f, quoteExpr(a))
-      case VLam0(_, fnty, b) => // impossible()
+      case VGlobal0(x, t)    => IR.Global(x.expose, quoteTy(t))
+      case VApp0(f, a)       => quoteApp(f, quoteExpr(a))
+      case VLam0(_, fnty, b) => impossible()
+      /*
         val x = fresh()
         val td = quoteTy(fnty)
         val at = td.ps.head
@@ -270,7 +271,7 @@ object Staging:
           at,
           IR.TDef(td.ps.tail, td.rt),
           quoteExpr(b(VVar0(l)))(l + 1, (x, IR.TDef(at)) :: ns)
-        )
+        )*/
       case VLet0(_, ty, bty, v, b) =>
         quoteTy(ty) match
           case td @ IR.TDef(Nil, rt) =>
@@ -293,8 +294,33 @@ object Staging:
               case VPrim1(PFun, List(ta, tb)) =>
                 v :: intermediateFunctionTypes(tb)
               case _ => Nil
+            def flatten(t: IR.TDef, v: Val0)(implicit
+                l: Lvl,
+                ns: List[(IR.Name, IR.TDef)]
+            ): (List[(IR.Name, IR.Ty)], Val0) =
+              def go(
+                  l: Lvl,
+                  ps: List[IR.Ty],
+                  v: Val0,
+                  ts: List[(IR.Name, IR.Ty)]
+              )(implicit
+                  ns: List[(IR.Name, IR.TDef)]
+              ): (List[(IR.Name, IR.Ty)], Val0) =
+                (ps, v) match
+                  case (t :: ps, VLam0(x, fnty, b)) =>
+                    val x = fresh()
+                    go(l + 1, ps, b(VVar0(l)), ts ++ List((x, t)))(
+                      (x, IR.TDef(t)) :: ns
+                    )
+                  case (Nil, b) => (ts, b)
+                  case _        => impossible()
+              go(l, t.ps, v, Nil)
             val x = fresh()
-            val (ps, _, body) = quoteExpr(eta(ty, v)).flattenLams
+            val (ps, vbody) = flatten(td, eta(ty, v))
+            val body = quoteExpr(vbody)(
+              l + ps.size,
+              ps.map((x, t) => (x, IR.TDef(t))).reverse ++ ns
+            )
             IR.LetLift(
               x,
               td,
@@ -317,21 +343,49 @@ object Staging:
         def drop1(v: Val1): Val1 = v match
           case VPrim1(PFun, List(_, tb)) => tb
           case _                         => impossible()
+        def flatten(t: IR.TDef, v: Val0)(implicit
+            l: Lvl,
+            ns: List[(IR.Name, IR.TDef)]
+        ): (List[(IR.Name, IR.Ty)], Val0) =
+          def go(
+              l: Lvl,
+              ps: List[IR.Ty],
+              v: Val0,
+              ts: List[(IR.Name, IR.Ty)]
+          )(implicit
+              ns: List[(IR.Name, IR.TDef)]
+          ): (List[(IR.Name, IR.Ty)], Val0) =
+            (ps, v) match
+              case (t :: ps, VLam0(x, fnty, b)) =>
+                val x = fresh()
+                go(l + 1, ps, b(VVar0(l)), ts ++ List((x, t)))(
+                  ns ++ List((x, IR.TDef(t)))
+                )
+              case (Nil, b) => (ts, b)
+              case _        => impossible()
+          go(l, t.ps, v, Nil)
         val go = fresh()
         val td = quoteTy(t)
         val at = td.ps.head
         val atd = IR.TDef(at)
-        val x = fresh()((go, atd) :: ns)
+        val x = fresh()((go, td) :: ns)
         val rt = IR.TDef(td.ps.tail, td.rt)
+        val (ps, vbody) = flatten(rt, eta(drop1(t), b(VVar0(l), VVar0(l + 1))))(
+          l + 2,
+          (x, atd) :: (go, td) :: ns
+        )
+        val body = quoteExpr(vbody)(
+          l + 2 + ps.size,
+          ps.reverse
+            .map((x, t) => (x, IR.TDef(t))) ++ ((x, atd) :: (go, td) :: ns)
+        )
         IR.Fix(
           go,
           x,
           at,
           rt,
-          quoteExpr(eta(drop1(t), b(VVar0(l), VVar0(l + 1))))(
-            l + 2,
-            (x, atd) :: (go, td) :: ns
-          ),
+          ps,
+          body,
           quoteExpr(a)
         )
 
@@ -410,7 +464,7 @@ object Staging:
           crcq
         )
 
-      case VPrim0(p) =>
+      /*case VPrim0(p) =>
         val x = fresh()
         val dty = IR.TDef(IR.TInt)
         val y = fresh()((x, dty) :: ns)
@@ -425,7 +479,7 @@ object Staging:
             IR.TDef(op.returnTy),
             IR.BinOp(op, IR.Var(x, dty), IR.Var(y, dty))
           )
-        )
+        )*/
 
       case _ => impossible()
 
@@ -494,17 +548,16 @@ object Staging:
             )
           )
         )
-      case IR.Fix(g, x, t1, t2, b0, arg) =>
-        val b = go(b0)
+      case IR.Fix(g, x, t1, t2, ps, b0, arg) =>
+        val b1 = go(b0)
         val name = s"$dx$$$next$$fix"
-        val free = b.fvs
-          .filterNot((y, _) => y == g || y == x)
+        val free = b1.fvs
+          .filterNot((y, _) => y == g || y == x || ps.exists((z, _) => z == y))
           .map((x, t) => {
             if t.ps.nonEmpty then ???
             (x, t.rt)
           })
           .distinctBy((y, _) => y)
-        val (ps, _, b1) = b.flattenLams
         val rt = t2
         val nps = free ++ List((x, t1)) ++ ps
         val vv = b1
@@ -524,7 +577,7 @@ object Staging:
       case IR.Var(x, _)            => e
       case IR.Global(x, _)         => e
       case IR.App(f, a)            => IR.App(go(f), go(a))
-      case IR.Lam(x, t1, t2, b)    => IR.Lam(x, t1, t2, go(b))
+      case IR.Lam(x, t1, t2, b)    => impossible()
       case IR.Let(x, t1, t2, v, b) => IR.Let(x, t1, t2, go(v), go(b))
 
       case IR.Pair(t1, t2, fst, snd) => IR.Pair(t1, t2, go(fst), go(snd))

@@ -15,4 +15,6 @@ java Test
 TODO:
 - [ ] IR fix with parameters
 - [ ] Remove lambdas from IR language
+- [ ] Eta expand during elaboration?
+- [ ] Lift lambda over let during elaboration?
 - [ ] Eta expansion after staging?
