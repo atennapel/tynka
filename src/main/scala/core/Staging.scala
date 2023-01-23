@@ -227,16 +227,7 @@ object Staging:
       ns: List[(IR.Name, IR.TDef)]
   ): IR.Expr = v match
     case VApp0(VPrim0(p), a) => IR.BinOp(quotePrim(p), quoteExpr(a), b)
-    /*case VPrim0(p) =>
-      val x = fresh()
-      val op = quotePrim(p)
-      IR.Lam(
-        x,
-        IR.TInt,
-        IR.TDef(op.returnTy),
-        IR.BinOp(op, b, IR.Var(x, IR.TDef(IR.TInt)))
-      )*/
-    case f => IR.App(quoteExpr(f), b)
+    case f                   => IR.App(quoteExpr(f), b)
 
   private def quotePrim(p: PrimName): IR.Op = p match
     case PPrimIntAdd => IR.BAdd
@@ -262,16 +253,6 @@ object Staging:
       case VGlobal0(x, t)    => IR.Global(x.expose, quoteTy(t))
       case VApp0(f, a)       => quoteApp(f, quoteExpr(a))
       case VLam0(_, fnty, b) => impossible()
-      /*
-        val x = fresh()
-        val td = quoteTy(fnty)
-        val at = td.ps.head
-        IR.Lam(
-          x,
-          at,
-          IR.TDef(td.ps.tail, td.rt),
-          quoteExpr(b(VVar0(l)))(l + 1, (x, IR.TDef(at)) :: ns)
-        )*/
       case VLet0(_, ty, bty, v, b) =>
         quoteTy(ty) match
           case td @ IR.TDef(Nil, rt) =>
@@ -464,23 +445,6 @@ object Staging:
           crcq
         )
 
-      /*case VPrim0(p) =>
-        val x = fresh()
-        val dty = IR.TDef(IR.TInt)
-        val y = fresh()((x, dty) :: ns)
-        val op = quotePrim(p)
-        IR.Lam(
-          x,
-          IR.TInt,
-          IR.TDef(IR.TInt, op.returnTy),
-          IR.Lam(
-            y,
-            IR.TInt,
-            IR.TDef(op.returnTy),
-            IR.BinOp(op, IR.Var(x, dty), IR.Var(y, dty))
-          )
-        )*/
-
       case _ => impossible()
 
   private def etaExpand(
@@ -577,7 +541,6 @@ object Staging:
       case IR.Var(x, _)            => e
       case IR.Global(x, _)         => e
       case IR.App(f, a)            => IR.App(go(f), go(a))
-      case IR.Lam(x, t1, t2, b)    => impossible()
       case IR.Let(x, t1, t2, v, b) => IR.Let(x, t1, t2, go(v), go(b))
 
       case IR.Pair(t1, t2, fst, snd) => IR.Pair(t1, t2, go(fst), go(snd))

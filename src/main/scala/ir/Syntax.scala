@@ -98,7 +98,6 @@ object Syntax:
     case Var(x: Name, ty: TDef)
     case Global(x: GName, ty: TDef)
     case App(f: Expr, a: Expr)
-    case Lam(x: Name, t1: Ty, t2: TDef, body: Expr)
 
     case Let(x: Name, ty: Ty, bt: TDef, value: Expr, body: Expr)
     case LetLift(
@@ -163,7 +162,6 @@ object Syntax:
       case Var(x, _)          => s"$x"
       case Global(x, _)       => s"$x"
       case App(f, a)          => s"($f $a)"
-      case Lam(x, t, _, b)    => s"(\\($x : $t). $b)"
       case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
       case LetLift(x, t, ps, _, v, b) =>
         s"(^let $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v; $b)"
@@ -194,24 +192,11 @@ object Syntax:
       case CaseEither(_, _, _, v, x, l, y, r) =>
         s"(caseEither $v ($x. $l) ($y. $r))"
 
-    def flattenLams: (List[(Name, Ty)], Option[Ty], Expr) =
-      def go(t: Expr): (List[(Name, Ty)], Option[Ty], Expr) = t match
-        case Lam(x, t1, t2, b) =>
-          val (xs, rt, b2) = go(b)
-          ((x, t1) :: xs, rt.fold(Some(t2.rt))(t => Some(t)), b2)
-        case b => (Nil, None, b)
-      go(this)
-
     def flattenApps: (Expr, List[Expr]) = this match
       case App(f, a) =>
         val (hd, as) = f.flattenApps
         (hd, as ++ List(a))
       case t => (t, Nil)
-
-    def lams(ps: List[(Name, Ty)], rt: TDef): Expr =
-      ps.foldRight[(Expr, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
-        (Lam(x, t, rt, b), TDef(t :: rt.ps, rt.rt))
-      }._1
 
     def apps(args: List[Expr]) = args.foldLeft(this)(App.apply)
 
@@ -219,7 +204,6 @@ object Syntax:
       case Var(x, t)                   => 1
       case Global(x, _)                => 1
       case App(f, a)                   => 1 + f.size + a.size
-      case Lam(x, _, _, b)             => 1 + b.size
       case Let(x, _, _, v, b)          => 1 + v.size + b.size
       case LetLift(x, _, _, _, v, b)   => 1 + v.size + b.size
       case Fix(go, x, _, _, _, b, arg) => 1 + b.size + arg.size
@@ -250,7 +234,6 @@ object Syntax:
       case Var(x, t)          => List((x, t))
       case Global(x, _)       => Nil
       case App(f, a)          => f.fvs ++ a.fvs
-      case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => x == y)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
       case LetLift(x, t, ps, bt, v, b) => impossible()
       case Fix(go, x, _, _, ps, b, arg) =>
@@ -366,9 +349,6 @@ object Syntax:
         case Var(x, _)    => sub.get(x).getOrElse(this)
         case Global(_, _) => this
         case App(f, a)    => App(f.subst(sub, scope), a.subst(sub, scope))
-        case Lam(x0, t1, t2, b0) =>
-          val (x, b) = under(x0, TDef(t1), b0, sub, scope)
-          Lam(x, t1, t2, b)
         case Let(x0, t, bt, v, b0) =>
           val (x, b) = under(x0, TDef(t), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)

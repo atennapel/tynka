@@ -13,9 +13,9 @@ java Test
 ```
 
 TODO:
-- [ ] Unit type in meta level
 - [x] IR fix with parameters
-- [ ] Remove lambdas from IR language
+- [x] Remove lambdas from IR language
+- [ ] Unit type in meta level
 - [ ] Eta expand during elaboration?
 - [ ] Lift lambda over let during elaboration?
 - [ ] Eta expansion after staging?
