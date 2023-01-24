@@ -37,7 +37,12 @@ object Syntax:
     override def toString: String = ps match
       case Nil => rt.toString
       case _   => s"(${ps.mkString(", ")}) -> $rt"
+    def head: Ty = ps.head
     def tail: TDef = TDef(ps.tail, rt)
+    def ty: Ty =
+      if ps.nonEmpty then impossible()
+      else rt
+    def drop(n: Int): TDef = TDef(ps.drop(n), rt)
   object TDef:
     def apply(rt: Ty): TDef = TDef(Nil, rt)
     def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
@@ -50,7 +55,7 @@ object Syntax:
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: GName, ty: TDef, params: List[(Name, Ty)], value: Expr)
+    case DDef(name: GName, ty: TDef, ps: List[(Name, Ty)], value: Let)
 
     override def toString: String = this match
       case DDef(x, t, Nil, v) => s"def $x : ${t.rt} = $v"
@@ -94,179 +99,56 @@ object Syntax:
       case _    => TInt
   export Op.*
 
-  enum Expr:
+  enum Value:
     case Var(x: Name, ty: TDef)
     case Global(x: GName, ty: TDef)
-    case App(f: Expr, a: Expr)
-
-    case Let(x: Name, ty: Ty, bt: TDef, value: Expr, body: Expr)
-    case LetLift(
-        x: Name,
-        ty: TDef,
-        ps: List[(Name, Ty)],
-        bt: TDef,
-        value: Expr,
-        body: Expr
-    )
-
-    case Fix(
-        go: Name,
-        x: Name,
-        t1: Ty,
-        t2: TDef,
-        ps: List[(Name, Ty)],
-        body: Expr,
-        arg: Expr
-    )
-
-    case Pair(t1: Ty, t2: Ty, fst: Expr, snd: Expr)
-    case Fst(ty: Ty, tm: Expr)
-    case Snd(ty: Ty, tm: Expr)
-
-    case IntLit(value: Int)
-    case BinOp(op: Op, a: Expr, b: Expr)
-
-    case Absurd(ty: TDef)
 
     case Unit
-
     case BoolLit(bool: Boolean)
-    case If(ty: Ty, cond: Expr, ifTrue: Expr, ifFalse: Expr)
+    case IntLit(value: Int)
+
+    case Pair(t1: Ty, t2: Ty, fst: Value, snd: Value)
 
     case LNil(ty: Ty)
-    case LCons(ty: Ty, hd: Expr, tl: Expr)
-    case CaseList(
-        t1: Ty,
-        t2: Ty,
-        l: Expr,
-        n: Expr,
-        hd: Name,
-        tl: Name,
-        c: Expr
-    )
+    case LCons(ty: Ty, hd: Value, tl: Value)
 
-    case ELeft(t1: Ty, t2: Ty, v: Expr)
-    case ERight(t1: Ty, t2: Ty, v: Expr)
-    case CaseEither(
-        t1: Ty,
-        t2: Ty,
-        rt: Ty,
-        v: Expr,
-        x: Name,
-        l: Expr,
-        y: Name,
-        r: Expr
-    )
+    case ELeft(t1: Ty, t2: Ty, v: Value)
+    case ERight(t1: Ty, t2: Ty, v: Value)
 
     override def toString: String = this match
-      case Var(x, _)          => s"$x"
-      case Global(x, _)       => s"$x"
-      case App(f, a)          => s"($f $a)"
-      case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
-      case LetLift(x, t, ps, _, v, b) =>
-        s"(^let $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v; $b)"
-      case Fix(go, x, _, _, ps, b, arg) =>
-        s"(fix ($go $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")}. $b) $arg)"
+      case Var(x, _)    => s"$x"
+      case Global(x, _) => s"$x"
 
       case Pair(_, _, fst, snd) => s"($fst, $snd)"
-      case Fst(_, t)            => s"$t.1"
-      case Snd(_, t)            => s"$t.2"
 
-      case IntLit(n)       => s"$n"
-      case BinOp(op, a, b) => s"($a $op $b)"
-
-      case Absurd(_) => s"absurd"
-
-      case Unit => "()"
-
+      case IntLit(n)      => s"$n"
+      case Unit           => "()"
       case BoolLit(true)  => "True"
       case BoolLit(false) => "False"
-      case If(_, c, a, b) => s"(if $c then $a else $b)"
 
-      case LNil(_)                         => "Nil"
-      case LCons(_, hd, tl)                => s"($hd :: $tl)"
-      case CaseList(_, _, l, n, hd, tl, c) => s"(caseList $l $n ($hd $tl. $c))"
+      case LNil(_)          => "Nil"
+      case LCons(_, hd, tl) => s"($hd :: $tl)"
 
       case ELeft(_, _, v)  => s"(Left $v)"
       case ERight(_, _, v) => s"(Right $v)"
-      case CaseEither(_, _, _, v, x, l, y, r) =>
-        s"(caseEither $v ($x. $l) ($y. $r))"
-
-    def flattenApps: (Expr, List[Expr]) = this match
-      case App(f, a) =>
-        val (hd, as) = f.flattenApps
-        (hd, as ++ List(a))
-      case t => (t, Nil)
-
-    def apps(args: List[Expr]) = args.foldLeft(this)(App.apply)
-
-    def size: Int = this match
-      case Var(x, t)                   => 1
-      case Global(x, _)                => 1
-      case App(f, a)                   => 1 + f.size + a.size
-      case Let(x, _, _, v, b)          => 1 + v.size + b.size
-      case LetLift(x, _, _, _, v, b)   => 1 + v.size + b.size
-      case Fix(go, x, _, _, _, b, arg) => 1 + b.size + arg.size
-
-      case Pair(_, _, fst, snd) => 1 + fst.size + snd.size
-      case Fst(_, t)            => 1 + t.size
-      case Snd(_, t)            => 1 + t.size
-
-      case IntLit(n)       => 1
-      case BinOp(op, a, b) => 1 + a.size + b.size
-
-      case Absurd(_) => 1
-
-      case Unit => 1
-
-      case BoolLit(_)     => 1
-      case If(_, c, a, b) => 1 + c.size + a.size + b.size
-
-      case LNil(_)                         => 1
-      case LCons(_, hd, tl)                => 1 + hd.size + tl.size
-      case CaseList(_, _, l, n, hd, tl, c) => 1 + l.size + n.size + c.size
-
-      case ELeft(_, _, v)                     => 1 + v.size
-      case ERight(_, _, v)                    => 1 + v.size
-      case CaseEither(_, _, _, v, _, l, _, r) => 1 + v.size + l.size + r.size
 
     def fvs: List[(Name, TDef)] = this match
-      case Var(x, t)          => List((x, t))
-      case Global(x, _)       => Nil
-      case App(f, a)          => f.fvs ++ a.fvs
-      case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
-      case LetLift(x, t, ps, bt, v, b) => impossible()
-      case Fix(go, x, _, _, ps, b, arg) =>
-        b.fvs.filterNot((y, _) =>
-          x == y || go == y || ps.exists((z, _) => z == y)
-        ) ++ arg.fvs
+      case Var(x, t)    => List((x, t))
+      case Global(x, _) => Nil
 
       case Pair(_, _, fst, snd) => fst.fvs ++ snd.fvs
-      case Fst(_, t)            => t.fvs
-      case Snd(_, t)            => t.fvs
 
-      case IntLit(n)       => Nil
-      case BinOp(op, a, b) => a.fvs ++ b.fvs
-
-      case Absurd(_) => Nil
-
-      case Unit => Nil
-
-      case BoolLit(_)     => Nil
-      case If(_, c, a, b) => c.fvs ++ a.fvs ++ b.fvs
+      case IntLit(n)  => Nil
+      case Unit       => Nil
+      case BoolLit(_) => Nil
 
       case LNil(_)          => Nil
       case LCons(_, hd, tl) => hd.fvs ++ tl.fvs
-      case CaseList(_, _, l, n, hd, tl, c) =>
-        l.fvs ++ n.fvs ++ c.fvs.filterNot((y, _) => y == hd || y == tl)
 
       case ELeft(_, _, v)  => v.fvs
       case ERight(_, _, v) => v.fvs
-      case CaseEither(_, _, _, v, x, l, y, r) =>
-        v.fvs ++ l.fvs.filterNot((z, _) => z == x) ++ r.fvs
-          .filterNot((z, _) => z == y)
 
-    def subst(sub: Map[Name, Expr]): Expr =
+    def subst(sub: Map[Name, Value]): Value =
       subst(
         sub,
         sub.values
@@ -407,6 +289,106 @@ object Syntax:
           val (x, l) = under(x0, TDef(t1), l0, sub, scope)
           val (y, r) = under(y0, TDef(t2), r0, sub, scope)
           CaseEither(t1, t2, rt, v.subst(sub, scope), x, l, y, r)
-  export Expr.*
-  object Expr:
-    def fromBool(b: Boolean): Expr = BoolLit(b)
+  export Value.*
+
+  enum Comp:
+    case Val(value: Value)
+
+    case App(f: Value, as: List[Value])
+
+    case Lam(ps: List[(Name, Ty)], t2: TDef, body: Let)
+
+    case Fix(
+        t1: Ty,
+        t2: TDef,
+        go: Name,
+        x: Name,
+        ps: List[(Name, Ty)],
+        body: Let,
+        arg: Value
+    )
+
+    case Fst(ty: Ty, tm: Value)
+    case Snd(ty: Ty, tm: Value)
+
+    case BinOp(op: Op, a: Value, b: Value)
+
+    case Absurd(ty: TDef)
+    case If(ty: Ty, cond: Value, ifTrue: Let, ifFalse: Let)
+    case CaseList(
+        t1: Ty,
+        t2: Ty,
+        l: Value,
+        n: Let,
+        hd: Name,
+        tl: Name,
+        c: Let
+    )
+    case CaseEither(
+        t1: Ty,
+        t2: Ty,
+        rt: Ty,
+        v: Value,
+        x: Name,
+        l: Let,
+        y: Name,
+        r: Let
+    )
+
+    override def toString: String = this match
+      case Val(v)     => s"$v"
+      case App(f, as) => s"($f ${as.mkString(" ")})"
+      case Fix(t1, t2, go, x, Nil, b, arg) =>
+        s"(fix (($go : ${TDef(t1, t2)}) ($x : $t1). $b) $arg)"
+      case Fix(t1, t2, go, x, ps, b, arg) =>
+        s"(fix (($go : ${TDef(t1, t2)}) ($x : $t1) ${ps
+            .map((x, t) => s"($x : $t)")
+            .mkString(" ")}. $b) $arg)"
+      case Lam(ps, _, b) =>
+        s"(\\${ps.map((x, t) => s"($x : $t)").mkString(" ")}. $b)"
+
+      case Fst(_, t) => s"$t.1"
+      case Snd(_, t) => s"$t.2"
+
+      case BinOp(op, a, b) => s"($a $op $b)"
+
+      case Absurd(_)                       => s"absurd"
+      case If(_, c, a, b)                  => s"(if $c then $a else $b)"
+      case CaseList(_, _, l, n, hd, tl, c) => s"(caseList $l $n ($hd $tl. $c))"
+      case CaseEither(_, _, _, v, x, l, y, r) =>
+        s"(caseEither $v ($x. $l) ($y. $r))"
+
+    def fvs: List[(Name, TDef)] = this match
+      case Val(v)     => v.fvs
+      case App(f, as) => f.fvs ++ as.map(_.fvs).flatten
+      case Lam(ps, _, b) =>
+        b.fvs.filterNot((y, _) => ps.exists((x, _) => x == y))
+      case Fix(_, _, go, x, ps, b, arg) =>
+        b.fvs.filterNot((y, _) =>
+          x == y || go == y || ps.exists((z, _) => z == y)
+        ) ++ arg.fvs
+
+      case Fst(_, t) => t.fvs
+      case Snd(_, t) => t.fvs
+
+      case BinOp(op, a, b) => a.fvs ++ b.fvs
+
+      case Absurd(_)      => Nil
+      case If(_, c, a, b) => c.fvs ++ a.fvs ++ b.fvs
+      case CaseList(_, _, l, n, hd, tl, c) =>
+        l.fvs ++ n.fvs ++ c.fvs.filterNot((y, _) => y == hd || y == tl)
+      case CaseEither(_, _, _, v, x, l, y, r) =>
+        v.fvs ++ l.fvs.filterNot((z, _) => z == x) ++ r.fvs
+          .filterNot((z, _) => z == y)
+  export Comp.*
+
+  type Lets = List[(Name, Ty, Comp)]
+  final case class Let(ds: Lets, ty: TDef, body: Comp):
+    override def toString: String =
+      val lets: String = ds
+        .map { case (x, t, v) => s"let $x : $t = $v; " }
+        .mkString("")
+      s"($lets$body)"
+
+    def fvs: List[(Name, TDef)] =
+      body.fvs.filterNot((y, _) => ds.exists((x, _, _) => x == y))

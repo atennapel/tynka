@@ -35,15 +35,13 @@ object Staging:
     case VGlobal0(x: Name, ty: Val1)
     case VPrim0(x: PrimName)
     case VApp0(f: Val0, a: Val0)
-    case VLam0(x: Bind, fnty: Val1, body: Val0 => Val0)
+    case VLam0(fnty: Val1, body: Val0 => Val0)
     case VFix0(
-        go: Name,
-        x: Name,
         fnty: Val1,
         body: (Val0, Val0) => Val0,
         arg: Val0
     )
-    case VLet0(x: Name, ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
+    case VLet0(ty: Val1, value: Val0, body: Val0 => Val0)
     case VPair0(fst: Val0, snd: Val0, ty: Val1)
     case VFst0(ty: Val1, t: Val0)
     case VSnd0(ty: Val1, t: Val0)
@@ -122,44 +120,33 @@ object Staging:
     case VPrim1(x, as) => VSplicePrim0(x, as)
     case _             => impossible()
 
-  private def vbool0(b: Boolean): Val0 =
-    if b then VPrim0(PTrue) else VPrim0(PFalse)
-
   private def vapp0(f: Val0, a: Val0): Val0 = f match
-    case VLam0(DontBind, _, b) => b(a)
-    case VLam0(DoBind(x), f, b) =>
-      f match
-        case VPrim1(PFun, List(ta, tb)) => vlet0(x, ta, tb, a, b)
-        case _                          => impossible()
-    case VLet0(x, t1, t2, v, b) =>
-      t2 match
-        case VPrim1(PFun, List(_, tb)) =>
-          vlet0(Name("f"), t2, tb, f, f => vapp0(f, a))
-        case _ => impossible()
+    // case VLam0(f, b) =>
+    //  f match
+    //    case VPrim1(PFun, List(ta, tb)) => vlet0(ta, a, b)
+    //    case _                          => impossible()
     case _ => VApp0(f, a)
 
   private def vproj0(v: Val0, p: ProjType, t: Val1): Val0 = (v, p) match
-    case (VPair0(fst, _, _), Fst) => fst
-    case (VPair0(_, snd, _), Snd) => snd
-    case (p, Fst)                 => VFst0(t, p)
-    case (p, Snd)                 => VSnd0(t, p)
-    case _                        => impossible()
+    // case (VPair0(fst, _, _), Fst) => fst
+    // case (VPair0(_, snd, _), Snd) => snd
+    case (p, Fst) => VFst0(t, p)
+    case (p, Snd) => VSnd0(t, p)
+    case _        => impossible()
 
   // flatten lets
   // let y : t2 ~> t3 = (let x : t1 ~> t2 = v; b1); b2
   // let x : t1 ~> t3 = v; let y = t2 ~> t3 = b1; b2
   // inline simple literals
   private def vlet0(
-      x: Name,
       t1: Val1,
-      t2: Val1,
       v: Val0,
       b: Val0 => Val0
   ): Val0 = v match
-    case VLet0(y, t3, _, v2, b2) =>
-      vlet0(y, t3, t2, v2, w => vlet0(x, t1, t2, b2(w), b))
-    case _ if isInlinable(v) => b(v)
-    case _                   => VLet0(x, t1, t2, v, b)
+    // case VLet0(t3, v2, b2) =>
+    // vlet0(t3, v2, w => vlet0(t1, b2(w), b))
+    // case _ if isInlinable(v) => b(v)
+    case _ => VLet0(t1, v, b)
 
   private def isInlinable(v: Val0): Boolean = v match
     case VVar0(_)                    => true
@@ -176,19 +163,16 @@ object Staging:
     case Var(x)             => vvar0(x)
     case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
     case Prim(x)            => VPrim0(x)
-    case Lam(x, _, fnty, b) => VLam0(x, eval1(fnty), clos0(b))
+    case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
     case App(f, a, _)       => vapp0(eval0(f), eval0(a))
     case Proj(t, p, ty)     => vproj0(eval0(t), p, eval1(ty))
-    case Let(x, t, STy, bt, v, b) =>
-      vlet0(x, eval1(t), eval1(bt), eval0(v), clos0(b))
-    case Pair(fst, snd, ty) => VPair0(eval0(fst), eval0(snd), eval1(ty))
-    case Splice(t)          => vsplice0(eval1(t))
-    case Wk(t)              => eval0(t)(env.tail)
-    case IntLit(n)          => VIntLit0(n)
+    case Let(x, t, STy, _, v, b) => vlet0(eval1(t), eval0(v), clos0(b))
+    case Pair(fst, snd, ty)      => VPair0(eval0(fst), eval0(snd), eval1(ty))
+    case Splice(t)               => vsplice0(eval1(t))
+    case Wk(t)                   => eval0(t)(env.tail)
+    case IntLit(n)               => VIntLit0(n)
     case Fix(go, x, t, b, a) =>
       VFix0(
-        go,
-        x,
         eval1(t),
         (v, w) => eval0(b)(Def0(Def0(env, v), w)),
         eval0(a)
@@ -204,7 +188,8 @@ object Staging:
     case Irrelevant            => impossible()
     case Let(_, _, _, _, _, _) => impossible()
 
-  private def quoteVTy(v: Val1)(implicit l: Lvl): IR.Ty = v match
+  // quoting
+  private def quoteVTy(v: Val1): IR.Ty = v match
     case VPrim1(PVoid, Nil)          => IR.TVoid
     case VPrim1(PUnitType, Nil)      => IR.TUnit
     case VPrim1(PBool, Nil)          => IR.TBool
@@ -214,356 +199,348 @@ object Staging:
     case VPrim1(PEither, List(a, b)) => IR.TEither(quoteVTy(a), quoteVTy(b))
     case _                           => impossible()
 
-  private def quoteTy(v: Val1)(implicit l: Lvl): IR.TDef = v match
+  private def quoteTy(v: Val1): IR.TDef = v match
     case VPrim1(PVal, List(t))    => IR.TDef(quoteVTy(t))
     case VPrim1(PFun, List(a, b)) => IR.TDef(quoteVTy(a), quoteTy(b))
     case _                        => IR.TDef(quoteVTy(v))
 
-  private def fresh()(implicit ns: List[(IR.Name, IR.TDef)]): IR.Name =
-    IR.Name.fresh(ns.map(_._1))
+  private type NS = List[(IR.Name, IR.TDef)]
+  private type Lets = List[(IR.Name, IR.TDef, IR.Comp)]
+  private type Fresh = () => IR.Name
+  private type Emit = () => (IR.GName, IR.Def => Unit)
 
-  private def quoteApp(v: Val0, b: IR.Expr)(implicit
-      l: Lvl,
-      ns: List[(IR.Name, IR.TDef)]
-  ): IR.Expr = v match
-    case VApp0(VPrim0(p), a) => IR.BinOp(quotePrim(p), quoteExpr(a), b)
-    case f                   => IR.App(quoteExpr(f), b)
-
-  private def quotePrim(p: PrimName): IR.Op = p match
-    case PPrimIntAdd => IR.BAdd
-    case PPrimIntMul => IR.BMul
-    case PPrimIntSub => IR.BSub
-    case PPrimIntDiv => IR.BDiv
-    case PPrimIntMod => IR.BMod
-    case PPrimIntEq  => IR.BEq
-    case PPrimIntNeq => IR.BNeq
-    case PPrimIntLt  => IR.BLt
-    case PPrimIntGt  => IR.BGt
-    case PPrimIntLeq => IR.BLeq
-    case PPrimIntGeq => IR.BGeq
-    case _           => impossible()
-
-  private def quoteExpr(
+  private def c2v(
       v: Val0
-  )(implicit l: Lvl, ns: List[(IR.Name, IR.TDef)]): IR.Expr =
+  )(implicit
+      ns: NS,
+      fresh: Fresh,
+      emit: Emit
+  ): (IR.Value, IR.TDef, Lets) =
+    val (c, t, ds) = quoteComp(v)
+    c match
+      case IR.Val(qv) => (qv, t, ds)
+      case _ =>
+        val x = fresh()
+        (IR.Var(x, t), t, ds ++ List((x, t, c)))
+
+  private def quoteVal(
+      v: Val0
+  )(implicit
+      ns: NS,
+      fresh: Fresh,
+      emit: Emit
+  ): (IR.Value, IR.TDef, Lets) =
     v match
       case VVar0(k) =>
-        val (x, t) = ns(k.toIx.expose)
-        IR.Var(x, t)
-      case VGlobal0(x, t)    => IR.Global(x.expose, quoteTy(t))
-      case VApp0(f, a)       => quoteApp(f, quoteExpr(a))
-      case VLam0(_, fnty, b) => impossible()
-      case VLet0(_, ty, bty, v, b) =>
-        quoteTy(ty) match
-          case td @ IR.TDef(Nil, rt) =>
-            val x = fresh()
-            IR.Let(
-              x,
-              rt,
-              quoteTy(bty),
-              quoteExpr(v),
-              quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
-            )
-          case td @ IR.TDef(ps, rt) =>
-            def eta(t: Val1, v: Val0): Val0 =
-              def go(ps: List[Val1], as: List[Val0]): Val0 = ps match
-                case Nil => as.foldLeft(v)((v, a) => vapp0(v, a))
-                case ft :: ps =>
-                  VLam0(DoBind(Name("x")), ft, a => go(ps, as ++ List(a)))
-              go(intermediateFunctionTypes(t), Nil)
-            def intermediateFunctionTypes(v: Val1): List[Val1] = v match
-              case VPrim1(PFun, List(ta, tb)) =>
-                v :: intermediateFunctionTypes(tb)
-              case _ => Nil
-            def flatten(t: IR.TDef, v: Val0)(implicit
-                l: Lvl,
-                ns: List[(IR.Name, IR.TDef)]
-            ): (List[(IR.Name, IR.Ty)], Val0) =
-              def go(
-                  l: Lvl,
-                  ps: List[IR.Ty],
-                  v: Val0,
-                  ts: List[(IR.Name, IR.Ty)]
-              )(implicit
-                  ns: List[(IR.Name, IR.TDef)]
-              ): (List[(IR.Name, IR.Ty)], Val0) =
-                (ps, v) match
-                  case (t :: ps, VLam0(x, fnty, b)) =>
-                    val x = fresh()
-                    go(l + 1, ps, b(VVar0(l)), ts ++ List((x, t)))(
-                      (x, IR.TDef(t)) :: ns
-                    )
-                  case (Nil, b) => (ts, b)
-                  case _        => impossible()
-              go(l, t.ps, v, Nil)
-            val x = fresh()
-            val (ps, vbody) = flatten(td, eta(ty, v))
-            val body = quoteExpr(vbody)(
-              l + ps.size,
-              ps.map((x, t) => (x, IR.TDef(t))).reverse ++ ns
-            )
-            IR.LetLift(
-              x,
-              td,
-              ps,
-              quoteTy(bty),
-              body,
-              quoteExpr(b(VVar0(l)))(l + 1, (x, td) :: ns)
-            )
-      case VFix0(_, _, t, b, a) =>
-        def eta(t: Val1, v: Val0): Val0 =
-          def go(ps: List[Val1], as: List[Val0]): Val0 = ps match
-            case Nil => as.foldLeft(v)((v, a) => vapp0(v, a))
-            case ft :: ps =>
-              VLam0(DoBind(Name("x")), ft, a => go(ps, as ++ List(a)))
-          go(intermediateFunctionTypes(t), Nil)
-        def intermediateFunctionTypes(v: Val1): List[Val1] = v match
-          case VPrim1(PFun, List(ta, tb)) =>
-            v :: intermediateFunctionTypes(tb)
-          case _ => Nil
-        def drop1(v: Val1): Val1 = v match
-          case VPrim1(PFun, List(_, tb)) => tb
-          case _                         => impossible()
-        def flatten(t: IR.TDef, v: Val0)(implicit
-            l: Lvl,
-            ns: List[(IR.Name, IR.TDef)]
-        ): (List[(IR.Name, IR.Ty)], Val0) =
-          def go(
-              l: Lvl,
-              ps: List[IR.Ty],
-              v: Val0,
-              ts: List[(IR.Name, IR.Ty)]
-          )(implicit
-              ns: List[(IR.Name, IR.TDef)]
-          ): (List[(IR.Name, IR.Ty)], Val0) =
-            (ps, v) match
-              case (t :: ps, VLam0(x, fnty, b)) =>
-                val x = fresh()
-                go(l + 1, ps, b(VVar0(l)), ts ++ List((x, t)))(
-                  ns ++ List((x, IR.TDef(t)))
-                )
-              case (Nil, b) => (ts, b)
-              case _        => impossible()
-          go(l, t.ps, v, Nil)
-        val go = fresh()
-        val td = quoteTy(t)
-        val at = td.ps.head
-        val atd = IR.TDef(at)
-        val x = fresh()((go, td) :: ns)
-        val rt = IR.TDef(td.ps.tail, td.rt)
-        val (ps, vbody) = flatten(rt, eta(drop1(t), b(VVar0(l), VVar0(l + 1))))(
-          l + 2,
-          (x, atd) :: (go, td) :: ns
-        )
-        val body = quoteExpr(vbody)(
-          l + 2 + ps.size,
-          ps.reverse
-            .map((x, t) => (x, IR.TDef(t))) ++ ((x, atd) :: (go, td) :: ns)
-        )
-        IR.Fix(
-          go,
-          x,
-          at,
-          rt,
-          ps,
-          body,
-          quoteExpr(a)
-        )
-
+        val (x, t) = ns(k.toIx(mkLvl(ns.size)).expose)
+        (IR.Var(x, t), t, Nil)
+      case VGlobal0(x, ty) =>
+        val t = quoteTy(ty)
+        (IR.Global(x.expose, t), t, Nil)
+      case VIntLit0(n) => (IR.IntLit(n), IR.TDef(IR.TInt), Nil)
       case VPair0(fst, snd, ty) =>
-        quoteVTy(ty) match
-          case IR.TPair(t1, t2) =>
-            IR.Pair(t1, t2, quoteExpr(fst), quoteExpr(snd))
-          case _ => impossible()
-      case VFst0(ty, t) => IR.Fst(quoteVTy(ty), quoteExpr(t))
-      case VSnd0(ty, t) => IR.Snd(quoteVTy(ty), quoteExpr(t))
-
-      case VIntLit0(n) => IR.IntLit(n)
-
-      case VPrim0(PUnit)  => IR.Unit
-      case VPrim0(PTrue)  => IR.BoolLit(true)
-      case VPrim0(PFalse) => IR.BoolLit(false)
-
-      case VSplicePrim0(PAbsurd, List(_, t, _)) => IR.Absurd(quoteTy(t))
-      case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PTrue)), t, _)) =>
-        quoteExpr(vsplice0(t))
-      case VSplicePrim0(PCaseBool, List(_, _, VQuote1(VPrim0(PFalse)), _, f)) =>
-        quoteExpr(vsplice0(f))
-      case VSplicePrim0(PCaseBool, List(ty, b, t, f)) =>
-        val cond = quoteExpr(vsplice0(b))
-        val ifTrue = quoteExpr(vsplice0(t))
-        val ifFalse = quoteExpr(vsplice0(f))
-        IR.If(quoteVTy(ty), cond, ifTrue, ifFalse)
-
-      case VSplicePrim0(PNil, List(t)) => IR.LNil(quoteVTy(t))
+        val (f, tf, ds1) = quoteVal(fst)
+        val (s, ts, ds2) = quoteVal(snd)
+        (IR.Pair(tf.ty, ts.ty, f, s), quoteTy(ty), ds1 ++ ds2)
+      case VPrim0(PUnit)  => (IR.Unit, IR.TDef(IR.TUnit), Nil)
+      case VPrim0(PTrue)  => (IR.BoolLit(true), IR.TDef(IR.TBool), Nil)
+      case VPrim0(PFalse) => (IR.BoolLit(false), IR.TDef(IR.TBool), Nil)
+      case VSplicePrim0(PNil, List(t)) =>
+        val ty = quoteVTy(t)
+        (IR.LNil(ty), IR.TDef(IR.TList(ty)), Nil)
       case VSplicePrim0(PCons, List(t, hd, tl)) =>
-        IR.LCons(quoteVTy(t), quoteExpr(vsplice0(hd)), quoteExpr(vsplice0(tl)))
-      case VSplicePrim0(PCaseList, List(t1, t2, lst, n, c)) =>
-        val hd = fresh()
-        val et = quoteVTy(t1)
-        val etd = IR.TDef(et)
-        val tl = fresh()((hd, etd) :: ns)
-        val cc = vapp1(vapp1(c, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
-        val cr = quoteExpr(vsplice0(cc))(
-          l + 2,
-          (tl, IR.TDef(IR.TList(et))) :: (hd, etd) :: ns
+        val ty = quoteVTy(t)
+        val (qhd, _, ds1) = quoteVal(vsplice0(hd))
+        val (qtl, _, ds2) = quoteVal(vsplice0(tl))
+        (
+          IR.LCons(ty, qhd, qtl),
+          IR.TDef(IR.TList(ty)),
+          ds1 ++ ds2
         )
-        IR.CaseList(
-          et,
-          quoteVTy(t2),
-          quoteExpr(vsplice0(lst)),
-          quoteExpr(vsplice0(n)),
-          hd,
-          tl,
-          cr
-        )
-
       case VSplicePrim0(PLeft, List(t1, t2, v)) =>
-        IR.ELeft(quoteVTy(t1), quoteVTy(t2), quoteExpr(vsplice0(v)))
-      case VSplicePrim0(PRight, List(t1, t2, v)) =>
-        IR.ERight(quoteVTy(t1), quoteVTy(t2), quoteExpr(vsplice0(v)))
-      case VSplicePrim0(PCaseEither, List(t1q, t2q, rtq, v, lc, rc)) =>
-        val t1 = quoteVTy(t1q)
-        val t1d = IR.TDef(t1)
-        val t2 = quoteVTy(t2q)
-        val t2d = IR.TDef(t2)
-        val rt = quoteVTy(rtq)
-
-        val x = fresh()
-        val clc = vapp1(lc, VQuote1(VVar0(l)))
-        val clcq = quoteExpr(vsplice0(clc))(l + 1, (x, t1d) :: ns)
-        val crc = vapp1(rc, VQuote1(VVar0(l)))
-        val crcq = quoteExpr(vsplice0(crc))(l + 1, (x, t2d) :: ns)
-        IR.CaseEither(
-          t1,
-          t2,
-          rt,
-          quoteExpr(vsplice0(v)),
-          x,
-          clcq,
-          x,
-          crcq
+        val ty1 = quoteVTy(t1)
+        val ty2 = quoteVTy(t2)
+        val (qv, _, ds) = quoteVal(vsplice0(v))
+        (
+          IR.ELeft(ty1, ty2, qv),
+          IR.TDef(IR.TEither(ty1, ty2)),
+          ds
         )
+      case VSplicePrim0(PRight, List(t1, t2, v)) =>
+        val ty1 = quoteVTy(t1)
+        val ty2 = quoteVTy(t2)
+        val (qv, _, ds) = quoteVal(vsplice0(v))
+        (
+          IR.ERight(ty1, ty2, qv),
+          IR.TDef(IR.TEither(ty1, ty2)),
+          ds
+        )
+      case _ => c2v(v)
+
+  private def v2c(
+      v: Val0
+  )(implicit
+      ns: NS,
+      fresh: Fresh,
+      emit: Emit
+  ): (IR.Comp, IR.TDef, Lets) =
+    val (qv, t, ds) = quoteVal(v)
+    (IR.Val(qv), t, ds)
+
+  private def quotePrim(p: PrimName): (IR.Op, IR.Ty) = p match
+    case PPrimIntAdd => (IR.BAdd, IR.TInt)
+    case PPrimIntMul => (IR.BMul, IR.TInt)
+    case PPrimIntSub => (IR.BSub, IR.TInt)
+    case PPrimIntDiv => (IR.BDiv, IR.TInt)
+    case PPrimIntMod => (IR.BMod, IR.TInt)
+    case PPrimIntEq  => (IR.BEq, IR.TBool)
+    case PPrimIntNeq => (IR.BNeq, IR.TBool)
+    case PPrimIntLt  => (IR.BLt, IR.TBool)
+    case PPrimIntGt  => (IR.BGt, IR.TBool)
+    case PPrimIntLeq => (IR.BLeq, IR.TBool)
+    case PPrimIntGeq => (IR.BGeq, IR.TBool)
+    case _           => impossible()
+
+  private def quoteApp(v: Val0)(implicit
+      ns: NS,
+      fresh: Fresh,
+      emit: Emit
+  ): (IR.Comp, IR.TDef, Lets) =
+    def go(
+        v: Val0,
+        as: List[IR.Value],
+        ds: Lets
+    ): (IR.Comp, IR.TDef, Lets) =
+      v match
+        case VApp0(f, a) =>
+          val (qa, _, ds1) = quoteVal(a)
+          go(f, qa :: as, ds1 ++ ds)
+        case VPrim0(p) =>
+          if as.size != 2 then impossible()
+          val (op, rt) = quotePrim(p)
+          (IR.BinOp(op, as(0), as(1)), IR.TDef(rt), ds)
+        case v =>
+          val (qv, ft, ds1) = quoteVal(v)
+          (IR.App(qv, as), ft.drop(as.size), ds1 ++ ds)
+    go(v, Nil, Nil)
+
+  private def quoteLam(
+      v: Val0,
+      topTy: IR.TDef
+  )(implicit ns: NS, fresh: Fresh, emit: Emit): (IR.Comp, IR.TDef, Lets) =
+    def go(v: Val0, l: Lvl, ps: List[(IR.Name, IR.Ty)])(implicit
+        ns: NS
+    ): (IR.Comp, IR.TDef, Lets) = v match
+      case VLam0(t, b) =>
+        val td = quoteTy(t)
+        val t1 = td.head
+        val t2 = td.tail
+        val x = fresh()
+        go(b(VVar0(l)), l + 1, ps ++ List((x, t1)))((x, IR.TDef(t1)) :: ns)
+      case b =>
+        val qb = quoteLet(b)
+        (IR.Lam(ps, topTy.drop(ps.size), qb), topTy, Nil)
+    go(v, mkLvl(ns.size), Nil)
+
+  private def appComp(
+      e: IR.Comp,
+      rt: IR.TDef,
+      as: List[IR.Value]
+  )(implicit fresh: Fresh, emit: Emit): (IR.Comp, Lets) =
+    e match
+      case IR.App(f, bs) => (IR.App(f, bs ++ as), Nil)
+      case IR.Val(v)     => (IR.App(v, as), Nil)
+      case _ =>
+        val x = fresh()
+        (IR.App(IR.Var(x, rt), as), List((x, rt, e)))
+
+  private def etaExpandComp(
+      td: IR.TDef,
+      e: IR.Comp
+  )(implicit
+      fresh: Fresh,
+      emit: Emit
+  ): (List[(IR.Name, IR.Ty)], IR.Comp, Lets) =
+    def go(
+        ts: List[IR.Ty],
+        e: IR.Comp,
+        ps: List[(IR.Name, IR.Ty)]
+    ): (List[(IR.Name, IR.Ty)], IR.Comp, Lets) =
+      (ts, e) match
+        case (ts, IR.Fix(_, _, _, _, _, _, _)) =>
+          (ps, e, Nil)
+        case (Nil, e) =>
+          val (ea, ds) =
+            appComp(
+              e,
+              td,
+              ps.map((x, t) => IR.Var(x, IR.TDef(t)))
+            )
+          (ps, ea, ds)
+        case (t :: ts, IR.Lam((x, _) :: Nil, bt, b)) =>
+          val nps = ps ++ List((x, t))
+          val (ps1, c, ds) = etaExpandComp(IR.TDef(ts, td.rt), b.body)
+          (
+            nps ++ ps1,
+            c,
+            b.ds.map((x, t, ps, v) =>
+              (
+                x,
+                t,
+                if ps.isEmpty then v
+                else
+                  IR.Lam(ps, t.drop(ps.size), IR.Let(Nil, t.drop(ps.size), v))
+              )
+            ) ++ ds
+          )
+        case (t :: ts, IR.Lam((x, _) :: lps, bt, b)) =>
+          go(ts, IR.Lam(lps, bt, b), ps ++ List((x, t)))
+        case (t :: ts, e) =>
+          val x = fresh()
+          go(ts, e, ps ++ List((x, t)))
+    if td.ps.isEmpty then (Nil, e, Nil) else go(td.ps, e, Nil)
+
+  private def etaExpand(
+      td: IR.TDef,
+      e: IR.Let
+  )(implicit fresh: Fresh, emit: Emit): (List[(IR.Name, IR.Ty)], IR.Let) =
+    val (ps, c, ds) = etaExpandComp(td, e.body)
+    (ps, IR.Let(e.ds ++ expandLets(ds), e.ty.drop(ps.size), c))
+
+  private def expandLets(ds: Lets)(implicit fresh: Fresh, emit: Emit): IR.Lets =
+    ds.map { (x, t, e) =>
+      if t.ps.isEmpty then (x, t.ty, e)
+      else
+        // eta expand and lift out
+        val (gx, add) = emit()
+
+        add(IR.DDef(gx, ))
+    }
+
+  private def quoteComp(
+      v: Val0
+  )(implicit
+      ns: NS,
+      fresh: Fresh,
+      emit: Emit
+  ): (IR.Comp, IR.TDef, Lets) =
+    v match
+      case VVar0(k)                              => v2c(v)
+      case VGlobal0(x, ty)                       => v2c(v)
+      case VIntLit0(n)                           => v2c(v)
+      case VPair0(fst, snd, ty)                  => v2c(v)
+      case VPrim0(PUnit)                         => v2c(v)
+      case VPrim0(PTrue)                         => v2c(v)
+      case VPrim0(PFalse)                        => v2c(v)
+      case VSplicePrim0(PNil, List(t))           => v2c(v)
+      case VSplicePrim0(PCons, List(t, hd, tl))  => v2c(v)
+      case VSplicePrim0(PLeft, List(t1, t2, _))  => v2c(v)
+      case VSplicePrim0(PRight, List(t1, t2, _)) => v2c(v)
+
+      case VApp0(_, _) => quoteApp(v)
+      case VFst0(ty, t) =>
+        val qty = quoteVTy(ty)
+        val (qt, _, ds) = quoteVal(t)
+        (IR.Fst(qty, qt), IR.TDef(qty), ds)
+      case VSnd0(ty, t) =>
+        val qty = quoteVTy(ty)
+        val (qt, _, ds) = quoteVal(t)
+        (IR.Snd(qty, qt), IR.TDef(qty), ds)
+      case VLam0(t, _) => quoteLam(v, quoteTy(t))
+      case VLet0(t, v, b) =>
+        val qt = quoteTy(t)
+        val (qv, _, ds1) = quoteComp(v)
+        val x = fresh()
+        val (qb, qrt, ds2) =
+          quoteComp(b(VVar0(mkLvl(ns.size))))((x, qt) :: ns, fresh, emit)
+        (qb, qrt, ds1 ++ List((x, qt, qv)) ++ ds2)
+      case VFix0(t, b, a) =>
+        val qt = quoteTy(t)
+        val t1 = qt.head
+        val t2 = qt.tail
+        val go = fresh()
+        val x = fresh()
+        val l = mkLvl(ns.size)
+        val qb = quoteLet(b(VVar0(l), VVar0(l + 1)))(
+          (x, IR.TDef(t1)) :: (go, qt) :: ns,
+          fresh,
+          emit
+        )
+        val (ps, qb2) = etaExpand(t2, qb)
+        val (qa, _, ds) = quoteVal(a)
+        (IR.Fix(t1, t2, go, x, ps, qb2, qa), t2, ds)
+
+      case VSplicePrim0(PCaseBool, List(ty, b, t, f)) =>
+        val qty = quoteVTy(ty)
+        val (qb, _, ds) = quoteVal(vsplice0(b))
+        val qt = quoteLet(vsplice0(t))
+        val qf = quoteLet(vsplice0(f))
+        (IR.If(qty, qb, qt, qf), IR.TDef(qty), ds)
+
+      case VSplicePrim0(PCaseList, List(t1, t2, lst, n, c)) =>
+        val qt1 = quoteVTy(t1)
+        val qt2 = quoteVTy(t2)
+        val (qlst, _, ds) = quoteVal(vsplice0(lst))
+        // nil
+        val qn = quoteLet(vsplice0(n))
+        // cons
+        val l = mkLvl(ns.size)
+        val hd = fresh()
+        val tl = fresh()
+        val cc = vapp1(vapp1(c, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
+        val qc = quoteLet(vsplice0(cc))(
+          (tl, IR.TDef(IR.TList(qt1))) :: (hd, IR.TDef(qt1)) :: ns,
+          fresh,
+          emit
+        )
+        (IR.CaseList(qt1, qt2, qlst, qn, hd, tl, qc), IR.TDef(qt2), ds)
+
+      case VSplicePrim0(PCaseEither, List(t1, t2, rt, v, l, r)) =>
+        val qt1 = quoteVTy(t1)
+        val qt2 = quoteVTy(t2)
+        val qrt = quoteVTy(rt)
+        val (qv, _, ds) = quoteVal(vsplice0(v))
+        val lvl = mkLvl(ns.size)
+        // left
+        val x = fresh()
+        val ll = vapp1(l, VQuote1(VVar0(lvl)))
+        val ql = quoteLet(vsplice0(ll))((x, IR.TDef(qt1)) :: ns, fresh, emit)
+        // right
+        val y = fresh()
+        val rr = vapp1(r, VQuote1(VVar0(lvl)))
+        val qr = quoteLet(vsplice0(rr))((y, IR.TDef(qt2)) :: ns, fresh, emit)
+        (IR.CaseEither(qt1, qt2, qrt, qv, x, ql, y, qr), IR.TDef(qrt), ds)
 
       case _ => impossible()
 
-  private def etaExpand(
-      ty: IR.TDef,
-      body: Tm
-  ): (List[(IR.Name, IR.Ty)], IR.Ty, IR.Expr) =
-    def go(
-        ps: List[IR.Ty],
-        ns: List[(IR.Name, IR.TDef)]
-    ): List[(IR.Name, IR.TDef)] =
-      ps match
-        case Nil => ns
-        case t :: ps =>
-          val x = fresh()(ns)
-          go(ps, ns ++ List((x, IR.TDef(t))))
-    val irns = go(ty.ps, Nil)
-    val irps = irns.map((x, t) => (x, t.rt))
-    val ns = irns.reverse
-    val env = (0 until ns.size).reverse.foldRight(Empty)((i, e) =>
-      Def0(e, VVar0(mkLvl(i)))
-    )
-    val body2 =
-      (0 until ns.size).foldRight(body)((i, b) => App(b, Var(mkIx(i)), Expl))
-    val v = eval0(body2)(env)
-    val qbody = quoteExpr(v)(mkLvl(ns.size), ns)
-    (irps, ty.rt, qbody)
+  private def quoteLet(
+      v: Val0
+  )(implicit ns: NS, fresh: Fresh, emit: Emit): IR.Let =
+    val (b, t, ds) = quoteComp(v)
+    IR.Let(expandLets(ds), t, b)
 
-  private def stageExpr(t: Tm): IR.Expr =
-    quoteExpr(eval0(t)(Empty))(lvl0, Nil)
-  private def stageTDef(t: Ty): IR.TDef = quoteTy(eval1(t)(Empty))(lvl0)
-
+  // staging
+  private def stageTDef(t: Ty): IR.TDef = quoteTy(eval1(t)(Empty))
+  private def stageLet(t: Tm)(implicit fresh: Fresh, emit: Emit): IR.Let =
+    quoteLet(eval0(t)(Empty))(Nil, fresh, emit)
   private def stageDef(d: Def): List[IR.Def] = d match
     case DDef(x, t, STy, v) =>
+      var n = 0
+      implicit val fresh: Fresh = () => {
+        val c = n
+        n += 1
+        IR.Name(c)
+      }
+      var n2 = 0
+      val nds = ArrayBuffer.empty[IR.Def]
+      implicit val emit: Emit = () => {
+        val c = n2
+        n2 + 1
+        (s"$x$$$c", d => { nds += d; () })
+      }
       val ty = stageTDef(t)
-      val (ps, rt, body) = etaExpand(ty, v)
-      val (lifted, nds) = lift(x.expose, body)
-      nds ++ List(IR.DDef(x.expose, ty, ps, lifted))
+      val (ps, b) = etaExpand(ty, stageLet(v))
+      nds.toList ++ List(IR.DDef(x.expose, ty, ps, b))
     case _ => Nil
 
   def stage(ds: Defs): IR.Defs = IR.Defs(ds.toList.flatMap(stageDef))
-
-  // lifting
-  private def lift(dx: IR.GName, e: IR.Expr): (IR.Expr, List[IR.Def]) =
-    val ds = ArrayBuffer.empty[IR.Def]
-    var uniq = 0; def next: Int = { val u = uniq; uniq += 1; u }
-    def go(e: IR.Expr): IR.Expr = e match
-      case IR.LetLift(x, t, ps, bt, v0, b) =>
-        val v = go(v0)
-        val psnames = ps.map(_._1)
-        val name = s"$dx$$$next$$let${x.expose}"
-        val free = v.fvs
-          .filterNot((y, _) => psnames.contains(y))
-          .map((x, t) => {
-            if t.ps.nonEmpty then ???
-            (x, t.rt)
-          })
-          .distinctBy((y, _) => y)
-        ds += IR.DDef(name, IR.TDef(free.map(_._2), t), free ++ ps, v)
-        go(
-          b.subst(
-            Map(
-              x -> IR
-                .Global(name, t)
-                .apps(free.map((x, t) => IR.Var(x, IR.TDef(t))))
-            )
-          )
-        )
-      case IR.Fix(g, x, t1, t2, ps, b0, arg) =>
-        val b1 = go(b0)
-        val name = s"$dx$$$next$$fix"
-        val free = b1.fvs
-          .filterNot((y, _) => y == g || y == x || ps.exists((z, _) => z == y))
-          .map((x, t) => {
-            if t.ps.nonEmpty then ???
-            (x, t.rt)
-          })
-          .distinctBy((y, _) => y)
-        val rt = t2
-        val nps = free ++ List((x, t1)) ++ ps
-        val vv = b1
-        val gl = IR
-          .Global(name, IR.TDef(nps.map(_._2), rt))
-          .apps(free.map((x, t) => IR.Var(x, IR.TDef(t))))
-        val b2 = vv.subst(Map(g -> gl))
-        val newdef = IR.DDef(
-          name,
-          IR.TDef(nps.map((_, t) => t), rt),
-          nps,
-          b2
-        )
-        ds += newdef
-        IR.App(gl, go(arg))
-
-      case IR.Var(x, _)            => e
-      case IR.Global(x, _)         => e
-      case IR.App(f, a)            => IR.App(go(f), go(a))
-      case IR.Let(x, t1, t2, v, b) => IR.Let(x, t1, t2, go(v), go(b))
-
-      case IR.Pair(t1, t2, fst, snd) => IR.Pair(t1, t2, go(fst), go(snd))
-      case IR.Fst(ty, t)             => IR.Fst(ty, go(t))
-      case IR.Snd(ty, t)             => IR.Snd(ty, go(t))
-
-      case IR.IntLit(n)       => e
-      case IR.BinOp(op, a, b) => IR.BinOp(op, go(a), go(b))
-
-      case IR.Absurd(_) => e
-
-      case IR.Unit => e
-
-      case IR.BoolLit(_)     => e
-      case IR.If(t, c, a, b) => IR.If(t, go(c), go(a), go(b))
-
-      case IR.LNil(_)          => e
-      case IR.LCons(t, hd, tl) => IR.LCons(t, go(hd), go(tl))
-      case IR.CaseList(t1, t2, l, n, hd, tl, c) =>
-        IR.CaseList(t1, t2, go(l), go(n), hd, tl, go(c))
-
-      case IR.ELeft(t1, t2, v)  => IR.ELeft(t1, t2, go(v))
-      case IR.ERight(t1, t2, v) => IR.ERight(t1, t2, go(v))
-      case IR.CaseEither(t1, t2, rt, v, x, l, y, r) =>
-        IR.CaseEither(t1, t2, rt, go(v), x, go(l), y, go(r))
-    (go(e), ds.toList)

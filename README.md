@@ -13,8 +13,7 @@ java Test
 ```
 
 TODO:
-- [x] IR fix with parameters
-- [x] Remove lambdas from IR language
+- [ ] Fix order of fresh names in eta expansion and application
 - [ ] Unit type in meta level
 - [ ] Eta expand during elaboration?
 - [ ] Lift lambda over let during elaboration?
