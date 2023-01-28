@@ -73,6 +73,18 @@ object Value:
   def vsigma(x: String, t: Val, f: Val => Val): Val =
     VSigma(name(x), t, CFun(f))
 
+  object SVTy:
+    def apply(): VStage = STy(VVal())
+    def unapply(value: VStage): Boolean = value match
+      case STy(VVal()) => true
+      case _           => false
+
+  object SFTy:
+    def apply(): VStage = STy(VFun())
+    def unapply(value: VStage): Boolean = value match
+      case STy(VFun()) => true
+      case _           => false
+
   object VVar:
     def apply(lvl: Lvl): Val = VRigid(HVar(lvl), SId)
     def unapply(value: Val): Option[Lvl] = value match

@@ -212,11 +212,11 @@ object Evaluation:
       )
 
     case PUnitType => (VVTy(), SMeta)
-    case PUnit     => (VUnitType(), STy(VVal()))
+    case PUnit     => (VUnitType(), SVTy())
 
     case PBool  => (VVTy(), SMeta)
-    case PTrue  => (VBool(), STy(VVal()))
-    case PFalse => (VBool(), STy(VVal()))
+    case PTrue  => (VBool(), SVTy())
+    case PFalse => (VBool(), SVTy())
     // {vf : VF} -> {A : Ty vf} -> ^Bool -> ^A -> ^A -> ^A
     case PCaseBool =>
       (

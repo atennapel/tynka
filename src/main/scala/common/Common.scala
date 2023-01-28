@@ -105,6 +105,10 @@ object Common:
     def map[VF2](f: VF => VF2): Stage[VF2] = this match
       case SMeta   => SMeta
       case STy(vf) => STy(f(vf))
+
+    def isMeta: Boolean = this match
+      case SMeta => true
+      case _     => false
   export Stage.*
 
   // primitives
