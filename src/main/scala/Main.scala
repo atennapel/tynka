@@ -2,6 +2,7 @@ import surface.Parser.defsParser
 import common.Debug.*
 import core.Pretty.pretty
 import elaboration.Elaboration.*
+import core.Staging.stage
 
 import java.io.File
 import scala.io.Source
@@ -27,6 +28,10 @@ object Main:
         s"total time: ${(ptime + etime) / 1000000}ms (${ptime + etime}ns)"
       )
       println(pretty(eds))
+
+      println("\nstaging:")
+      val ids = stage(eds)
+      println(pretty(ids))
     catch
       case err: ElaborateError =>
         println(err.getMessage)

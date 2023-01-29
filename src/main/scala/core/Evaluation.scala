@@ -188,7 +188,7 @@ object Evaluation:
     // Ty Val -> Ty Val -> Ty Val
     case PTPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 
-    // {A : Ty Val} -> {vf : VF} -> {B : Ty vf} -> ((^A -> ^B) -> ^A -> ^B) -> ^A -> ^B
+    // {A : Ty Val} -> {vf : VF} -> {B : Ty vf} -> ((^A -> ^B) -> ^A -> ^B) -> ^(A -> B)
     case PFix =>
       (
         vpiI(
@@ -203,8 +203,8 @@ object Evaluation:
                   "B",
                   VUTy(vf),
                   b =>
-                    val f = vfun(vquote(a), vquote(b))
-                    vfun(vfun(f, f), f)
+                    val f = vfun(VLift(VVal(), a), VLift(vf, b))
+                    vfun(vfun(f, f), VLift(VFun(), VTFun(a, vf, b)))
                 )
             )
         ),
@@ -228,8 +228,8 @@ object Evaluation:
               "A",
               VUTy(vf),
               a =>
-                val qa = vquote(a)
-                vfun(vquote(VBool()), vfun(qa, vfun(qa, qa)))
+                val qa = VLift(vf, a)
+                vfun(VLift(VVal(), VBool()), vfun(qa, vfun(qa, qa)))
             )
         ),
         SMeta

@@ -107,21 +107,25 @@ object Elaboration:
   // coercion
   private def tryAdjustStage(t: Tm, a: VTy, s1: VStage, s2: VStage)(implicit
       ctx: Ctx
-  ): Option[(Tm, VTy)] = (s1, s2) match
-    case (SMeta, SMeta)       => None
-    case (STy(vf1), STy(vf2)) => unify(vf1, vf2); None
-    case (STy(vf), SMeta)     => Some((t.quote, VLift(vf, a)))
-    case (SMeta, STy(vf)) =>
-      debug(s"$t : ${ctx.pretty(a)} : ${ctx.pretty(s1)} to ${ctx.pretty(s2)}")
-      val m = ctx.eval(newMeta(VUTy(vf), SMeta))
-      unify(a, VLift(vf, m))
-      Some((t.splice, m))
+  ): Option[(Tm, VTy)] =
+    debug(
+      s"tryAdjustStage $t : ${ctx.pretty(a)} : ${ctx.pretty(s1)} to ${ctx.pretty(s2)}"
+    )
+    (s1, s2) match
+      case (SMeta, SMeta)       => None
+      case (STy(vf1), STy(vf2)) => unify(vf1, vf2); None
+      case (STy(vf), SMeta)     => Some((t.quote, VLift(vf, a)))
+      case (SMeta, STy(vf)) =>
+        debug(s"$t : ${ctx.pretty(a)} : ${ctx.pretty(s1)} to ${ctx.pretty(s2)}")
+        val m = ctx.eval(newMeta(VUTy(vf), SMeta))
+        unify(a, VLift(vf, m))
+        Some((t.splice, m))
 
   private def adjustStage(t: Tm, a: VTy, s1: VStage, s2: VStage)(implicit
       ctx: Ctx
   ): (Tm, VTy) =
     debug(
-      s"adjustStage $t : ${ctx.pretty(a)} : $s1 to $s2"
+      s"adjustStage $t : ${ctx.pretty(a)} : ${ctx.pretty(s1)} to ${ctx.pretty(s2)}"
     )
     tryAdjustStage(t, a, s1, s2).fold((t, a))(x => x)
 
@@ -129,7 +133,8 @@ object Elaboration:
       ctx: Ctx
   ): Tm =
     debug(
-      s"coeTop ${ctx.pretty(t)} : ${ctx.pretty(a)} : $st1 to ${ctx.pretty(b)} : $st2"
+      s"coeTop ${ctx.pretty(t)} : ${ctx.pretty(a)} : ${ctx.pretty(st1)} to ${ctx
+          .pretty(b)} : ${ctx.pretty(st2)}"
     )
     def pick(x: Bind, y: Bind)(implicit ctx: Ctx): Bind = ctx.fresh((x, y) match
       case (DontBind, DontBind) => DoBind(Name("x"))
@@ -140,9 +145,13 @@ object Elaboration:
     def justAdjust(t: Tm, a: VTy, st1: VStage, b: VTy, st2: VStage)(implicit
         ctx: Ctx
     ): Option[Tm] =
+      debug(
+        s"justAdjust $t : ${ctx.pretty(a)} : ${ctx.pretty(st1)} to ${ctx
+            .pretty(b)} : ${ctx.pretty(st2)}"
+      )
       tryAdjustStage(t, a, st1, st2) match
         case None         => unify(st1, st2); unify(a, b); None
-        case Some((t, a)) => unify(st1, st2); unify(a, b); Some(t)
+        case Some((t, a)) => unify(a, b); Some(t)
     def go(
         t: Tm,
         a: VTy,
@@ -166,7 +175,7 @@ object Elaboration:
               val v = VVar(ctx.lvl)
               val body =
                 go(App(Wk(t), Var(ix0), i), r1(v), SMeta, r2(v), SMeta)(ctx2)
-              body.map(Lam(x, i, ctx.quote(b), _))
+              body.map(Lam(pick(x, x2), i, ctx.quote(b), _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
@@ -233,6 +242,7 @@ object Elaboration:
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
           val ctx2 = ctx.bind(x, p2, SMeta)
+          val y = DoBind(Name("x"))
           go(Var(ix0), p2, SMeta, p1, SVTy())(ctx2) match
             case None =>
               val body =
@@ -245,7 +255,7 @@ object Elaboration:
                 )(
                   ctx2
                 )
-              body.map(Lam(x, i, ctx.quote(b), _))
+              body.map(Lam(pick(y, x), i, ctx.quote(b), _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
@@ -254,12 +264,14 @@ object Elaboration:
                 r2(VVar(ctx.lvl)),
                 SMeta
               )(ctx2) match
-                case None => Some(Lam(x, i, ctx.quote(b), App(Wk(t), coev0, i)))
-                case Some(body) => Some(Lam(x, i, ctx.quote(b), body))
+                case None =>
+                  Some(Lam(pick(y, x), i, ctx.quote(b), App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(pick(y, x), i, ctx.quote(b), body))
         case (VPi(x, i, p1, r1), VTFun(p2, vf, r2)) =>
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
           val ctx2 = ctx.bind(x, p2, SVTy())
+          val y = DoBind(Name("x"))
           go(Var(ix0), p2, SVTy(), p1, SMeta)(ctx2) match
             case None =>
               val body =
@@ -272,7 +284,7 @@ object Elaboration:
                 )(
                   ctx2
                 )
-              body.map(Lam(x, i, ctx.quote(b), _))
+              body.map(Lam(pick(y, x), i, ctx.quote(b), _))
             case Some(coev0) =>
               go(
                 App(Wk(t), coev0, i),
@@ -281,8 +293,9 @@ object Elaboration:
                 r2,
                 STy(vf)
               )(ctx2) match
-                case None => Some(Lam(x, i, ctx.quote(b), App(Wk(t), coev0, i)))
-                case Some(body) => Some(Lam(x, i, ctx.quote(b), body))
+                case None =>
+                  Some(Lam(pick(y, x), i, ctx.quote(b), App(Wk(t), coev0, i)))
+                case Some(body) => Some(Lam(pick(y, x), i, ctx.quote(b), body))
 
         case (VTPair(p1, r1), VSigma(_, p2, r2)) =>
           val fst = go(Proj(t, Fst, ctx.quote(p1)), p1, SVTy(), p2, SMeta)
@@ -539,7 +552,7 @@ object Elaboration:
       case _ =>
         val (t, a, si) = insert(infer(tm))
         debug(
-          s"inferred $t : ${ctx.pretty(a)} : $si to $s"
+          s"inferred $t : ${ctx.pretty(a)} : ${ctx.pretty(si)} to ${ctx.pretty(s)}"
         )
         adjustStage(t, a, si, s)
 
