@@ -31,7 +31,7 @@ object Main:
 
       println("\nstaging:")
       val ids = stage(eds)
-      println(pretty(ids))
+      println(ids.mkString("\n"))
     catch
       case err: ElaborateError =>
         println(err.getMessage)
