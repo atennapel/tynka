@@ -182,6 +182,14 @@ object Staging:
         (R.Lam(x, t, rt, b), IR.TDef(t :: rt.ps, rt.rt))
       }._1
 
+    def flattenLams: (List[(IR.LName, IR.Ty)], Option[IR.Ty], R) =
+      def go(t: R): (List[(IR.LName, IR.Ty)], Option[IR.Ty], R) = t match
+        case Lam(x, t1, t2, b) =>
+          val (xs, rt, b2) = go(b)
+          ((x, t1) :: xs, rt.fold(Some(t2.rt))(t => Some(t)), b2)
+        case b => (Nil, None, b)
+      go(this)
+
     def apps(args: List[R]) = args.foldLeft(this)(App.apply)
 
     def flattenApps: (R, List[R]) = this match
@@ -489,6 +497,115 @@ object Staging:
       case tm => tm
     go(tm)
 
+  // to IR
+  private type IRNS = Map[IR.LName, IR.LName]
+  private type Lets = List[(IR.LName, IR.Ty, IR.Comp)]
+
+  private def c2v(
+      tm: R
+  )(implicit ns: IRNS, fresh: Fresh): (IR.Value, IR.Ty, Lets) =
+    val (c, t, ds) = toIRComp(tm)
+    c match
+      case IR.Val(qv) => (qv, t, ds)
+      case _ =>
+        val x = fresh()
+        (IR.Var(x, t), t, ds ++ List((x, t, c)))
+
+  private def toIRValue(
+      tm: R
+  )(implicit ns: IRNS, fresh: Fresh): (IR.Value, IR.Ty, Lets) =
+    tm match
+      case R.Var(x, t) =>
+        val ty = t.ty
+        val y = ns(x)
+        (IR.Var(y, ty), ty, Nil)
+      case R.Global(x, t) =>
+        val ty = t.ty
+        (IR.Global(x, ty), ty, Nil)
+
+      case R.Unit       => (IR.Unit, IR.TUnit, Nil)
+      case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
+      case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
+
+      case R.Pair(t1, t2, f, s) =>
+        val (qf, tf, ds1) = toIRValue(f)
+        val (qs, ts, ds2) = toIRValue(s)
+        (IR.Pair(tf, ts, qf, qs), IR.TPair(tf, ts), ds1 ++ ds2)
+
+      case _ => c2v(tm)
+
+  private def v2c(
+      tm: R
+  )(implicit ns: IRNS, fresh: Fresh): (IR.Comp, IR.Ty, Lets) =
+    val (v, t, ds) = toIRValue(tm)
+    (IR.Val(v), t, ds)
+
+  private def toIRComp(
+      tm: R
+  )(implicit ns: IRNS, fresh: Fresh): (IR.Comp, IR.Ty, Lets) = tm match
+    case R.Var(_, _)        => v2c(tm)
+    case R.Global(_, _)     => v2c(tm)
+    case R.Unit             => v2c(tm)
+    case R.IntLit(_)        => v2c(tm)
+    case R.BoolLit(_)       => v2c(tm)
+    case R.Pair(_, _, _, _) => v2c(tm)
+
+    case R.App(_, _) =>
+      val (f, as) = tm.flattenApps
+      f match
+        case R.Global(x, t) =>
+          val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
+            case ((as, ds), a) =>
+              val (qa, ta, nds) = toIRValue(a)
+              (as ++ List(qa), ds ++ nds)
+          }
+          (IR.GlobalApp(x, t, qas), t.rt, ds)
+        case _ => impossible()
+    case R.PrimApp(p, as) =>
+      val rt = p match
+        case PIntLeq => IR.TBool
+        case PIntSub => IR.TInt
+        case PIntMul => IR.TInt
+        case _       => impossible()
+      val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
+        case ((as, ds), a) =>
+          val (qa, ta, nds) = toIRValue(a)
+          (as ++ List(qa), ds ++ nds)
+      }
+      (IR.PrimApp(p, qas), rt, ds)
+
+    case R.Let(x, t, bt, v, b) =>
+      val (qv, tv, ds1) = toIRComp(v)
+      val y = fresh()
+      val (qb, tb, ds2) = toIRComp(b)(ns + (x -> y), fresh)
+      (qb, tb, ds1 ++ List((y, tv, qv)) ++ ds2)
+
+    case R.Fst(ty, t) =>
+      val (qt, tt, ds) = toIRValue(t)
+      (IR.Fst(ty, qt), ty, ds)
+    case R.Snd(ty, t) =>
+      val (qt, tt, ds) = toIRValue(t)
+      (IR.Snd(ty, qt), ty, ds)
+
+    case R.If(ty, c, t, f) =>
+      val rty = ty.ty
+      val (qc, tc, ds) = toIRValue(c)
+      val qt = toIRLet(t)
+      val qf = toIRLet(f)
+      (IR.If(rty, qc, qt, qf), rty, ds)
+
+    case _ => impossible()
+
+  private def toIRLet(tm: R)(implicit ns: IRNS, fresh: Fresh): IR.Let =
+    val (b, t, ds) = toIRComp(tm)
+    IR.Let(ds, t, b)
+
+  private def toIRDef(d: RD)(implicit fresh: Fresh): IR.Def = d match
+    case RD.Def(x, gen, t, v0) =>
+      val (ps, _, v) = v0.flattenLams
+      implicit val irns: IRNS = ps.map((x, _) => (x, fresh())).toMap
+      IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIRLet(v))
+
   // staging
   private def stageFTy(t: Ty): IR.TDef = quoteFTy(eval1(t)(Empty))
 
@@ -503,14 +620,17 @@ object Staging:
         .lams(ps, IR.TDef(ty.rt))
     )
 
-  private def stageDef(d: Def): List[RD] = d match
+  private def newFresh(): Fresh =
+    var n = 0
+    () => {
+      val c = n
+      n += 1
+      c
+    }
+
+  private def stageDef(d: Def): List[IR.Def] = d match
     case DDef(x, t, st @ STy(_), v) =>
-      var n = 0
-      implicit val fresh: Fresh = () => {
-        val c = n
-        n += 1
-        c
-      }
+      implicit val fresh: Fresh = newFresh()
       var n2 = 0
       val nds = ArrayBuffer.empty[RD]
       implicit val emit: Emit = () => {
@@ -520,7 +640,8 @@ object Staging:
       }
       val ty = stageFTy(t)
       val value = stageRep(ty, v)
-      nds.toList ++ List(RD.Def(x.expose, false, ty, value))
+      val rd = RD.Def(x.expose, false, ty, value)
+      (nds.toList ++ List(rd)).map(d => toIRDef(d)(newFresh()))
     case _ => Nil
 
-  def stage(ds: Defs): List[RD] = ds.toList.flatMap(stageDef)
+  def stage(ds: Defs): List[IR.Def] = ds.toList.flatMap(stageDef)
