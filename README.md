@@ -7,14 +7,9 @@ Try it out:
 ```
 sbt "run examples/Test"
 javac jvmstd/Pair.java
-javac jvmstd/List.java
-javac jvmstd/Either.java
 java Test
 ```
 
 TODO:
-- [ ] Fix order of fresh names in eta expansion and application
-- [ ] Unit type in meta level
-- [ ] Eta expand during elaboration?
-- [ ] Lift lambda over let during elaboration?
-- [ ] Eta expansion after staging?
+- [ ] JVM bytecode generation
+- [ ] Datatypes
