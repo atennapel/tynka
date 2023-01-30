@@ -142,6 +142,7 @@ object Staging:
     case BoolLit(value: Boolean)
 
     case App(fn: R, arg: R)
+    case PrimApp(name: PrimName, args: List[R])
     case Lam(name: IR.LName, t1: IR.Ty, t2: IR.TDef, body: R)
     case Let(name: IR.LName, ty: IR.TDef, bty: IR.TDef, value: R, body: R)
 
@@ -162,6 +163,8 @@ object Staging:
       case BoolLit(v) => if v then "True" else "False"
 
       case App(f, a)          => s"($f $a)"
+      case PrimApp(p, Nil)    => s"$p"
+      case PrimApp(p, as)     => s"($p ${as.mkString(" ")})"
       case Lam(x, t, _, b)    => s"(\\($x : $t). $b)"
       case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
 
@@ -196,6 +199,7 @@ object Staging:
       case BoolLit(_) => Nil
 
       case App(f, a)          => f.fvs ++ a.fvs
+      case PrimApp(p, as)     => as.map(_.fvs).fold(Nil)(_ ++ _)
       case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => y == x)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
@@ -246,7 +250,8 @@ object Staging:
         case IntLit(n)  => this
         case BoolLit(_) => this
 
-        case App(f, a) => App(f.subst(sub, scope), a.subst(sub, scope))
+        case App(f, a)      => App(f.subst(sub, scope), a.subst(sub, scope))
+        case PrimApp(p, as) => PrimApp(p, as.map(_.subst(sub, scope)))
         case Lam(x0, t1, t2, b0) =>
           val (List((x, _)), b) =
             underN(List((x0, IR.TDef(t1))), b0, sub, scope)
@@ -308,7 +313,18 @@ object Staging:
       case VPrim0(PFalse) => R.BoolLit(false)
       case VIntLit0(v)    => R.IntLit(v)
 
-      case VApp0(f, a) => R.App(quoteRep(f), quoteRep(a))
+      case VApp0(f, a) =>
+        def flatten(v: Val0): (Val0, List[Val0]) = v match
+          case VApp0(f, a) =>
+            val (hd, as) = flatten(f)
+            (hd, as ++ List(a))
+          case v => (v, Nil)
+        val (hd, as) = flatten(v)
+        hd match
+          case VPrim0(p) => R.PrimApp(p, as.map(quoteRep))
+          case _ =>
+            val qhd = quoteRep(hd)
+            as.map(quoteRep).foldLeft(qhd)(R.App.apply)
       case VLam0(ft, b) =>
         val x = fresh()
         val qt = quoteFTy(ft)
@@ -385,6 +401,17 @@ object Staging:
           // (\(x : t). b) a ~> let x : t = a; b
           case R.Lam(x, t1, t2, b) => go(R.Let(x, IR.TDef(t1), t2, a, b))
           case f                   => R.App(f, go(a))
+
+      case R.PrimApp(PIntLeq, List(R.IntLit(a), R.IntLit(b))) =>
+        R.BoolLit(a <= b)
+      case R.PrimApp(PIntSub, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
+      case R.PrimApp(PIntSub, List(a, R.IntLit(0)))           => go(a)
+      case R.PrimApp(PIntMul, List(_, R.IntLit(0)))           => R.IntLit(0)
+      case R.PrimApp(PIntMul, List(R.IntLit(0), _))           => R.IntLit(0)
+      case R.PrimApp(PIntMul, List(a, R.IntLit(1)))           => go(a)
+      case R.PrimApp(PIntMul, List(R.IntLit(1), a))           => go(a)
+      case R.PrimApp(PIntMul, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
+      case R.PrimApp(p, as) => R.PrimApp(p, as.map(go))
 
       case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
 

@@ -131,6 +131,9 @@ object Common:
     case PCaseBool
 
     case PInt
+    case PIntLeq
+    case PIntSub
+    case PIntMul
 
     override def toString: String = this match
       case PVF  => "VF"
@@ -150,7 +153,10 @@ object Common:
       case PFalse    => "False"
       case PCaseBool => "caseBool"
 
-      case PInt => "Int"
+      case PInt    => "Int"
+      case PIntLeq => "intLeq"
+      case PIntSub => "intSub"
+      case PIntMul => "intMul"
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
@@ -171,6 +177,9 @@ object Common:
       case "False"    => Some(PFalse)
       case "caseBool" => Some(PCaseBool)
 
-      case "Int" => Some(PInt)
+      case "Int"    => Some(PInt)
+      case "intLeq" => Some(PIntLeq)
+      case "intSub" => Some(PIntSub)
+      case "intMul" => Some(PIntMul)
 
       case _ => None

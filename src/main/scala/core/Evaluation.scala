@@ -236,3 +236,9 @@ object Evaluation:
       )
 
     case PInt => (VVTy(), SMeta)
+    case PIntLeq =>
+      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VBool())), SFTy())
+    case PIntSub =>
+      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
+    case PIntMul =>
+      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
