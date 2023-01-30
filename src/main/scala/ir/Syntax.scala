@@ -52,7 +52,7 @@ object Syntax:
     override def toString: String = this match
       case DDef(x, _, t, Nil, v) => s"def $x : $t = $v"
       case DDef(x, _, t, ps, v) =>
-        s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : $t = $v"
+        s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
   export Def.*
 
   final case class Let(ps: List[(LName, Ty, Comp)], ty: Ty, body: Comp):

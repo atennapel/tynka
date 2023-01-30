@@ -410,16 +410,18 @@ object Staging:
           case R.Lam(x, t1, t2, b) => go(R.Let(x, IR.TDef(t1), t2, a, b))
           case f                   => R.App(f, go(a))
 
-      case R.PrimApp(PIntLeq, List(R.IntLit(a), R.IntLit(b))) =>
-        R.BoolLit(a <= b)
-      case R.PrimApp(PIntSub, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
-      case R.PrimApp(PIntSub, List(a, R.IntLit(0)))           => go(a)
-      case R.PrimApp(PIntMul, List(_, R.IntLit(0)))           => R.IntLit(0)
-      case R.PrimApp(PIntMul, List(R.IntLit(0), _))           => R.IntLit(0)
-      case R.PrimApp(PIntMul, List(a, R.IntLit(1)))           => go(a)
-      case R.PrimApp(PIntMul, List(R.IntLit(1), a))           => go(a)
-      case R.PrimApp(PIntMul, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
-      case R.PrimApp(p, as) => R.PrimApp(p, as.map(go))
+      case R.PrimApp(p, as) =>
+        (p, as.map(go)) match
+          case (PIntLeq, List(R.IntLit(a), R.IntLit(b))) =>
+            R.BoolLit(a <= b)
+          case (PIntSub, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
+          case (PIntSub, List(a, R.IntLit(0)))           => go(a)
+          case (PIntMul, List(_, R.IntLit(0)))           => R.IntLit(0)
+          case (PIntMul, List(R.IntLit(0), _))           => R.IntLit(0)
+          case (PIntMul, List(a, R.IntLit(1)))           => go(a)
+          case (PIntMul, List(R.IntLit(1), a))           => go(a)
+          case (PIntMul, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
+          case (p, as)                                   => R.PrimApp(p, as)
 
       case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
 
