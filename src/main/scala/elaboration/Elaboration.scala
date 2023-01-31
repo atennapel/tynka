@@ -445,6 +445,13 @@ object Elaboration:
         val eb = checkVTy(b)
         tpair(ea, eb)
 
+      case (S.Con(i, as), VTCon(_, b)) =>
+        val cs = b(ty)
+        if i < 0 || i >= cs.size || as.size != cs(i).size then
+          error(s"invalid constructor $tm : ${ctx.pretty(ty)}")
+        val eas = as.zip(cs(i)).map((a, vt) => check(a, vt, SVTy()))
+        Con(ctx.quote(ty), i, eas)
+
       case (S.Quote(t), VLift(vf, a)) => check(t, a, STy(vf)).quote
       case (t, VLift(vf, a))          => check(t, a, STy(vf)).quote
 
@@ -753,6 +760,12 @@ object Elaboration:
                   case S.Fst => (Proj(et2, Fst, ctx.quote(pty)), pty, SVTy())
                   case S.Snd => (Proj(et2, Snd, ctx.quote(rty)), rty, SVTy())
                   case _     => error(s"named projection in Ty: $tm")
+
+      case S.TCon(x, cs) =>
+        val ctx2 = ctx.bind(x, VVTy(), SMeta)
+        val ecs = cs.map(as => as.map(t => check(t, VVTy(), SMeta)(ctx2)))
+        (TCon(x, ecs), VVTy(), SMeta)
+      case S.Con(_, _) => error(s"cannot infer: $tm")
 
       case S.Lift(a) =>
         val vf = newVF()

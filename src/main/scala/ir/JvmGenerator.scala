@@ -31,7 +31,10 @@ object JvmGenerator:
     a.substring(0, i)
   }
 
-  private final case class Ctx(moduleGName: String, moduleType: Type)
+  private final case class Ctx(moduleName: String, moduleType: Type)
+  private val tcons: mutable.Map[GName, Type] = mutable.Map.empty
+  private val cons: mutable.Map[GName, mutable.Map[Int, List[Ty]]] =
+    mutable.Map.empty
 
   def generate(moduleGName: String, ds: Defs): Unit =
     implicit val cw: ClassWriter = new ClassWriter(
@@ -124,6 +127,8 @@ object JvmGenerator:
     case TBool       => Type.BOOLEAN_TYPE
     case TInt        => Type.INT_TYPE
     case TPair(_, _) => PAIR_TYPE
+    case TCon(x) =>
+      tcons.getOrElseUpdate(x, Type.getType(s"L${ctx.moduleName}$$$x;"))
 
   private def constantValue(e: Let): Option[Any] = e match
     case Let(Nil, Val(v)) => constantValue(v)
@@ -192,6 +197,150 @@ object JvmGenerator:
       gen(v)
       mg.returnValue()
       mg.endMethod()
+    case DData(x, cs) => genData(x, cs)
+
+  private def genData(dx: GName, cs: List[List[Ty]])(implicit
+      cw: ClassWriter,
+      ctx: Ctx
+  ): Unit =
+    val className = s"${ctx.moduleName}$$$dx"
+    val datacw = new ClassWriter(
+      ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES
+    )
+    datacw.visit(
+      V1_8,
+      ACC_PUBLIC + ACC_ABSTRACT,
+      className,
+      null,
+      "java/lang/Object",
+      null
+    )
+    // private empty constructor
+    val con = datacw.visitMethod(ACC_PROTECTED, "<init>", "()V", null, null)
+    con.visitVarInsn(ALOAD, 0)
+    con.visitMethodInsn(
+      INVOKESPECIAL,
+      "java/lang/Object",
+      "<init>",
+      "()V",
+      false
+    )
+    con.visitInsn(RETURN)
+    con.visitMaxs(1, 1)
+    con.visitEnd()
+    // datatype constructors
+    cs.zipWithIndex.foreach((as, i) => {
+      if cons.get(dx).isEmpty then cons(dx) = mutable.Map.empty
+      cons(dx) += i -> as
+      genCon(className, i, as)
+      datacw.visitInnerClass(
+        s"$className$$$i",
+        className,
+        s"$$$i",
+        ACC_PUBLIC + ACC_STATIC + ACC_FINAL
+      )
+      if as.isEmpty then
+        datacw.visitField(
+          ACC_PUBLIC + ACC_FINAL + ACC_STATIC,
+          s"$$$i$$",
+          s"L$className$$$i;",
+          null,
+          null
+        )
+    })
+    // 0-ary constructor initialization
+    val m = new Method("<clinit>", Type.VOID_TYPE, Nil.toArray)
+    implicit val stmg: GeneratorAdapter =
+      new GeneratorAdapter(ACC_STATIC, m, null, null, datacw)
+    cs.zipWithIndex.foreach((as, i) => {
+      if as.isEmpty then
+        val conType = Type.getType(s"L$className$$$i;")
+        stmg.newInstance(conType)
+        stmg.dup()
+        stmg.invokeConstructor(
+          conType,
+          new Method(
+            "<init>",
+            Type.VOID_TYPE,
+            Array.empty
+          )
+        )
+        stmg.putStatic(Type.getType(s"L$className;"), s"$$$i$$", conType)
+    })
+    stmg.visitInsn(RETURN)
+    stmg.endMethod()
+    // output
+    datacw.visitEnd()
+    cw.visitInnerClass(
+      className,
+      ctx.moduleName,
+      dx,
+      ACC_PUBLIC + ACC_ABSTRACT + ACC_STATIC
+    )
+    val bos = new BufferedOutputStream(
+      new FileOutputStream(s"$className.class")
+    )
+    bos.write(datacw.toByteArray())
+    bos.close()
+
+  private def genCon(superName: String, x: Int, as: List[Ty])(implicit
+      ctx: Ctx
+  ): Unit =
+    val className = s"$superName$$$x"
+    val cw = new ClassWriter(
+      ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES
+    )
+    cw.visit(
+      V1_8,
+      ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
+      className,
+      null,
+      superName,
+      null
+    )
+    // fields
+    as.zipWithIndex.foreach((ty, i) => {
+      cw.visitField(
+        ACC_PUBLIC + ACC_FINAL,
+        s"a$i",
+        gen(ty).getDescriptor,
+        null,
+        null
+      )
+    })
+    // class constructor
+    val m = new Method("<init>", Type.VOID_TYPE, as.map(gen).toArray)
+    val mg: GeneratorAdapter =
+      new GeneratorAdapter(
+        if as.isEmpty then ACC_PROTECTED else ACC_PUBLIC,
+        m,
+        null,
+        null,
+        cw
+      )
+    mg.visitVarInsn(ALOAD, 0)
+    mg.visitMethodInsn(
+      INVOKESPECIAL,
+      superName,
+      "<init>",
+      "()V",
+      false
+    )
+    as.zipWithIndex.foreach((ty, i) => {
+      mg.loadThis()
+      mg.loadArg(i)
+      mg.putField(Type.getType(s"L$className;"), s"a$i", gen(ty))
+    })
+    mg.visitInsn(RETURN)
+    mg.visitMaxs(1, 1)
+    mg.visitEnd()
+    // done
+    cw.visitEnd()
+    val bos = new BufferedOutputStream(
+      new FileOutputStream(s"$className.class")
+    )
+    bos.write(cw.toByteArray())
+    bos.close()
 
   private def gen(
       t: Let
@@ -292,6 +441,27 @@ object JvmGenerator:
           "<init>",
           Type.VOID_TYPE,
           List(OBJECT_TYPE, OBJECT_TYPE).toArray
+        )
+      )
+
+    case Con(ty, i, Nil) =>
+      val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
+      mg.getStatic(
+        tcons(ty),
+        s"$$$i$$",
+        conType
+      )
+    case Con(ty, i, as) =>
+      val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
+      mg.newInstance(conType)
+      mg.dup()
+      as.foreach(gen)
+      mg.invokeConstructor(
+        conType,
+        new Method(
+          "<init>",
+          Type.VOID_TYPE,
+          cons(ty)(i).map(gen).toArray
         )
       )
 

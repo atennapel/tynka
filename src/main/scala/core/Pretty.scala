@@ -98,6 +98,16 @@ object Pretty:
 
     case IntLit(n) => s"$n"
 
+    case TCon(x0, Nil) =>
+      val x = x0.fresh
+      s"tcon $x."
+    case TCon(x0, cs) =>
+      val x = x0.fresh
+      s"tcon $x. ${cs.map(as => s"(${as.map(a => prettyParen(a)(x.toName :: ns)).mkString(" ")})").mkString(" ")}"
+    case Con(ty, i, Nil) => s"con ${prettyParen(ty)} #$i"
+    case Con(ty, i, as) =>
+      s"con ${prettyParen(ty)} #$i ${as.map(a => prettyParen(a)).mkString(" ")}"
+
     case Lift(_, t) => s"^${prettyParen(t)}"
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"

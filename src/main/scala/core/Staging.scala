@@ -28,6 +28,8 @@ object Staging:
     case VQuote1(v: Val0)
     case VType1
     case VPair1(fst: Val1, snd: Val1)
+    case VTCon1(cs: Val1 => List[List[Val1]])
+    case VTConName1(x: IR.GName)
   import Val1.*
 
   private enum Val0:
@@ -42,6 +44,7 @@ object Staging:
     case VFst0(ty: Val1, t: Val0)
     case VSnd0(ty: Val1, t: Val0)
     case VIntLit0(n: Int)
+    case VCon0(ty: Val1, ix: Int, as: List[Val0])
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -78,8 +81,10 @@ object Staging:
     case Proj(t, p, _)         => vproj1(eval1(t), p)
     case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
     case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
-    case Quote(t)              => VQuote1(eval0(t))
-    case Wk(t)                 => eval1(t)(env.tail)
+    case TCon(_, cs) =>
+      VTCon1(r => cs.map(as => as.map(a => eval1(a)(Def1(env, r)))))
+    case Quote(t) => VQuote1(eval0(t))
+    case Wk(t)    => eval1(t)(env.tail)
 
     case U(_)           => VType1
     case Pi(_, _, _, _) => VType1
@@ -123,6 +128,7 @@ object Staging:
     case Splice(t)          => vsplice0(eval1(t))
     case Wk(t)              => eval0(t)(env.tail)
     case IntLit(n)          => VIntLit0(n)
+    case Con(ty, i, as)     => VCon0(eval1(ty), i, as.map(eval0))
     case _                  => impossible()
 
   // intermediate rep
@@ -151,6 +157,8 @@ object Staging:
     case Fst(ty: IR.Ty, tm: R)
     case Snd(ty: IR.Ty, tm: R)
 
+    case Con(ty: IR.GName, ix: Int, as: List[R])
+
     case Fix(t1: IR.Ty, t2: IR.TDef, go: IR.LName, x: IR.LName, body: R)
 
     case If(ty: IR.TDef, c: R, t: R, f: R)
@@ -172,6 +180,9 @@ object Staging:
       case Pair(_, _, f, s) => s"($f, $s)"
       case Fst(_, t)        => s"$t.1"
       case Snd(_, t)        => s"$t.2"
+
+      case Con(ty, i, Nil) => s"(con $ty #$i)"
+      case Con(ty, i, as)  => s"(con $ty #$i ${as.mkString(" ")})"
 
       case Fix(t1, t2, go, x, b) =>
         s"(fix ($go : ${IR.TDef(t1, t2)}) ($x : $t1). $b)"
@@ -215,6 +226,8 @@ object Staging:
       case Pair(_, _, fst, snd) => fst.fvs ++ snd.fvs
       case Fst(_, t)            => t.fvs
       case Snd(_, t)            => t.fvs
+
+      case Con(_, _, as) => as.map(_.fvs).fold(Nil)(_ ++ _)
 
       case Fix(_, _, go, x, b) => b.fvs.filterNot((y, _) => y == go || y == x)
 
@@ -274,6 +287,8 @@ object Staging:
         case Fst(ty, t) => Fst(ty, t.subst(sub, scope))
         case Snd(ty, t) => Fst(ty, t.subst(sub, scope))
 
+        case Con(ty, i, as) => Con(ty, i, as.map(_.subst(sub, scope)))
+
         case Fix(t1, t2, g0, x0, b0) =>
           val (List((g, _), (x, _)), b) = underN(
             List((g0, IR.TDef(t1, t2)), (x0, IR.TDef(t1))),
@@ -287,14 +302,64 @@ object Staging:
           If(t, c.subst(sub, scope), a.subst(sub, scope), b.subst(sub, scope))
 
   // quotation
-  private def quoteVTy(v: Val1): IR.Ty = v match
+  private type DataMap =
+    ArrayBuffer[(Val1 => List[List[Val1]], List[List[IR.Ty]])]
+
+  private def tyMatch(a: Val1, b: Val1)(implicit l: Int): Boolean = (a, b) match
+    case (VPrim1(x1, as1), VPrim1(x2, as2))
+        if x1 == x2 && as1.size == as2.size =>
+      as1.zip(as2).forall(tyMatch)
+    case (VTCon1(cs1), VTCon1(cs2))     => dataMatch(cs1, cs2)
+    case (VTConName1(x), VTConName1(y)) => x == y
+    case _                              => false
+  private def dataMatch(
+      a: Val1 => List[List[Val1]],
+      b: Val1 => List[List[Val1]]
+  )(implicit l: Int): Boolean =
+    val cs1 = a(VTConName1(s"X$l"))
+    val cs2 = b(VTConName1(s"X$l"))
+    cs1.size == cs2.size && cs1
+      .zip(cs2)
+      .forall((as1, as2) =>
+        as1.size == as2.size && as1.zip(as2).forall(tyMatch)
+      )
+
+  private def findData(cs: Val1 => List[List[Val1]])(implicit
+      dm: DataMap
+  ): Int =
+    dm.indexWhere((cs2, _) => dataMatch(cs, cs2)(0))
+
+  private def addData(
+      cs: Val1 => List[List[Val1]],
+      k: (i: Int) => List[List[IR.Ty]]
+  )(implicit
+      dm: DataMap
+  ): Int =
+    val ix = findData(cs)
+    if ix >= 0 then ix
+    else
+      val i = dm.size
+      dm += ((cs, k(dm.size)))
+      i
+
+  private def quoteVTy(v: Val1)(implicit dm: DataMap): IR.Ty = v match
     case VPrim1(PUnitType, Nil)     => IR.TUnit
     case VPrim1(PBool, Nil)         => IR.TBool
     case VPrim1(PInt, Nil)          => IR.TInt
     case VPrim1(PTPair, List(a, b)) => IR.TPair(quoteVTy(a), quoteVTy(b))
-    case _                          => impossible()
+    case VTConName1(x)              => IR.TCon(x)
+    case VTCon1(cs) =>
+      val i = addData(
+        cs,
+        i => {
+          val x = s"D$i"
+          cs(VTConName1(x)).map(as => as.map(quoteVTy))
+        }
+      )
+      IR.TCon(s"D$i")
+    case _ => impossible()
 
-  private def quoteFTy(v: Val1): IR.TDef = v match
+  private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
     case _                            => IR.TDef(quoteVTy(v))
 
@@ -305,12 +370,15 @@ object Staging:
   private def primOverApp(p: PrimName, n: Int, as: List[Val1])(implicit
       l: Lvl,
       ns: NS,
-      fresh: Fresh
+      fresh: Fresh,
+      dm: DataMap
   ): R =
     val hd = quoteRep(VSplicePrim0(p, as.take(n)))
     val qas = as.drop(n).map(a => quoteRep(vsplice0(a)))
     qas.foldLeft(hd)((f, a) => R.App(f, a))
-  private def quoteRep(v: Val0)(implicit l: Lvl, ns: NS, fresh: Fresh): R =
+  private def quoteRep(
+      v: Val0
+  )(implicit l: Lvl, ns: NS, fresh: Fresh, dm: DataMap): R =
     v match
       case VVar0(lvl) =>
         val (x, t) = ns(lvl.toIx.expose)
@@ -341,7 +409,7 @@ object Staging:
           x,
           qt.head,
           qt.tail,
-          quoteRep(b(VVar0(l)))(l + 1, (x, IR.TDef(qt.head)) :: ns, fresh)
+          quoteRep(b(VVar0(l)))(l + 1, (x, IR.TDef(qt.head)) :: ns, fresh, dm)
         )
       case VLet0(ty, bt, v, b) =>
         val x = fresh()
@@ -351,7 +419,7 @@ object Staging:
           qt,
           quoteFTy(bt),
           quoteRep(v),
-          quoteRep(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh)
+          quoteRep(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh, dm)
         )
 
       case VPair0(fst, snd, ty) =>
@@ -359,6 +427,11 @@ object Staging:
         R.Pair(tfst, tsnd, quoteRep(fst), quoteRep(snd))
       case VFst0(ty, t) => R.Fst(quoteVTy(ty), quoteRep(t))
       case VSnd0(ty, t) => R.Snd(quoteVTy(ty), quoteRep(t))
+
+      case VCon0(VTCon1(cs), i, as) =>
+        val ix = findData(cs)
+        if ix < 0 then impossible()
+        else R.Con(s"D$ix", i, as.map(quoteRep))
 
       case VSplicePrim0(PFix, List(pty, _, rty, b)) =>
         val qpty = quoteVTy(pty)
@@ -369,7 +442,12 @@ object Staging:
           vsplice0(
             vapp1(vapp1(b, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
           )
-        )(l + 2, (x, IR.TDef(qpty)) :: (go, IR.TDef(qpty, qrty)) :: ns, fresh)
+        )(
+          l + 2,
+          (x, IR.TDef(qpty)) :: (go, IR.TDef(qpty, qrty)) :: ns,
+          fresh,
+          dm
+        )
         R.Fix(qpty, qrty, go, x, qb)
       case VSplicePrim0(PFix, as) => primOverApp(PFix, 4, as)
 
@@ -471,6 +549,8 @@ object Staging:
       case R.Fst(ty, t)             => R.Fst(ty, go(t))
       case R.Snd(ty, t)             => R.Snd(ty, go(t))
 
+      case R.Con(ty, i, as) => R.Con(ty, i, as.map(go))
+
       case R.Fix(t1, t2, g, x, b0) =>
         val (vs, spine) = eta(t2.ps)
         val fv = b0.fvs
@@ -543,6 +623,14 @@ object Staging:
         val (qs, ts, ds2) = toIRValue(s)
         (IR.Pair(tf, ts, qf, qs), IR.TPair(tf, ts), ds1 ++ ds2)
 
+      case R.Con(ty, i, as) =>
+        val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
+          case ((as, ds), a) =>
+            val (qa, ta, nds) = toIRValue(a)
+            (as ++ List(qa), ds ++ nds)
+        }
+        (IR.Con(ty, i, qas), IR.TCon(ty), ds)
+
       case _ => c2v(tm)
 
   private def v2c(
@@ -569,6 +657,7 @@ object Staging:
     case R.IntLit(_)        => v2c(tm)
     case R.BoolLit(_)       => v2c(tm)
     case R.Pair(_, _, _, _) => v2c(tm)
+    case R.Con(_, _, _)     => v2c(tm)
 
     case R.App(_, _) =>
       val (f, as) = tm.flattenApps
@@ -632,15 +721,17 @@ object Staging:
       IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIRLet(v, true))
 
   // staging
-  private def stageFTy(t: Ty): IR.TDef = quoteFTy(eval1(t)(Empty))
+  private def stageFTy(t: Ty)(implicit dm: DataMap): IR.TDef =
+    quoteFTy(eval1(t)(Empty))
 
   private def stageRep(ty: IR.TDef, tm: Tm)(implicit
       fresh: Fresh,
-      emit: Emit
+      emit: Emit,
+      dm: DataMap
   ): R =
     val (ps, spine) = eta(ty.ps)
     lambdaLift(
-      quoteRep(eval0(tm)(Empty))(lvl0, Nil, fresh)
+      quoteRep(eval0(tm)(Empty))(lvl0, Nil, fresh, dm)
         .apps(spine)
         .lams(ps, IR.TDef(ty.rt))
     )
@@ -653,7 +744,7 @@ object Staging:
       c
     }
 
-  private def stageDef(d: Def): List[IR.Def] = d match
+  private def stageDef(d: Def)(implicit dm: DataMap): List[IR.Def] = d match
     case DDef(x, t, st @ STy(_), v) =>
       implicit val fresh: Fresh = newFresh()
       var n2 = 0
@@ -669,4 +760,10 @@ object Staging:
       (nds.toList ++ List(rd)).map(d => toIRDef(d)(newFresh()))
     case _ => Nil
 
-  def stage(ds: Defs): IR.Defs = IR.Defs(ds.toList.flatMap(stageDef))
+  def stage(ds: Defs): IR.Defs =
+    implicit val dds: DataMap =
+      ArrayBuffer.empty[(Val1 => List[List[Val1]], List[List[IR.Ty]])]
+    val sds = ds.toList.flatMap(stageDef)
+    IR.Defs(
+      dds.zipWithIndex.map((cs, i) => IR.DData(s"D$i", cs._2)).toList ++ sds
+    )

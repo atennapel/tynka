@@ -14,6 +14,8 @@ object Value:
   object Clos:
     def apply(tm: Tm)(implicit env: Env): Clos = CClos(env, tm)
 
+  final case class TConClos(env: Env, cs: List[List[Tm]])
+
   enum Spine:
     case SId
     case SApp(spine: Spine, arg: Val, icit: Icit)
@@ -52,6 +54,9 @@ object Value:
     case VPair(fst: Val, snd: Val, ty: VTy)
 
     case VIntLit(value: Int)
+
+    case VTCon(name: Bind, cs: TConClos)
+    case VCon(ty: VTy, ix: Int, args: List[Val])
 
     case VLift(vf: VTy, tm: VTy)
     case VQuote(tm: Val)

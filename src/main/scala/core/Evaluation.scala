@@ -14,6 +14,10 @@ object Evaluation:
       case CClos(env, tm) => eval(tm)(v :: env)
       case CFun(fn)       => fn(v)
 
+  extension (c: TConClos)
+    def apply(v: Val): List[List[Val]] =
+      c.cs.map(as => as.map(t => eval(t)(v :: c.env)))
+
   // evaluation
   private def vglobal(x: Name): Val =
     val value = getGlobal(x).get.value
@@ -105,6 +109,9 @@ object Evaluation:
 
     case IntLit(n) => VIntLit(n)
 
+    case TCon(x, cs)    => VTCon(x, TConClos(env, cs))
+    case Con(ty, i, as) => VCon(eval(ty), i, as.map(eval))
+
     case Lift(vf, t) => VLift(eval(vf), eval(t))
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
@@ -168,6 +175,11 @@ object Evaluation:
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
 
       case VIntLit(n) => IntLit(n)
+
+      case VTCon(x, cs) =>
+        TCon(x, cs(VVar(l)).map(as => as.map(a => quote(a, unfold)(l + 1))))
+      case VCon(ty, i, as) =>
+        Con(quote(ty, unfold), i, as.map(quote(_, unfold)))
 
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote

@@ -11,12 +11,14 @@ object Syntax:
     case TBool
     case TInt
     case TPair(fst: Ty, snd: Ty)
+    case TCon(name: GName)
 
     override def toString: String = this match
       case TUnit           => "()"
       case TBool           => "Bool"
       case TInt            => "Int"
       case TPair(fst, snd) => s"($fst, $snd)"
+      case TCon(x)         => s"$x"
   export Ty.*
 
   final case class TDef(ps: List[Ty], rt: Ty):
@@ -48,11 +50,15 @@ object Syntax:
         ps: List[(LName, Ty)],
         value: Let
     )
+    case DData(name: GName, cons: List[List[Ty]])
 
     override def toString: String = this match
       case DDef(x, _, t, Nil, v) => s"def $x : $t = $v"
       case DDef(x, _, t, ps, v) =>
         s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
+      case DData(x, Nil) => s"data $x"
+      case DData(x, cs) =>
+        s"data $x = ${cs.map(as => s"(${as.mkString(" ")})").mkString(" | ")}"
   export Def.*
 
   final case class Let(ps: List[(LName, Ty, Comp)], body: Comp):
@@ -71,6 +77,7 @@ object Syntax:
     case BoolLit(value: Boolean)
 
     case Pair(t1: Ty, t2: Ty, fst: Value, snd: Value)
+    case Con(ty: GName, ix: Int, as: List[Value])
 
     override def toString: String = this match
       case Var(x)       => s"'$x"
@@ -81,6 +88,8 @@ object Syntax:
       case BoolLit(v) => if v then "True" else "False"
 
       case Pair(_, _, f, s) => s"($f, $s)"
+      case Con(t, i, Nil)   => s"(con $t #$i)"
+      case Con(t, i, as)    => s"(con $t #$i ${as.mkString(" ")})"
   export Value.*
 
   enum Comp:

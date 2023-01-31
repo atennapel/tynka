@@ -48,6 +48,9 @@ object Syntax:
 
     case IntLit(value: Int)
 
+    case TCon(name: Bind, cons: List[List[Ty]])
+    case Con(ty: Ty, ix: Int, args: List[Tm])
+
     case Lift(vf: Ty, tm: Ty)
     case Quote(tm: Tm)
     case Splice(tm: Tm)
@@ -71,7 +74,6 @@ object Syntax:
     def splice: Tm = this match
       case Quote(t) => t
       case t        => Splice(t)
-    def embedVal: Tm = App(Prim(PVal), this, Expl)
 
     override def toString: String = this match
       case Var(x)                     => s"'$x"
@@ -94,6 +96,12 @@ object Syntax:
       case Proj(t, p, _)         => s"$t$p"
 
       case IntLit(n) => s"$n"
+
+      case TCon(x, Nil) => s"(tcon $x.)"
+      case TCon(x, cs) =>
+        s"(tcon $x. ${cs.map(as => s"(${as.mkString(" ")})").mkString(" ")})"
+      case Con(ty, i, Nil) => s"(con $ty #$i)"
+      case Con(ty, i, as)  => s"(con $ty #$i ${as.mkString(" ")})"
 
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"

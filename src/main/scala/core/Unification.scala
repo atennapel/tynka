@@ -189,6 +189,10 @@ object Unification:
 
       case VIntLit(n) => IntLit(n)
 
+      case VTCon(x, cs) =>
+        TCon(x, cs(VVar(psub.cod)).map(as => as.map(a => go(a)(psub.lift))))
+      case VCon(ty, i, as) => Con(go(ty), i, as.map(go))
+
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => go(t).quote
 
@@ -340,8 +344,21 @@ object Unification:
         unify(vf1, vf2); unify(ty1, ty2)
       case (VQuote(a), VQuote(b))             => unify(a, b)
       case (VIntLit(a), VIntLit(b)) if a == b => ()
-      case (VIrrelevant, _)                   => ()
-      case (_, VIrrelevant)                   => ()
+      case (VCon(_, i, as1), VCon(_, j, as2)) if i == j =>
+        as1.zip(as2).foreach((a, b) => unify(a, b))
+      case (VIrrelevant, _) => ()
+      case (_, VIrrelevant) => ()
+
+      case (VTCon(_, c1), VTCon(_, c2)) =>
+        val cs1 = c1(VVar(l))
+        val cs2 = c2(VVar(l))
+        if cs1.size != cs2.size then
+          throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")
+        cs1.zip(cs2).foreach { (as1, as2) =>
+          if as1.size != as2.size then
+            throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")
+          as1.zip(as2).foreach((a, b) => unify(a, b)(l + 1))
+        }
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)

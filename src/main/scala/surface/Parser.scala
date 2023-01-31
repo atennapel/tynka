@@ -130,7 +130,7 @@ object Parser:
     private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
 
     lazy val tm: Parsley[Tm] = positioned(
-      attempt(piSigma) <|> let <|> lam <|> ifP <|>
+      attempt(piSigma) <|> let <|> lam <|> ifP <|> tcon <|> con <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -160,23 +160,32 @@ object Parser:
           }
         }
 
+    private lazy val tcon: Parsley[Tm] = positioned(
+      ("tcon" *> bind <~> "." *> many("(" *> many(atom) <* ")")).map(TCon.apply)
+    )
+    private lazy val con: Parsley[Tm] = positioned(
+      ("con" *> "#" *> natural <~> many(atom)).map(Con.apply)
+    )
+
     private type DefParam = (List[Bind], Icit, Option[Ty])
     private lazy val defParam: Parsley[DefParam] =
       attempt(piSigmaParam) <|> bind.map(x => (List(x), Expl, None))
 
     private lazy val let: Parsley[Tm] =
-      ("let" *> identOrOp <~> many(defParam) <~> option(
-        ":" *> tm
-      ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
-        .map { case (((((x, ps), ty), m), v), b) =>
-          Let(
-            x,
-            m,
-            ty.map(typeFromParams(ps, _)),
-            lamFromDefParams(ps, v, ty.isEmpty),
-            b
-          )
-        }
+      positioned(
+        ("let" *> identOrOp <~> many(defParam) <~> option(
+          ":" *> tm
+        ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
+          .map { case (((((x, ps), ty), m), v), b) =>
+            Let(
+              x,
+              m,
+              ty.map(typeFromParams(ps, _)),
+              lamFromDefParams(ps, v, ty.isEmpty),
+              b
+            )
+          }
+      )
 
     private type LamParam = (List[Bind], ArgInfo, Option[Ty])
     private lazy val lamParam: Parsley[LamParam] =
@@ -187,27 +196,29 @@ object Parser:
         <|> bind.map(x => (List(x), ArgIcit(Expl), None))
 
     private lazy val lam: Parsley[Tm] =
-      ("\\" *> many(lamParam) <~> "." *> tm).map(lamFromLamParams _)
+      positioned(("\\" *> many(lamParam) <~> "." *> tm).map(lamFromLamParams _))
 
     private val caseBoolVar: Tm = Var(Name("caseBool"))
     private val tyName = Name("ty")
     private lazy val ifP: Parsley[Tm] =
-      ("if" *> tm <~> "then" *> tm <~> "else" *> tm)
-        .map { case ((c, t), f) =>
-          App(
+      positioned(
+        ("if" *> tm <~> "then" *> tm <~> "else" *> tm)
+          .map { case ((c, t), f) =>
             App(
               App(
-                caseBoolVar,
-                c,
+                App(
+                  caseBoolVar,
+                  c,
+                  ArgIcit(Expl)
+                ),
+                t,
                 ArgIcit(Expl)
               ),
-              t,
+              f,
               ArgIcit(Expl)
-            ),
-            f,
-            ArgIcit(Expl)
-          )
-        }
+            )
+          }
+      )
 
     private lazy val app: Parsley[Tm] =
       precedence[Tm](appAtom)(

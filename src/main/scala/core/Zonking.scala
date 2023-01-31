@@ -62,6 +62,10 @@ object Zonking:
         case Proj(t, p, ty) => Proj(t, p, zonk(ty))
         case t              => t
 
+    case TCon(x, cs) =>
+      TCon(x, cs.map(as => as.map(a => zonk(a)(l + 1, VVar(l) :: e))))
+    case Con(ty, i, as) => Con(zonk(ty), i, as.map(zonk))
+
     case Lift(vf, t) => Lift(zonk(vf), zonk(t))
     case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
