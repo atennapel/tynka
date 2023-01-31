@@ -1,8 +1,9 @@
 import surface.Parser.defsParser
 import common.Debug.*
 import core.Pretty.pretty
-import elaboration.Elaboration.*
 import core.Staging.stage
+import elaboration.Elaboration.*
+import ir.JvmGenerator.generate
 
 import java.io.File
 import scala.io.Source
@@ -30,8 +31,11 @@ object Main:
       println(pretty(eds))
 
       println("\nstaging:")
-      val ids = stage(eds)
-      println(ids.mkString("\n"))
+      val irds = stage(eds)
+      println(irds)
+
+      println("\ngenerate JVM bytecode")
+      generate(moduleName, irds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

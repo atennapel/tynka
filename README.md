@@ -11,5 +11,6 @@ java Test
 ```
 
 TODO:
-- [ ] JVM bytecode generation
+- [x] JVM bytecode generation
+- [ ] Tail recursion
 - [ ] Datatypes

@@ -53,10 +53,11 @@ object Staging:
     go(env, ix.expose)
 
   private def vapp1(f: Val1, a: Val1): Val1 = (f, a) match
-    case (VLam1(f), _)            => f(a)
-    case (VPrim1(x, as), _)       => VPrim1(x, as ++ List(a))
-    case (VQuote1(f), VQuote1(a)) => VQuote1(VApp0(f, a))
-    case _                        => impossible()
+    case (VLam1(f), _)               => f(a)
+    case (VPrim1(x, as), _)          => VPrim1(x, as ++ List(a))
+    case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
+    case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
+    case _                           => impossible()
 
   private def vproj1(t: Val1, p: ProjType): Val1 = (t, p) match
     case (VPair1(fst, _), Fst)         => fst
@@ -511,7 +512,7 @@ object Staging:
       case IR.Val(qv) => (qv, t, ds)
       case _ =>
         val x = fresh()
-        (IR.Var(x, t), t, ds ++ List((x, t, c)))
+        (IR.Var(x), t, ds ++ List((x, t, c)))
 
   private def toIRValue(
       tm: R
@@ -520,7 +521,7 @@ object Staging:
       case R.Var(x, t) =>
         val ty = t.ty
         val y = ns(x)
-        (IR.Var(y, ty), ty, Nil)
+        (IR.Var(y), ty, Nil)
       case R.Global(x, t) =>
         val ty = t.ty
         (IR.Global(x, ty), ty, Nil)
@@ -594,13 +595,13 @@ object Staging:
       val (qc, tc, ds) = toIRValue(c)
       val qt = toIRLet(t)
       val qf = toIRLet(f)
-      (IR.If(rty, qc, qt, qf), rty, ds)
+      (IR.If(qc, qt, qf), rty, ds)
 
     case _ => impossible()
 
   private def toIRLet(tm: R)(implicit ns: IRNS, fresh: Fresh): IR.Let =
-    val (b, t, ds) = toIRComp(tm)
-    IR.Let(ds, t, b)
+    val (b, _, ds) = toIRComp(tm)
+    IR.Let(ds, b)
 
   private def toIRDef(d: RD)(implicit fresh: Fresh): IR.Def = d match
     case RD.Def(x, gen, t, v0) =>
@@ -646,4 +647,4 @@ object Staging:
       (nds.toList ++ List(rd)).map(d => toIRDef(d)(newFresh()))
     case _ => Nil
 
-  def stage(ds: Defs): List[IR.Def] = ds.toList.flatMap(stageDef)
+  def stage(ds: Defs): IR.Defs = IR.Defs(ds.toList.flatMap(stageDef))

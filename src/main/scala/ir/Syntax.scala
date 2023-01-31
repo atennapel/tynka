@@ -55,7 +55,7 @@ object Syntax:
         s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
   export Def.*
 
-  final case class Let(ps: List[(LName, Ty, Comp)], ty: Ty, body: Comp):
+  final case class Let(ps: List[(LName, Ty, Comp)], body: Comp):
     override def toString: String =
       if ps.isEmpty then body.toString
       else
@@ -63,7 +63,7 @@ object Syntax:
         s"($pss$body)"
 
   enum Value:
-    case Var(name: LName, ty: Ty)
+    case Var(name: LName)
     case Global(name: GName, ty: Ty)
 
     case Unit
@@ -73,7 +73,7 @@ object Syntax:
     case Pair(t1: Ty, t2: Ty, fst: Value, snd: Value)
 
     override def toString: String = this match
-      case Var(x, _)    => s"'$x"
+      case Var(x)       => s"'$x"
       case Global(x, _) => s"$x"
 
       case Unit       => "()"
@@ -92,7 +92,7 @@ object Syntax:
     case Fst(ty: Ty, tm: Value)
     case Snd(ty: Ty, tm: Value)
 
-    case If(ty: Ty, c: Value, t: Let, f: Let)
+    case If(c: Value, t: Let, f: Let)
 
     override def toString: String = this match
       case Val(v)              => s"$v"
@@ -100,5 +100,5 @@ object Syntax:
       case PrimApp(f, as)      => s"($f ${as.mkString(" ")})"
       case Fst(_, t)           => s"$t.1"
       case Snd(_, t)           => s"$t.2"
-      case If(_, c, t, f)      => s"(if $c then $t else $f)"
+      case If(c, t, f)         => s"(if $c then $t else $f)"
   export Comp.*
