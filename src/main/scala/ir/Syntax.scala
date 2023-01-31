@@ -86,7 +86,7 @@ object Syntax:
   enum Comp:
     case Val(value: Value)
 
-    case GlobalApp(name: GName, ty: TDef, as: List[Value])
+    case GlobalApp(name: GName, ty: TDef, tc: Boolean, as: List[Value])
     case PrimApp(name: PrimName, args: List[Value])
 
     case Fst(ty: Ty, tm: Value)
@@ -95,10 +95,11 @@ object Syntax:
     case If(c: Value, t: Let, f: Let)
 
     override def toString: String = this match
-      case Val(v)              => s"$v"
-      case GlobalApp(x, _, as) => s"($x ${as.mkString(" ")})"
-      case PrimApp(f, as)      => s"($f ${as.mkString(" ")})"
-      case Fst(_, t)           => s"$t.1"
-      case Snd(_, t)           => s"$t.2"
-      case If(c, t, f)         => s"(if $c then $t else $f)"
+      case Val(v) => s"$v"
+      case GlobalApp(x, _, tc, as) =>
+        s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
+      case PrimApp(f, as) => s"($f ${as.mkString(" ")})"
+      case Fst(_, t)      => s"$t.1"
+      case Snd(_, t)      => s"$t.2"
+      case If(c, t, f)    => s"(if $c then $t else $f)"
   export Comp.*

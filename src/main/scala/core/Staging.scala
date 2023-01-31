@@ -506,8 +506,12 @@ object Staging:
 
   private def c2v(
       tm: R
-  )(implicit ns: IRNS, fresh: Fresh): (IR.Value, IR.Ty, Lets) =
-    val (c, t, ds) = toIRComp(tm)
+  )(implicit
+      ns: IRNS,
+      defname: IR.GName,
+      fresh: Fresh
+  ): (IR.Value, IR.Ty, Lets) =
+    val (c, t, ds) = toIRComp(tm, false)
     c match
       case IR.Val(qv) => (qv, t, ds)
       case _ =>
@@ -516,7 +520,11 @@ object Staging:
 
   private def toIRValue(
       tm: R
-  )(implicit ns: IRNS, fresh: Fresh): (IR.Value, IR.Ty, Lets) =
+  )(implicit
+      ns: IRNS,
+      defname: IR.GName,
+      fresh: Fresh
+  ): (IR.Value, IR.Ty, Lets) =
     tm match
       case R.Var(x, t) =>
         val ty = t.ty
@@ -539,13 +547,22 @@ object Staging:
 
   private def v2c(
       tm: R
-  )(implicit ns: IRNS, fresh: Fresh): (IR.Comp, IR.Ty, Lets) =
+  )(implicit
+      ns: IRNS,
+      defname: IR.GName,
+      fresh: Fresh
+  ): (IR.Comp, IR.Ty, Lets) =
     val (v, t, ds) = toIRValue(tm)
     (IR.Val(v), t, ds)
 
   private def toIRComp(
-      tm: R
-  )(implicit ns: IRNS, fresh: Fresh): (IR.Comp, IR.Ty, Lets) = tm match
+      tm: R,
+      tail: Boolean
+  )(implicit
+      ns: IRNS,
+      defname: IR.GName,
+      fresh: Fresh
+  ): (IR.Comp, IR.Ty, Lets) = tm match
     case R.Var(_, _)        => v2c(tm)
     case R.Global(_, _)     => v2c(tm)
     case R.Unit             => v2c(tm)
@@ -562,7 +579,7 @@ object Staging:
               val (qa, ta, nds) = toIRValue(a)
               (as ++ List(qa), ds ++ nds)
           }
-          (IR.GlobalApp(x, t, qas), t.rt, ds)
+          (IR.GlobalApp(x, t, tail && x == defname, qas), t.rt, ds)
         case _ => impossible()
     case R.PrimApp(p, as) =>
       val rt = p match
@@ -578,9 +595,9 @@ object Staging:
       (IR.PrimApp(p, qas), rt, ds)
 
     case R.Let(x, t, bt, v, b) =>
-      val (qv, tv, ds1) = toIRComp(v)
+      val (qv, tv, ds1) = toIRComp(v, false)
       val y = fresh()
-      val (qb, tb, ds2) = toIRComp(b)(ns + (x -> y), fresh)
+      val (qb, tb, ds2) = toIRComp(b, tail)(ns + (x -> y), defname, fresh)
       (qb, tb, ds1 ++ List((y, tv, qv)) ++ ds2)
 
     case R.Fst(ty, t) =>
@@ -593,21 +610,26 @@ object Staging:
     case R.If(ty, c, t, f) =>
       val rty = ty.ty
       val (qc, tc, ds) = toIRValue(c)
-      val qt = toIRLet(t)
-      val qf = toIRLet(f)
+      val qt = toIRLet(t, tail)
+      val qf = toIRLet(f, tail)
       (IR.If(qc, qt, qf), rty, ds)
 
     case _ => impossible()
 
-  private def toIRLet(tm: R)(implicit ns: IRNS, fresh: Fresh): IR.Let =
-    val (b, _, ds) = toIRComp(tm)
+  private def toIRLet(tm: R, tail: Boolean)(implicit
+      ns: IRNS,
+      defname: IR.GName,
+      fresh: Fresh
+  ): IR.Let =
+    val (b, _, ds) = toIRComp(tm, tail)
     IR.Let(ds, b)
 
   private def toIRDef(d: RD)(implicit fresh: Fresh): IR.Def = d match
     case RD.Def(x, gen, t, v0) =>
       val (ps, _, v) = v0.flattenLams
       implicit val irns: IRNS = ps.map((x, _) => (x, fresh())).toMap
-      IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIRLet(v))
+      implicit val defname: IR.GName = x
+      IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIRLet(v, true))
 
   // staging
   private def stageFTy(t: Ty): IR.TDef = quoteFTy(eval1(t)(Empty))

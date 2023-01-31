@@ -12,5 +12,7 @@ java Test
 
 TODO:
 - [x] JVM bytecode generation
-- [ ] Tail recursion
+- [x] Tail recursion
 - [ ] Datatypes
+- [ ] Improve fix type inference
+- [ ] Keep generics signature in JVM bytecode output
