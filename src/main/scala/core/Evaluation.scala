@@ -71,12 +71,20 @@ object Evaluation:
         VGlobal(y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
       case _ => impossible()
 
+  private def vcase(ty: VTy, rty: VTy, v: Val, cs: List[Val]): Val = v match
+    case VRigid(hd, sp) => VRigid(hd, SCase(sp, ty, rty, cs))
+    case VFlex(hd, sp)  => VFlex(hd, SCase(sp, ty, rty, cs))
+    case VGlobal(uri, sp, v) =>
+      VGlobal(uri, SCase(sp, ty, rty, cs), () => vcase(v(), ty, rty, cs))
+    case _ => impossible()
+
   def vspine(v: Val, sp: Spine): Val = sp match
-    case SId              => v
-    case SApp(sp, a, i)   => vapp(vspine(v, sp), a, i)
-    case SSplice(sp)      => vsplice(vspine(v, sp))
-    case SProj(sp, proj)  => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as) => vprimelim(x, as, vspine(v, sp))
+    case SId                    => v
+    case SApp(sp, a, i)         => vapp(vspine(v, sp), a, i)
+    case SSplice(sp)            => vsplice(vspine(v, sp))
+    case SProj(sp, proj)        => vproj(vspine(v, sp), proj)
+    case SPrim(sp, x, as)       => vprimelim(x, as, vspine(v, sp))
+    case SCase(sp, ty, rty, cs) => vcase(ty, rty, vspine(v, sp), cs)
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _, _) => v
@@ -111,6 +119,8 @@ object Evaluation:
 
     case TCon(x, cs)    => VTCon(x, TConClos(env, cs))
     case Con(ty, i, as) => VCon(eval(ty), i, as.map(eval))
+    case Case(ty, rty, scrut, cs) =>
+      vcase(eval(ty), eval(rty), eval(scrut), cs.map(eval))
 
     case Lift(vf, t) => VLift(eval(vf), eval(t))
     case Quote(t)    => vquote(eval(t))
@@ -149,6 +159,13 @@ object Evaluation:
           App(f, quote(a, unfold), i)
         }
         App(as, quote(hd, sp, unfold), Expl)
+      case SCase(sp, ty, rty, cs) =>
+        Case(
+          quote(ty, unfold),
+          quote(rty, unfold),
+          quote(hd, sp, unfold),
+          cs.map(quote(_, unfold))
+        )
 
   private def quote(hd: Head)(implicit l: Lvl): Tm = hd match
     case HVar(ix) => Var(ix.toIx)

@@ -151,17 +151,21 @@ object Unification:
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
       case SPrim(sp, x, args) =>
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
+      case SCase(sp, ty, rty, cs) =>
+        or(go(sp), Some((sp, SId))).map((l, r) => (l, SCase(r, ty, rty, cs)))
     go(sp).fold((sp, SId))(x => x)
 
   private def psubst(v: Val)(implicit psub: PSub): Tm =
     def goSp(t: Tm, sp: Spine)(implicit psub: PSub): Tm = sp match
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
-      case SSplice(sp)      => Splice(goSp(t, sp))
+      case SSplice(sp)      => goSp(t, sp).splice
       case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant)
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
+      case SCase(sp, ty, rty, cs) =>
+        Case(go(ty), go(rty), goSp(t, sp), cs.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
@@ -317,6 +321,9 @@ object Unification:
     case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
       unify(a, b)
       as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
+    case (SCase(s1, t1, _, cs1), SCase(s2, t2, _, cs2)) =>
+      unify(s1, s2); unify(t1, t2)
+      cs1.zip(cs2).foreach((a, b) => unify(a, b))
     case _ => throw UnifyError(s"spine mismatch")
 
   private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =

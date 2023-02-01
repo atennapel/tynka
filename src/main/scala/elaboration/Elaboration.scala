@@ -452,6 +452,25 @@ object Elaboration:
         val eas = as.zip(cs(i)).map((a, vt) => check(a, vt, SVTy()))
         Con(ctx.quote(ty), i, eas)
 
+      case (S.Case(s, cs), _) if !stage.isMeta =>
+        val STy(vf) = stage: @unchecked
+        val (es, sty) = infer(s, SVTy())
+        val vcs = force(sty) match
+          case VTCon(_, b) => b(sty)
+          case _ =>
+            error(
+              s"unambigious datatype expected in case but got ${ctx.pretty(sty)}: $tm"
+            )
+        if cs.size != vcs.size then
+          error(s"invalid number of cases, expected ${vcs.size}: $tm")
+        val ecs = cs.zip(vcs).map { (c, ts) =>
+          val (cty, rvf) = ts.foldRight((ty, vf)) { case (pt, (rt, vf)) =>
+            (VTFun(pt, vf, rt), VFun())
+          }
+          check(c, cty, STy(rvf))
+        }
+        Case(ctx.quote(sty), ctx.quote(ty), es, ecs)
+
       case (S.Quote(t), VLift(vf, a)) => check(t, a, STy(vf)).quote
       case (t, VLift(vf, a))          => check(t, a, STy(vf)).quote
 
@@ -766,6 +785,13 @@ object Elaboration:
         val ecs = cs.map(as => as.map(t => check(t, VVTy(), SMeta)(ctx2)))
         (TCon(x, ecs), VVTy(), SMeta)
       case S.Con(_, _) => error(s"cannot infer: $tm")
+
+      case S.Case(scrut, cs) =>
+        val vf = ctx.eval(newVF())
+        val m = newMeta(VUTy(vf), SMeta)
+        val vm = ctx.eval(m)
+        val etm = check(tm, vm, STy(vf))
+        (etm, vm, STy(vf))
 
       case S.Lift(a) =>
         val vf = newVF()

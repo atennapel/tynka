@@ -33,7 +33,7 @@ object JvmGenerator:
 
   private final case class Ctx(moduleName: String, moduleType: Type)
   private val tcons: mutable.Map[GName, Type] = mutable.Map.empty
-  private val cons: mutable.Map[GName, mutable.Map[Int, List[Ty]]] =
+  private val cons: mutable.Map[GName, mutable.Map[Int, (Type, List[Ty])]] =
     mutable.Map.empty
 
   def generate(moduleGName: String, ds: Defs): Unit =
@@ -231,7 +231,7 @@ object JvmGenerator:
     // datatype constructors
     cs.zipWithIndex.foreach((as, i) => {
       if cons.get(dx).isEmpty then cons(dx) = mutable.Map.empty
-      cons(dx) += i -> as
+      cons(dx) += i -> (Type.getType(s"L$className$$$i;"), as)
       genCon(className, i, as)
       datacw.visitInnerClass(
         s"$className$$$i",
@@ -412,6 +412,62 @@ object JvmGenerator:
       gen(f)
       mg.visitLabel(lEnd)
 
+    case Case(_, s, Nil) =>
+      val ty = Type.getType(classOf[Exception])
+      mg.newInstance(ty)
+      mg.dup()
+      gen(s)
+      mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
+      mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
+      mg.throwException()
+    case Case(ty, scrut, cs) =>
+      val jty = Type.getType(s"L${ctx.moduleName}$$$ty;")
+      gen(scrut)
+      val lEnd = new Label
+      var lNextCase = new Label
+      cs.zipWithIndex.init.foreach { case ((ts, b), i) =>
+        val contype = cons(ty)(i)._1
+        mg.visitLabel(lNextCase)
+        lNextCase = new Label
+        mg.dup()
+        if ts.isEmpty then
+          mg.getStatic(jty, s"$$$i$$", contype)
+          mg.visitJumpInsn(IF_ACMPNE, lNextCase)
+        else
+          mg.instanceOf(contype)
+          mg.visitJumpInsn(IFEQ, lNextCase)
+        if ts.nonEmpty then mg.checkCast(contype)
+        var newlocals = locals
+        ts.zipWithIndex.foreach { case ((x, t), i) =>
+          val dt = gen(t)
+          val local = mg.newLocal(dt)
+          mg.dup()
+          mg.getField(contype, s"a$i", dt)
+          mg.storeLocal(local)
+          newlocals = newlocals + (x -> local)
+        }
+        mg.pop()
+        gen(b)(mg, ctx, args, newlocals, methodStart)
+        mg.visitJumpInsn(GOTO, lEnd)
+      }
+      mg.visitLabel(lNextCase)
+      val i = cs.size - 1
+      val (ts, b) = cs.last
+      val contype = cons(ty)(i)._1
+      if ts.nonEmpty then mg.checkCast(contype)
+      var newlocals = locals
+      ts.zipWithIndex.foreach { case ((x, t), i) =>
+        val dt = gen(t)
+        val local = mg.newLocal(dt)
+        mg.dup()
+        mg.getField(contype, s"a$i", dt)
+        mg.storeLocal(local)
+        newlocals = newlocals + (x -> local)
+      }
+      mg.pop()
+      gen(b)(mg, ctx, args, newlocals, methodStart)
+      mg.visitLabel(lEnd)
+
   private def gen(
       t: Value
   )(implicit
@@ -461,7 +517,7 @@ object JvmGenerator:
         new Method(
           "<init>",
           Type.VOID_TYPE,
-          cons(ty)(i).map(gen).toArray
+          cons(ty)(i)._2.map(gen).toArray
         )
       )
 

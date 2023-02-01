@@ -107,6 +107,9 @@ object Pretty:
     case Con(ty, i, Nil) => s"con ${prettyParen(ty)} #$i"
     case Con(ty, i, as) =>
       s"con ${prettyParen(ty)} #$i ${as.map(a => prettyParen(a)).mkString(" ")}"
+    case Case(ty, _, s, Nil) => s"case ${prettyParen(ty)} ${prettyParen(s)}"
+    case Case(ty, _, s, cs) =>
+      s"case ${prettyParen(ty)} ${prettyParen(s)} ${cs.map(a => prettyParen(a)).mkString(" ")}"
 
     case Lift(_, t) => s"^${prettyParen(t)}"
     case Quote(t)   => s"`${prettyParen(t)}"

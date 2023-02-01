@@ -27,7 +27,10 @@ object Parser:
         "then",
         "else",
         "Meta",
-        "Ty"
+        "Ty",
+        "tcon",
+        "con",
+        "case"
       ),
       operators = Set(
         "=",
@@ -130,7 +133,7 @@ object Parser:
     private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
 
     lazy val tm: Parsley[Tm] = positioned(
-      attempt(piSigma) <|> let <|> lam <|> ifP <|> tcon <|> con <|>
+      attempt(piSigma) <|> let <|> lam <|> ifP <|> tcon <|> con <|> caseP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -165,6 +168,11 @@ object Parser:
     )
     private lazy val con: Parsley[Tm] = positioned(
       ("con" *> "#" *> natural <~> many(atom)).map(Con.apply)
+    )
+    private lazy val caseP: Parsley[Tm] = positioned(
+      ("case" *> atom <~> many(atom) <~> option(lam)).map {
+        case ((scrut, cs), opt) => Case(scrut, cs ++ opt)
+      }
     )
 
     private type DefParam = (List[Bind], Icit, Option[Ty])
@@ -238,7 +246,7 @@ object Parser:
       )
 
     private lazy val appAtom: Parsley[Tm] = positioned(
-      (projAtom <~> many(arg) <~> option(let <|> lam <|> ifP))
+      (projAtom <~> many(arg) <~> option(lam))
         .map { case ((fn, args), opt) =>
           (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
             .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }

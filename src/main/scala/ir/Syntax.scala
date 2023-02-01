@@ -92,6 +92,7 @@ object Syntax:
       case Con(t, i, as)    => s"(con $t #$i ${as.mkString(" ")})"
   export Value.*
 
+  type CaseEntry = (List[(LName, Ty)], Let)
   enum Comp:
     case Val(value: Value)
 
@@ -102,13 +103,21 @@ object Syntax:
     case Snd(ty: Ty, tm: Value)
 
     case If(c: Value, t: Let, f: Let)
+    case Case(ty: GName, scrut: Value, cs: List[CaseEntry])
 
     override def toString: String = this match
       case Val(v) => s"$v"
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
-      case PrimApp(f, as) => s"($f ${as.mkString(" ")})"
-      case Fst(_, t)      => s"$t.1"
-      case Snd(_, t)      => s"$t.2"
-      case If(c, t, f)    => s"(if $c then $t else $f)"
+      case PrimApp(f, as)   => s"($f ${as.mkString(" ")})"
+      case Fst(_, t)        => s"$t.1"
+      case Snd(_, t)        => s"$t.2"
+      case If(c, t, f)      => s"(if $c then $t else $f)"
+      case Case(ty, s, Nil) => s"(case $ty $s)"
+      case Case(ty, s, cs) =>
+        def csStr(c: CaseEntry) = c match
+          case (Nil, b) => b.toString
+          case (xs, b) =>
+            s"(${xs.map((x, t) => s"($x : $t)").mkString(" ")}. $b)"
+        s"(case $ty $s ${cs.map(csStr).mkString(" ")})"
   export Comp.*

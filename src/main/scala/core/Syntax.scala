@@ -50,6 +50,7 @@ object Syntax:
 
     case TCon(name: Bind, cons: List[List[Ty]])
     case Con(ty: Ty, ix: Int, args: List[Tm])
+    case Case(ty: Ty, rty: Ty, scrut: Tm, cs: List[Tm])
 
     case Lift(vf: Ty, tm: Ty)
     case Quote(tm: Tm)
@@ -100,8 +101,10 @@ object Syntax:
       case TCon(x, Nil) => s"(tcon $x.)"
       case TCon(x, cs) =>
         s"(tcon $x. ${cs.map(as => s"(${as.mkString(" ")})").mkString(" ")})"
-      case Con(ty, i, Nil) => s"(con $ty #$i)"
-      case Con(ty, i, as)  => s"(con $ty #$i ${as.mkString(" ")})"
+      case Con(ty, i, Nil)     => s"(con $ty #$i)"
+      case Con(ty, i, as)      => s"(con $ty #$i ${as.mkString(" ")})"
+      case Case(ty, _, s, Nil) => s"(case $ty $s)"
+      case Case(ty, _, s, cs)  => s"(case $ty $s ${cs.mkString(" ")})"
 
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"
