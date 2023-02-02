@@ -128,13 +128,11 @@ object JvmGenerator:
     bos.write(cw.toByteArray())
     bos.close()
 
-  private val PAIR_TYPE: Type = Type.getType("Ljvmstd/Pair;")
   private val OBJECT_TYPE: Type = Type.getType("Ljava/lang/Object;")
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
-    case TBool       => Type.BOOLEAN_TYPE
-    case TInt        => Type.INT_TYPE
-    case TPair(_, _) => PAIR_TYPE
+    case TBool => Type.BOOLEAN_TYPE
+    case TInt  => Type.INT_TYPE
     case TCon(x) =>
       val (t, k) = tcons(x)
       k match
@@ -435,11 +433,6 @@ object JvmGenerator:
       mg.visitLabel(end)
     case PrimApp(_, _) => impossible()
 
-    case Fst(ty, v) =>
-      gen(v); mg.getField(PAIR_TYPE, "fst", OBJECT_TYPE); mg.unbox(gen(ty))
-    case Snd(ty, v) =>
-      gen(v); mg.getField(PAIR_TYPE, "snd", OBJECT_TYPE); mg.unbox(gen(ty))
-
     case Case(ty, scrut, cs) =>
       val (jty, kind) = tcons(ty)
       kind match
@@ -538,20 +531,6 @@ object JvmGenerator:
     case IntLit(v)  => mg.push(v)
     case BoolLit(v) => mg.push(v)
 
-    case Pair(t1, t2, fst, snd) =>
-      mg.newInstance(PAIR_TYPE)
-      mg.dup()
-      gen(fst); box(t1)
-      gen(snd); box(t2)
-      mg.invokeConstructor(
-        PAIR_TYPE,
-        new Method(
-          "<init>",
-          Type.VOID_TYPE,
-          List(OBJECT_TYPE, OBJECT_TYPE).toArray
-        )
-      )
-
     case Con(ty, i, as) =>
       val (jty, kind) = tcons(ty)
       (kind, as) match
@@ -598,4 +577,3 @@ object JvmGenerator:
             Method.getMethod("Integer valueOf (int)")
           )
         case _ =>
-    case _ =>

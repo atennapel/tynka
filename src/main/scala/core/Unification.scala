@@ -160,7 +160,7 @@ object Unification:
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SSplice(sp)      => goSp(t, sp).splice
-      case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant)
+      case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant, Irrelevant)
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)

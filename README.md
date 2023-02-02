@@ -5,8 +5,7 @@ We have a language with two layers, one compile-time layer with full dependent t
 
 Try it out:
 ```
-sbt "run examples/Test"
-javac jvmstd/Pair.java
+sbt "run examples/Push"
 java Test
 ```
 
@@ -22,11 +21,13 @@ TODO:
 - [x] Optimize `Void`-like types
 - [x] Optimize finite types to `Int`
 - [x] Syntax sugar for datatype definitions
-- [ ] Remove primitive Pair type
+- [x] Remove primitive Pair type
+- [ ] Remove TPair
+- [ ] Optimize single constructor types (product-like)
+- [ ] Optimize constructor elimination (only bind used values)
 - [ ] Irregular/nested datatype recursion
 - [ ] Improve inference for if condition
 - [ ] Rename symbol names in JVM generator
-- [ ] Optimize single constructor types (product-like)
 - [ ] Add new-types
 - [ ] Basic file importing
 - [ ] Keep generics signature in JVM bytecode output

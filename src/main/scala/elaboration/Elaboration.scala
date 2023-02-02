@@ -189,14 +189,21 @@ object Elaboration:
                 case Some(body) => Some(Lam(pick(x, x2), i, ctx.quote(b), body))
 
         case (VSigma(x, p1, r1), VSigma(x2, p2, r2)) =>
-          val fst = go(Proj(t, Fst, Irrelevant), p1, SMeta, p2, SMeta)
+          val fst =
+            go(Proj(t, Fst, Irrelevant, Irrelevant), p1, SMeta, p2, SMeta)
           val f = vfst(ctx.eval(t))
           val snd = fst match
             case None =>
-              go(Proj(t, Snd, Irrelevant), r1(f), SMeta, r2(f), SMeta)
+              go(
+                Proj(t, Snd, Irrelevant, Irrelevant),
+                r1(f),
+                SMeta,
+                r2(f),
+                SMeta
+              )
             case Some(fst) =>
               go(
-                Proj(t, Snd, Irrelevant),
+                Proj(t, Snd, Irrelevant, Irrelevant),
                 r1(f),
                 SMeta,
                 r2(ctx.eval(fst)),
@@ -205,9 +212,13 @@ object Elaboration:
           (fst, snd) match
             case (None, None) => None
             case (Some(fst), None) =>
-              Some(Pair(fst, Proj(t, Snd, Irrelevant), ctx.quote(b)))
+              Some(
+                Pair(fst, Proj(t, Snd, Irrelevant, Irrelevant), ctx.quote(b))
+              )
             case (None, Some(snd)) =>
-              Some(Pair(Proj(t, Fst, Irrelevant), snd, ctx.quote(b)))
+              Some(
+                Pair(Proj(t, Fst, Irrelevant, Irrelevant), snd, ctx.quote(b))
+              )
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd, ctx.quote(b)))
 
         case (VTFun(p1, vf, r1), VTFun(p2, vf2, r2)) =>
@@ -227,15 +238,39 @@ object Elaboration:
 
         case (VTPair(p1, r1), VTPair(p2, r2)) =>
           val fst =
-            go(Proj(t, Fst, ctx.quote(p1)), p1, SVTy(), p2, SVTy())
+            go(
+              Proj(t, Fst, ctx.quote(p1), ctx.quote(a)),
+              p1,
+              SVTy(),
+              p2,
+              SVTy()
+            )
           val snd =
-            go(Proj(t, Snd, ctx.quote(r1)), r1, SVTy(), r2, SVTy())
+            go(
+              Proj(t, Snd, ctx.quote(r1), ctx.quote(a)),
+              r1,
+              SVTy(),
+              r2,
+              SVTy()
+            )
           (fst, snd) match
             case (None, None) => None
             case (Some(fst), None) =>
-              Some(Pair(fst, Proj(t, Snd, ctx.quote(r1)), ctx.quote(b)))
+              Some(
+                Pair(
+                  fst,
+                  Proj(t, Snd, ctx.quote(r1), ctx.quote(a)),
+                  ctx.quote(b)
+                )
+              )
             case (None, Some(snd)) =>
-              Some(Pair(Proj(t, Fst, ctx.quote(p1)), snd, ctx.quote(b)))
+              Some(
+                Pair(
+                  Proj(t, Fst, ctx.quote(p1), ctx.quote(a)),
+                  snd,
+                  ctx.quote(b)
+                )
+              )
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd, ctx.quote(b)))
 
         case (VTFun(p1, vf, r1), VPi(x, i, p2, r2)) =>
@@ -298,11 +333,12 @@ object Elaboration:
                 case Some(body) => Some(Lam(pick(y, x), i, ctx.quote(b), body))
 
         case (VTPair(p1, r1), VSigma(_, p2, r2)) =>
-          val fst = go(Proj(t, Fst, ctx.quote(p1)), p1, SVTy(), p2, SMeta)
+          val fst =
+            go(Proj(t, Fst, ctx.quote(p1), ctx.quote(a)), p1, SVTy(), p2, SMeta)
           val snd = fst match
             case None =>
               go(
-                Proj(t, Snd, ctx.quote(r1)),
+                Proj(t, Snd, ctx.quote(r1), ctx.quote(a)),
                 r1,
                 SVTy(),
                 r2(vfst(ctx.eval(t))),
@@ -310,7 +346,7 @@ object Elaboration:
               )
             case Some(fst) =>
               go(
-                Proj(t, Snd, ctx.quote(r1)),
+                Proj(t, Snd, ctx.quote(r1), ctx.quote(a)),
                 r1,
                 SVTy(),
                 r2(ctx.eval(fst)),
@@ -319,24 +355,41 @@ object Elaboration:
           (fst, snd) match
             case (None, None) => None
             case (Some(fst), None) =>
-              Some(Pair(fst, Proj(t, Snd, ctx.quote(r1)), ctx.quote(b)))
+              Some(
+                Pair(
+                  fst,
+                  Proj(t, Snd, ctx.quote(r1), ctx.quote(a)),
+                  ctx.quote(b)
+                )
+              )
             case (None, Some(snd)) =>
-              Some(Pair(Proj(t, Fst, ctx.quote(p1)), snd, ctx.quote(b)))
+              Some(
+                Pair(
+                  Proj(t, Fst, ctx.quote(p1), ctx.quote(a)),
+                  snd,
+                  ctx.quote(b)
+                )
+              )
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd, ctx.quote(b)))
         case (VSigma(_, p1, r1), VTPair(p2, r2)) =>
-          val fst = go(Proj(t, Fst, Irrelevant), p1, SMeta, p2, SVTy())
+          val fst =
+            go(Proj(t, Fst, Irrelevant, Irrelevant), p1, SMeta, p2, SVTy())
           val f = vfst(ctx.eval(t))
           val snd = fst match
             case None =>
-              go(Proj(t, Snd, Irrelevant), r1(f), SMeta, r2, SVTy())
+              go(Proj(t, Snd, Irrelevant, Irrelevant), r1(f), SMeta, r2, SVTy())
             case Some(fst) =>
-              go(Proj(t, Snd, Irrelevant), r1(f), SMeta, r2, SVTy())
+              go(Proj(t, Snd, Irrelevant, Irrelevant), r1(f), SMeta, r2, SVTy())
           (fst, snd) match
             case (None, None) => None
             case (Some(fst), None) =>
-              Some(Pair(fst, Proj(t, Snd, Irrelevant), ctx.quote(b)))
+              Some(
+                Pair(fst, Proj(t, Snd, Irrelevant, Irrelevant), ctx.quote(b))
+              )
             case (None, Some(snd)) =>
-              Some(Pair(Proj(t, Fst, Irrelevant), snd, ctx.quote(b)))
+              Some(
+                Pair(Proj(t, Fst, Irrelevant, Irrelevant), snd, ctx.quote(b))
+              )
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd, ctx.quote(b)))
 
         case (VU(STy(vf)), VU(SMeta)) => Some(Lift(ctx.quote(vf), t))
@@ -768,16 +821,16 @@ object Elaboration:
           case (_, S.Named(x)) =>
             if st != SMeta then error(s"can only do named projection in Meta")
             val (p, pty) = projNamed(ctx.eval(et), ty, x)
-            (Proj(et, p, ctx.quote(pty)), pty, SMeta)
+            (Proj(et, p, Irrelevant, Irrelevant), pty, SMeta)
           case (VSigma(_, fstty, _), S.Fst) =>
-            (Proj(et, Fst, ctx.quote(fstty)), fstty, SMeta)
+            (Proj(et, Fst, Irrelevant, Irrelevant), fstty, SMeta)
           case (VSigma(_, _, sndty), S.Snd) =>
             val rt = sndty(vfst(ctx.eval(et)))
-            (Proj(et, Snd, ctx.quote(rt)), rt, SMeta)
+            (Proj(et, Snd, Irrelevant, Irrelevant), rt, SMeta)
           case (VTPair(fstty, _), S.Fst) =>
-            (Proj(et, Fst, ctx.quote(fstty)), fstty, SVTy())
+            (Proj(et, Fst, ctx.quote(fstty), ctx.quote(ty)), fstty, SVTy())
           case (VTPair(_, sndty), S.Snd) =>
-            (Proj(et, Snd, ctx.quote(sndty)), sndty, SVTy())
+            (Proj(et, Snd, ctx.quote(sndty), ctx.quote(ty)), sndty, SVTy())
           case (tty, _) =>
             st match
               case SMeta =>
@@ -790,10 +843,11 @@ object Elaboration:
                   )
                 val et2 = coe(et, tty, SMeta, VSigma(x, pty, rty), SMeta)
                 p match
-                  case S.Fst => (Proj(et2, Fst, ctx.quote(pty)), pty, SMeta)
+                  case S.Fst =>
+                    (Proj(et2, Fst, Irrelevant, Irrelevant), pty, SMeta)
                   case S.Snd =>
                     val ty = rty(vfst(ctx.eval(et2)))
-                    (Proj(et2, Snd, ctx.quote(ty)), ty, SMeta)
+                    (Proj(et2, Snd, Irrelevant, Irrelevant), ty, SMeta)
                   case _ => error(s"named projection with ambigious type: $tm")
               case STy(rvf) =>
                 unify(rvf, VVal())
@@ -801,9 +855,11 @@ object Elaboration:
                 val rty = ctx.eval(newMeta(VVTy(), SMeta))
                 val et2 = coe(et, tty, SVTy(), VTPair(pty, rty), SVTy())
                 p match
-                  case S.Fst => (Proj(et2, Fst, ctx.quote(pty)), pty, SVTy())
-                  case S.Snd => (Proj(et2, Snd, ctx.quote(rty)), rty, SVTy())
-                  case _     => error(s"named projection in Ty: $tm")
+                  case S.Fst =>
+                    (Proj(et2, Fst, ctx.quote(pty), ctx.quote(ty)), pty, SVTy())
+                  case S.Snd =>
+                    (Proj(et2, Snd, ctx.quote(rty), ctx.quote(ty)), rty, SVTy())
+                  case _ => error(s"named projection in Ty: $tm")
 
       case S.TCon(x, cs) =>
         val ctx2 = ctx.bind(x, VVTy(), SMeta)

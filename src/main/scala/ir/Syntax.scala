@@ -9,14 +9,12 @@ object Syntax:
   enum Ty:
     case TBool
     case TInt
-    case TPair(fst: Ty, snd: Ty)
     case TCon(name: GName)
 
     override def toString: String = this match
-      case TBool           => "Bool"
-      case TInt            => "Int"
-      case TPair(fst, snd) => s"($fst, $snd)"
-      case TCon(x)         => s"$x"
+      case TBool   => "Bool"
+      case TInt    => "Int"
+      case TCon(x) => s"$x"
   export Ty.*
 
   final case class TDef(ps: List[Ty], rt: Ty):
@@ -73,7 +71,6 @@ object Syntax:
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
 
-    case Pair(t1: Ty, t2: Ty, fst: Value, snd: Value)
     case Con(ty: GName, ix: Int, as: List[Value])
 
     override def toString: String = this match
@@ -83,9 +80,8 @@ object Syntax:
       case IntLit(v)  => s"$v"
       case BoolLit(v) => if v then "True" else "False"
 
-      case Pair(_, _, f, s) => s"($f, $s)"
-      case Con(t, i, Nil)   => s"(con $t #$i)"
-      case Con(t, i, as)    => s"(con $t #$i ${as.mkString(" ")})"
+      case Con(t, i, Nil) => s"(con $t #$i)"
+      case Con(t, i, as)  => s"(con $t #$i ${as.mkString(" ")})"
   export Value.*
 
   type CaseEntry = (List[(LName, Ty)], Let)
@@ -95,9 +91,6 @@ object Syntax:
     case GlobalApp(name: GName, ty: TDef, tc: Boolean, as: List[Value])
     case PrimApp(name: PrimName, args: List[Value])
 
-    case Fst(ty: Ty, tm: Value)
-    case Snd(ty: Ty, tm: Value)
-
     case Case(ty: GName, scrut: Value, cs: List[CaseEntry])
 
     override def toString: String = this match
@@ -105,8 +98,6 @@ object Syntax:
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
       case PrimApp(f, as)   => s"($f ${as.mkString(" ")})"
-      case Fst(_, t)        => s"$t.1"
-      case Snd(_, t)        => s"$t.2"
       case Case(ty, s, Nil) => s"(case $ty $s)"
       case Case(ty, s, cs) =>
         def csStr(c: CaseEntry) = c match

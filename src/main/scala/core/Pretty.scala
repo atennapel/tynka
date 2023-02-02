@@ -51,7 +51,7 @@ object Pretty:
       case Global(_)           => pretty(tm)
       case Prim(_)             => pretty(tm)
       case Pair(_, _, _)       => pretty(tm)
-      case Proj(_, _, _)       => pretty(tm)
+      case Proj(_, _, _, _)    => pretty(tm)
       case Meta(_)             => pretty(tm)
       case Lift(_, _)          => pretty(tm)
       case Quote(_)            => pretty(tm)
@@ -99,7 +99,7 @@ object Pretty:
       val es = flattenPair(tm)
       if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
       else s"(${es.map(pretty).mkString(", ")})"
-    case Proj(t, p, _) => s"${prettyParen(t)}$p"
+    case Proj(t, p, _, _) => s"${prettyParen(t)}$p"
 
     case IntLit(n) => s"$n"
 

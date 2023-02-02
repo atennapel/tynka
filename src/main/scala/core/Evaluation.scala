@@ -118,9 +118,9 @@ object Evaluation:
     case Fix(ty, rty, g, x, b, arg) =>
       VFix(eval(ty), eval(rty), g, x, CClos2(env, b), eval(arg))
 
-    case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
-    case Pair(a, b, ty) => VPair(eval(a), eval(b), eval(ty))
-    case Proj(t, p, _)  => vproj(eval(t), p)
+    case Sigma(x, t, b)   => VSigma(x, eval(t), Clos(b))
+    case Pair(a, b, ty)   => VPair(eval(a), eval(b), eval(ty))
+    case Proj(t, p, _, _) => vproj(eval(t), p)
 
     case IntLit(n) => VIntLit(n)
 
@@ -159,8 +159,9 @@ object Evaluation:
     sp match
       case SId              => hd
       case SApp(fn, arg, i) => App(quote(hd, fn, unfold), quote(arg, unfold), i)
-      case SProj(tm, proj)  => Proj(quote(hd, tm, unfold), proj, Irrelevant)
-      case SSplice(tm)      => quote(hd, tm, unfold).splice
+      case SProj(tm, proj) =>
+        Proj(quote(hd, tm, unfold), proj, Irrelevant, Irrelevant)
+      case SSplice(tm) => quote(hd, tm, unfold).splice
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) =>
           App(f, quote(a, unfold), i)

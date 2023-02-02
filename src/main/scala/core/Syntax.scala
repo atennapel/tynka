@@ -45,7 +45,7 @@ object Syntax:
 
     case Sigma(name: Bind, ty: Ty, body: Ty)
     case Pair(fst: Tm, snd: Tm, ty: Ty)
-    case Proj(tm: Tm, proj: ProjType, ty: Ty)
+    case Proj(tm: Tm, proj: ProjType, ty: Ty, pty: Ty)
 
     case IntLit(value: Int)
 
@@ -96,7 +96,7 @@ object Syntax:
       case Sigma(DontBind, t, b) => s"($t ** $b)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
       case Pair(a, b, _)         => s"($a, $b)"
-      case Proj(t, p, _)         => s"$t$p"
+      case Proj(t, p, _, _)      => s"$t$p"
 
       case IntLit(n) => s"$n"
 

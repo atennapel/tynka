@@ -41,9 +41,6 @@ object Staging:
     case VLam0(fnty: Val1, body: Val0 => Val0)
     case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
-    case VPair0(fst: Val0, snd: Val0, ty: Val1)
-    case VFst0(ty: Val1, t: Val0)
-    case VSnd0(ty: Val1, t: Val0)
     case VIntLit0(n: Int)
     case VCon0(ty: Val1, ix: Int, as: List[Val0])
     case VCase0(ty: Val1, rty: Val1, scrut: Val0, cs: List[Val0])
@@ -80,7 +77,7 @@ object Staging:
     case Prim(x)               => VPrim1(x, Nil)
     case Lam(_, _, _, b)       => VLam1(clos1(b))
     case App(f, a, _)          => vapp1(eval1(f), eval1(a))
-    case Proj(t, p, _)         => vproj1(eval1(t), p)
+    case Proj(t, p, _, _)      => vproj1(eval1(t), p)
     case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
     case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
     case TCon(_, cs) =>
@@ -109,10 +106,54 @@ object Staging:
     case VPrim1(x, as) => VSplicePrim0(x, as)
     case _             => impossible()
 
-  private def vproj0(v: Val0, p: ProjType, t: Val1): Val0 = (v, p) match
-    case (p, Fst) => VFst0(t, p)
-    case (p, Snd) => VSnd0(t, p)
-    case _        => impossible()
+  private def vpairTy1Clos(a: Val1, b: Val1): Val1 => List[List[Val1]] = _ =>
+    List(List(a, b))
+  private def vpairTy1(a: Val1, b: Val1): Val1 = VTCon1(vpairTy1Clos(a, b))
+
+  private def vproj0(v: Val0, p: ProjType, t: Val1, pt: Val1): Val0 =
+    val VPrim1(PTPair, List(a, b)) = pt: @unchecked
+    (v, p) match
+      case (p, Fst) =>
+        VCase0(
+          vpairTy1(a, b),
+          a,
+          v,
+          List(
+            VLam0(
+              VPrim1(
+                PTFun,
+                List(
+                  a,
+                  VPrim1(PFun, Nil),
+                  VPrim1(PTFun, List(b, VPrim1(PVal, Nil), a))
+                )
+              ),
+              fst =>
+                VLam0(VPrim1(PTFun, List(b, VPrim1(PVal, Nil), a)), snd => fst)
+            )
+          )
+        )
+      case (p, Snd) =>
+        VCase0(
+          vpairTy1(a, b),
+          b,
+          v,
+          List(
+            VLam0(
+              VPrim1(
+                PTFun,
+                List(
+                  a,
+                  VPrim1(PFun, Nil),
+                  VPrim1(PTFun, List(b, VPrim1(PVal, Nil), b))
+                )
+              ),
+              fst =>
+                VLam0(VPrim1(PTFun, List(b, VPrim1(PVal, Nil), b)), snd => snd)
+            )
+          )
+        )
+      case _ => impossible()
 
   private def clos0(t: Tm)(implicit env: Env): Val0 => Val0 =
     v => eval0(t)(Def0(env, v))
@@ -129,15 +170,17 @@ object Staging:
         (v, w) => eval0(b)(Def0(Def0(env, v), w)),
         eval0(arg)
       )
-    case App(f, a, _)   => VApp0(eval0(f), eval0(a))
-    case Proj(t, p, ty) => vproj0(eval0(t), p, eval1(ty))
+    case App(f, a, _)        => VApp0(eval0(f), eval0(a))
+    case Proj(t, p, ty, pty) => vproj0(eval0(t), p, eval1(ty), eval1(pty))
     case Let(x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
-    case Pair(fst, snd, ty) => VPair0(eval0(fst), eval0(snd), eval1(ty))
-    case Splice(t)          => vsplice0(eval1(t))
-    case Wk(t)              => eval0(t)(env.tail)
-    case IntLit(n)          => VIntLit0(n)
-    case Con(ty, i, as)     => VCon0(eval1(ty), i, as.map(eval0))
+    case Pair(fst, snd, ty) =>
+      val VPrim1(PTPair, List(a, b)) = eval1(ty): @unchecked
+      VCon0(vpairTy1(a, b), 0, List(eval0(fst), eval0(snd)))
+    case Splice(t)      => vsplice0(eval1(t))
+    case Wk(t)          => eval0(t)(env.tail)
+    case IntLit(n)      => VIntLit0(n)
+    case Con(ty, i, as) => VCon0(eval1(ty), i, as.map(eval0))
     case Case(ty, rty, s, cs) =>
       VCase0(eval1(ty), eval1(rty), eval0(s), cs.map(eval0))
     case _ => impossible()
@@ -164,10 +207,6 @@ object Staging:
     case Lam(name: IR.LName, t1: IR.Ty, t2: IR.TDef, body: R)
     case Let(name: IR.LName, ty: IR.TDef, bty: IR.TDef, value: R, body: R)
 
-    case Pair(t1: IR.Ty, t2: IR.Ty, fst: R, snd: R)
-    case Fst(ty: IR.Ty, tm: R)
-    case Snd(ty: IR.Ty, tm: R)
-
     case Con(ty: IR.GName, ix: Int, as: List[R])
     case Case(ty: IR.GName, rty: IR.TDef, scrut: R, cs: List[RCase])
 
@@ -185,10 +224,6 @@ object Staging:
       case PrimApp(p, as)     => s"($p ${as.mkString(" ")})"
       case Lam(x, t, _, b)    => s"(\\($x : $t). $b)"
       case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
-
-      case Pair(_, _, f, s) => s"($f, $s)"
-      case Fst(_, t)        => s"$t.1"
-      case Snd(_, t)        => s"$t.2"
 
       case Con(ty, i, Nil)     => s"(con $ty #$i)"
       case Con(ty, i, as)      => s"(con $ty #$i ${as.mkString(" ")})"
@@ -235,10 +270,6 @@ object Staging:
       case PrimApp(p, as)     => as.flatMap(_.fvs)
       case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => y == x)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
-
-      case Pair(_, _, fst, snd) => fst.fvs ++ snd.fvs
-      case Fst(_, t)            => t.fvs
-      case Snd(_, t)            => t.fvs
 
       case Con(_, _, as) => as.flatMap(_.fvs)
       case Case(_, _, s, cs) =>
@@ -296,11 +327,6 @@ object Staging:
         case Let(x0, t, bt, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)
-
-        case Pair(t1, t2, fst, snd) =>
-          Pair(t1, t2, fst.subst(sub, scope), snd.subst(sub, scope))
-        case Fst(ty, t) => Fst(ty, t.subst(sub, scope))
-        case Snd(ty, t) => Fst(ty, t.subst(sub, scope))
 
         case Con(ty, i, as) => Con(ty, i, as.map(_.subst(sub, scope)))
         case Case(ty, rty, s, cs) =>
@@ -378,11 +404,12 @@ object Staging:
     (i, s"D$i")
 
   private def quoteVTy(v: Val1)(implicit dm: DataMap): IR.Ty = v match
-    case VPrim1(PInt, Nil)          => IR.TInt
-    case VPrim1(PTPair, List(a, b)) => IR.TPair(quoteVTy(a), quoteVTy(b))
-    case VTConName1(x)              => IR.TCon(x)
-    case VTCon1(cs)                 => IR.TCon(findOrAddData(cs)._2)
-    case _                          => impossible()
+    case VPrim1(PInt, Nil) => IR.TInt
+    case VPrim1(PTPair, List(a, b)) =>
+      IR.TCon(findOrAddData(vpairTy1Clos(a, b))._2)
+    case VTConName1(x) => IR.TCon(x)
+    case VTCon1(cs)    => IR.TCon(findOrAddData(cs)._2)
+    case _             => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
@@ -443,12 +470,6 @@ object Staging:
           quoteRep(v),
           quoteRep(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh, dm)
         )
-
-      case VPair0(fst, snd, ty) =>
-        val IR.TPair(tfst, tsnd) = quoteVTy(ty): @unchecked
-        R.Pair(tfst, tsnd, quoteRep(fst), quoteRep(snd))
-      case VFst0(ty, t) => R.Fst(quoteVTy(ty), quoteRep(t))
-      case VSnd0(ty, t) => R.Snd(quoteVTy(ty), quoteRep(t))
 
       case VCon0(VTCon1(cs), i, as) =>
         R.Con(findOrAddData(cs)._2, i, as.map(quoteRep))
@@ -581,16 +602,6 @@ object Staging:
           val (vs2, spine2) = eta(bt.ps)
           go(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, IR.TDef(bt.rt)))
 
-      case R.Pair(t1, t2, fst, snd) => R.Pair(t1, t2, go(fst), go(snd))
-      case R.Fst(ty, t) =>
-        go(t) match
-          case R.Pair(_, _, fst, _) => go(fst)
-          case t                    => R.Fst(ty, t)
-      case R.Snd(ty, t) =>
-        go(t) match
-          case R.Pair(_, _, _, snd) => go(snd)
-          case t                    => R.Snd(ty, t)
-
       case R.Con(ty, i, as) => R.Con(ty, i, as.map(go))
       case R.Case(ty, rty, scrut, cs) =>
         go(scrut) match
@@ -665,11 +676,6 @@ object Staging:
 
       case R.IntLit(v) => (IR.IntLit(v), IR.TInt, Nil)
 
-      case R.Pair(t1, t2, f, s) =>
-        val (qf, tf, ds1) = toIRValue(f)
-        val (qs, ts, ds2) = toIRValue(s)
-        (IR.Pair(tf, ts, qf, qs), IR.TPair(tf, ts), ds1 ++ ds2)
-
       case R.Con(ty, i, as) =>
         val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
           case ((as, ds), a) =>
@@ -698,11 +704,10 @@ object Staging:
       defname: IR.GName,
       fresh: Fresh
   ): (IR.Comp, IR.Ty, Lets) = tm match
-    case R.Var(_, _)        => v2c(tm)
-    case R.Global(_, _)     => v2c(tm)
-    case R.IntLit(_)        => v2c(tm)
-    case R.Pair(_, _, _, _) => v2c(tm)
-    case R.Con(_, _, _)     => v2c(tm)
+    case R.Var(_, _)    => v2c(tm)
+    case R.Global(_, _) => v2c(tm)
+    case R.IntLit(_)    => v2c(tm)
+    case R.Con(_, _, _) => v2c(tm)
 
     case R.App(_, _) =>
       val (f, as) = tm.flattenApps
@@ -742,13 +747,6 @@ object Staging:
       val y = fresh()
       val (qb, tb, ds2) = toIRComp(b, tail)(ns + (x -> y), defname, fresh)
       (qb, tb, ds1 ++ List((y, tv, qv)) ++ ds2)
-
-    case R.Fst(ty, t) =>
-      val (qt, tt, ds) = toIRValue(t)
-      (IR.Fst(ty, qt), ty, ds)
-    case R.Snd(ty, t) =>
-      val (qt, tt, ds) = toIRValue(t)
-      (IR.Snd(ty, qt), ty, ds)
 
     case R.Case(ty, rty, s, cs) =>
       val (qs, ts, ds) = toIRValue(s)
