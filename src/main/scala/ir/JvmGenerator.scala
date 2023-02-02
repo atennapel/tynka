@@ -131,7 +131,6 @@ object JvmGenerator:
   private val OBJECT_TYPE: Type = Type.getType("Ljava/lang/Object;")
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
-    case TUnit       => Type.BOOLEAN_TYPE
     case TBool       => Type.BOOLEAN_TYPE
     case TInt        => Type.INT_TYPE
     case TPair(_, _) => PAIR_TYPE
@@ -435,17 +434,6 @@ object JvmGenerator:
     case Snd(ty, v) =>
       gen(v); mg.getField(PAIR_TYPE, "snd", OBJECT_TYPE); mg.unbox(gen(ty))
 
-    case If(c, t, f) =>
-      val lFalse = new Label
-      val lEnd = new Label
-      gen(c)
-      mg.visitJumpInsn(IFEQ, lFalse)
-      gen(t)
-      mg.visitJumpInsn(GOTO, lEnd)
-      mg.visitLabel(lFalse)
-      gen(f)
-      mg.visitLabel(lEnd)
-
     case Case(ty, scrut, cs) =>
       val (jty, kind) = tcons(ty)
       kind match
@@ -529,7 +517,6 @@ object JvmGenerator:
 
     case Global(x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
 
-    case Unit       => mg.push(true)
     case IntLit(v)  => mg.push(v)
     case BoolLit(v) => mg.push(v)
 
@@ -581,7 +568,6 @@ object JvmGenerator:
         Method.getMethod("Integer valueOf (int)")
       )
     case TBool => mg.box(Type.BOOLEAN_TYPE)
-    case TUnit => mg.box(Type.BOOLEAN_TYPE)
     case TCon(x) =>
       tcons(x)._2 match
         case VoidLike => mg.box(Type.BOOLEAN_TYPE)

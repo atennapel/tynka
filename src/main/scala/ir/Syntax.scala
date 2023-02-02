@@ -7,14 +7,12 @@ object Syntax:
   type GName = String
 
   enum Ty:
-    case TUnit
     case TBool
     case TInt
     case TPair(fst: Ty, snd: Ty)
     case TCon(name: GName)
 
     override def toString: String = this match
-      case TUnit           => "()"
       case TBool           => "Bool"
       case TInt            => "Int"
       case TPair(fst, snd) => s"($fst, $snd)"
@@ -72,7 +70,6 @@ object Syntax:
     case Var(name: LName)
     case Global(name: GName, ty: Ty)
 
-    case Unit
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
 
@@ -83,7 +80,6 @@ object Syntax:
       case Var(x)       => s"'$x"
       case Global(x, _) => s"$x"
 
-      case Unit       => "()"
       case IntLit(v)  => s"$v"
       case BoolLit(v) => if v then "True" else "False"
 
@@ -102,7 +98,6 @@ object Syntax:
     case Fst(ty: Ty, tm: Value)
     case Snd(ty: Ty, tm: Value)
 
-    case If(c: Value, t: Let, f: Let)
     case Case(ty: GName, scrut: Value, cs: List[CaseEntry])
 
     override def toString: String = this match
@@ -112,7 +107,6 @@ object Syntax:
       case PrimApp(f, as)   => s"($f ${as.mkString(" ")})"
       case Fst(_, t)        => s"$t.1"
       case Snd(_, t)        => s"$t.2"
-      case If(c, t, f)      => s"(if $c then $t else $f)"
       case Case(ty, s, Nil) => s"(case $ty $s)"
       case Case(ty, s, cs) =>
         def csStr(c: CaseEntry) = c match

@@ -123,11 +123,6 @@ object Common:
     case PUnitType
     case PUnit
 
-    case PBool
-    case PTrue
-    case PFalse
-    case PCaseBool
-
     case PInt
     case PIntAdd
     case PIntSub
@@ -152,11 +147,6 @@ object Common:
 
       case PUnitType => "()"
       case PUnit     => "[]"
-
-      case PBool     => "Bool"
-      case PTrue     => "True"
-      case PFalse    => "False"
-      case PCaseBool => "caseBool"
 
       case PInt    => "Int"
       case PIntAdd => "intAdd"
@@ -183,11 +173,6 @@ object Common:
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)
-
-      case "Bool"     => Some(PBool)
-      case "True"     => Some(PTrue)
-      case "False"    => Some(PFalse)
-      case "caseBool" => Some(PCaseBool)
 
       case "Int"    => Some(PInt)
       case "intAdd" => Some(PIntAdd)

@@ -190,22 +190,7 @@ object Value:
       case _                         => false
 
   object VBool:
-    def apply(): Val = VRigid(HPrim(PBool), SId)
-    def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PBool), SId) => true
-      case _                         => false
-
-  object VTrue:
-    def apply(): Val = VRigid(HPrim(PTrue), SId)
-    def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PTrue), SId) => true
-      case _                         => false
-
-  object VFalse:
-    def apply(): Val = VRigid(HPrim(PFalse), SId)
-    def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PFalse), SId) => true
-      case _                          => false
+    def apply(): Val = VTCon(DontBind, TConClos(Nil, List(Nil, Nil)))
 
   object VInt:
     def apply(): Val = VRigid(HPrim(PInt), SId)

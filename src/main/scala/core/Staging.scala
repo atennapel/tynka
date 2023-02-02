@@ -156,7 +156,6 @@ object Staging:
     case Var(name: IR.LName, ty: IR.TDef)
     case Global(name: IR.GName, ty: IR.TDef)
 
-    case Unit
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
 
@@ -174,15 +173,12 @@ object Staging:
 
     case Fix(t1: IR.Ty, t2: IR.TDef, go: IR.LName, x: IR.LName, body: R, arg: R)
 
-    case If(ty: IR.TDef, c: R, t: R, f: R)
-
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
 
-      case Unit       => "()"
       case IntLit(v)  => s"$v"
-      case BoolLit(v) => if v then "True" else "False"
+      case BoolLit(b) => if b then "True" else "False"
 
       case App(f, a)          => s"($f $a)"
       case PrimApp(p, Nil)    => s"$p"
@@ -206,8 +202,6 @@ object Staging:
 
       case Fix(t1, t2, go, x, b, arg) =>
         s"(fix (($go : ${IR.TDef(t1, t2)}) ($x : $t1). $b) $arg)"
-
-      case If(_, c, t, f) => s"(if $c then $t else $f)"
 
     def lams(ps: List[(IR.LName, IR.Ty)], rt: IR.TDef): R =
       ps.foldRight[(R, IR.TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -234,9 +228,8 @@ object Staging:
       case Var(x, t)    => List((x, t))
       case Global(x, _) => Nil
 
-      case Unit       => Nil
       case IntLit(n)  => Nil
-      case BoolLit(_) => Nil
+      case BoolLit(n) => Nil
 
       case App(f, a)          => f.fvs ++ a.fvs
       case PrimApp(p, as)     => as.flatMap(_.fvs)
@@ -255,8 +248,6 @@ object Staging:
 
       case Fix(_, _, go, x, b, arg) =>
         b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
-
-      case If(_, c, t, f) => c.fvs ++ t.fvs ++ f.fvs
 
     def subst(sub: Map[IR.LName, R]): R =
       subst(
@@ -293,9 +284,8 @@ object Staging:
         case Var(x, _)    => sub.get(x).getOrElse(this)
         case Global(x, _) => this
 
-        case Unit       => this
         case IntLit(n)  => this
-        case BoolLit(_) => this
+        case BoolLit(n) => this
 
         case App(f, a)      => App(f.subst(sub, scope), a.subst(sub, scope))
         case PrimApp(p, as) => PrimApp(p, as.map(_.subst(sub, scope)))
@@ -333,9 +323,6 @@ object Staging:
             scope
           )
           Fix(t1, t2, g, x, b, arg.subst(sub, scope))
-
-        case If(t, c, a, b) =>
-          If(t, c.subst(sub, scope), a.subst(sub, scope), b.subst(sub, scope))
 
   // quotation
   private type DataMap =
@@ -391,8 +378,6 @@ object Staging:
     (i, s"D$i")
 
   private def quoteVTy(v: Val1)(implicit dm: DataMap): IR.Ty = v match
-    case VPrim1(PUnitType, Nil)     => IR.TUnit
-    case VPrim1(PBool, Nil)         => IR.TBool
     case VPrim1(PInt, Nil)          => IR.TInt
     case VPrim1(PTPair, List(a, b)) => IR.TPair(quoteVTy(a), quoteVTy(b))
     case VTConName1(x)              => IR.TCon(x)
@@ -425,10 +410,7 @@ object Staging:
         R.Var(x, t)
       case VGlobal0(x, t) => R.Global(x.expose, quoteFTy(t))
 
-      case VPrim0(PUnit)  => R.Unit
-      case VPrim0(PTrue)  => R.BoolLit(true)
-      case VPrim0(PFalse) => R.BoolLit(false)
-      case VIntLit0(v)    => R.IntLit(v)
+      case VIntLit0(v) => R.IntLit(v)
 
       case VApp0(f, a) =>
         def flatten(v: Val0): (Val0, List[Val0]) = v match
@@ -497,14 +479,6 @@ object Staging:
         val qarg = quoteRep(arg)
         R.Fix(ta, tb, g, x, qf, qarg)
 
-      case VSplicePrim0(PCaseBool, List(_, ty, b, t, f)) =>
-        val qty = quoteFTy(ty)
-        val qb = quoteRep(vsplice0(b))
-        val qt = quoteRep(vsplice0(t))
-        val qf = quoteRep(vsplice0(f))
-        R.If(qty, qb, qt, qf)
-      case VSplicePrim0(PCaseBool, as) => primOverApp(PCaseBool, 5, as)
-
       case _ => impossible()
 
   private def eta(ps: List[IR.Ty])(implicit
@@ -519,12 +493,11 @@ object Staging:
     (vs, spine)
   private def lambdaLift(tm: R)(implicit fresh: Fresh, emit: Emit): R =
     def isSmall(v: R): Boolean = v match
-      case R.Var(_, _)    => true
-      case R.Global(_, _) => true
-      case R.Unit         => true
-      case R.IntLit(_)    => true
-      case R.BoolLit(_)   => true
-      case _              => false
+      case R.Var(_, _)      => true
+      case R.Global(_, _)   => true
+      case R.IntLit(_)      => true
+      case R.Con(_, _, Nil) => true
+      case _                => false
     def go(tm: R): R = tm match
       case R.App(f, a) =>
         go(f) match
@@ -653,16 +626,6 @@ object Staging:
         addDef(RD.Def(gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
         R.App(gl, go(arg))
 
-      case R.If(IR.TDef(ps, rt), c, t, f) =>
-        go(c) match
-          case R.BoolLit(true)  => go(t)
-          case R.BoolLit(false) => go(f)
-          case gc =>
-            val (vs, spine) = eta(ps)
-            val et = t.apps(spine)
-            val ef = f.apps(spine)
-            R.If(IR.TDef(rt), gc, go(et), go(ef)).lams(vs, IR.TDef(rt))
-
       case tm => tm
     go(tm)
 
@@ -700,9 +663,7 @@ object Staging:
         val ty = t.ty
         (IR.Global(x, ty), ty, Nil)
 
-      case R.Unit       => (IR.Unit, IR.TUnit, Nil)
-      case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
-      case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
+      case R.IntLit(v) => (IR.IntLit(v), IR.TInt, Nil)
 
       case R.Pair(t1, t2, f, s) =>
         val (qf, tf, ds1) = toIRValue(f)
@@ -739,9 +700,7 @@ object Staging:
   ): (IR.Comp, IR.Ty, Lets) = tm match
     case R.Var(_, _)        => v2c(tm)
     case R.Global(_, _)     => v2c(tm)
-    case R.Unit             => v2c(tm)
     case R.IntLit(_)        => v2c(tm)
-    case R.BoolLit(_)       => v2c(tm)
     case R.Pair(_, _, _, _) => v2c(tm)
     case R.Con(_, _, _)     => v2c(tm)
 
@@ -790,12 +749,6 @@ object Staging:
     case R.Snd(ty, t) =>
       val (qt, tt, ds) = toIRValue(t)
       (IR.Snd(ty, qt), ty, ds)
-
-    case R.If(ty, c, t, f) =>
-      val (qc, tc, ds) = toIRValue(c)
-      val qt = toIRLet(t, tail)
-      val qf = toIRLet(f, tail)
-      (IR.If(qc, qt, qf), ty.ty, ds)
 
     case R.Case(ty, rty, s, cs) =>
       val (qs, ts, ds) = toIRValue(s)

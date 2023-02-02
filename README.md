@@ -21,11 +21,10 @@ TODO:
 - [x] Optimize `Unit`-like types
 - [x] Optimize `Void`-like types
 - [ ] Optimize finite types to `Int`
+- [ ] Remove primitive Pair type
 - [ ] Rename symbol names in JVM generator
 - [ ] Optimize single constructor types (product-like)
 - [ ] Add new-types
-- [ ] See if primitive `Unit` and `Bool` can be removed
 - [ ] Basic file importing
-- [ ] `Unit` on meta level?
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Closures, thunks, boxed types, JVM generics

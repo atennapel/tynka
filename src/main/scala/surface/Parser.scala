@@ -224,21 +224,7 @@ object Parser:
     private lazy val ifP: Parsley[Tm] =
       positioned(
         ("if" *> tm <~> "then" *> tm <~> "else" *> tm)
-          .map { case ((c, t), f) =>
-            App(
-              App(
-                App(
-                  caseBoolVar,
-                  c,
-                  ArgIcit(Expl)
-                ),
-                t,
-                ArgIcit(Expl)
-              ),
-              f,
-              ArgIcit(Expl)
-            )
-          }
+          .map { case ((c, t), f) => Case(c, List(f, t)) }
       )
 
     private lazy val app: Parsley[Tm] =

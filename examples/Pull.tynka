@@ -1,6 +1,3 @@
-def Unit = (A : Meta) -> A -> A
-def unit : Unit = \A x. x
-
 def List A = tcon R. () (A R)
 def Nil {A} : List A = con #0
 def (::) {A} hd tl : List A = con #1 hd tl
@@ -9,13 +6,13 @@ def VTy = Ty Val
 
 def Step A S = (vf : VF) (R : VTy) -> R -> (A -> S -> R) -> R
 
-def Pull A = (S : VTy) ** (step : S -> Step A S) ** (value : S) ** Unit
+def Pull A = (S : VTy) ** (step : S -> Step A S) ** (value : S) ** ()
 
 def fromList {A : VTy} (as : List A) : Pull A =
-  (List A, \as vf R stop yield. case as stop (\hd tl. yield hd tl), as, unit)
+  [List A, \as vf R stop yield. case as stop (\hd tl. yield hd tl), as]
 
 def map {A B : VTy} (f : A -> B) (p : Pull A) : Pull B =
-  (p.S, \as vf R stop yield. p.step as vf R stop (\a s. yield (f a) s), p.value, unit)
+  [p.S, \as vf R stop yield. p.step as vf R stop (\a s. yield (f a) s), p.value]
 
 def Push A = (vf: VF) (B : VTy) -> (A -> B -> B) -> B -> B
 

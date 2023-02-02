@@ -233,29 +233,8 @@ object Evaluation:
     // Ty Val -> Ty Val -> Ty Val
     case PTPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 
-    case PUnitType => (VVTy(), SMeta)
-    case PUnit     => (VUnitType(), SVTy())
-
-    case PBool  => (VVTy(), SMeta)
-    case PTrue  => (VBool(), SVTy())
-    case PFalse => (VBool(), SVTy())
-    // {vf : VF} -> {A : Ty vf} -> ^Bool -> ^A -> ^A -> ^A
-    case PCaseBool =>
-      (
-        vpiI(
-          "vf",
-          VVF(),
-          vf =>
-            vpiI(
-              "A",
-              VUTy(vf),
-              a =>
-                val qa = VLift(vf, a)
-                vfun(VLift(VVal(), VBool()), vfun(qa, vfun(qa, qa)))
-            )
-        ),
-        SMeta
-      )
+    case PUnitType => (VUMeta(), SMeta)
+    case PUnit     => (VUnitType(), SMeta)
 
     case PInt => (VVTy(), SMeta)
 
