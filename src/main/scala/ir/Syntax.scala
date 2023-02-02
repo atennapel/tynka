@@ -64,6 +64,9 @@ object Syntax:
         val pss = ps.map((x, t, v) => s"let $x : $t = $v; ").mkString("")
         s"($pss$body)"
 
+    def fv: Set[LName] =
+      ps.foldRight(body.fv) { case ((x, _, v), fv) => (fv - x) ++ v.fv }
+
   enum Value:
     case Var(name: LName)
     case Global(name: GName, ty: Ty)
@@ -82,6 +85,11 @@ object Syntax:
 
       case Con(t, i, Nil) => s"(con $t #$i)"
       case Con(t, i, as)  => s"(con $t #$i ${as.mkString(" ")})"
+
+    def fv: Set[LName] = this match
+      case Var(x)        => Set(x)
+      case Con(_, _, as) => as.flatMap(_.fv).toSet
+      case _             => Set.empty
   export Value.*
 
   type CaseEntry = (List[(LName, Ty)], Let)
@@ -105,4 +113,10 @@ object Syntax:
           case (xs, b) =>
             s"(${xs.map((x, t) => s"($x : $t)").mkString(" ")}. $b)"
         s"(case $ty $s ${cs.map(csStr).mkString(" ")})"
+
+    def fv: Set[LName] = this match
+      case Val(v)                 => v.fv
+      case GlobalApp(_, _, _, as) => as.flatMap(_.fv).toSet
+      case PrimApp(_, as)         => as.flatMap(_.fv).toSet
+      case Case(_, s, cs) => s.fv ++ cs.flatMap((xs, b) => b.fv -- xs.map(_._1))
   export Comp.*

@@ -484,13 +484,15 @@ object JvmGenerator:
               mg.visitJumpInsn(IFEQ, lNextCase)
             if ts.nonEmpty then mg.checkCast(contype)
             var newlocals = locals
+            val fv = b.fv
             ts.zipWithIndex.foreach { case ((x, t), i) =>
-              val dt = gen(t)
-              val local = mg.newLocal(dt)
-              mg.dup()
-              mg.getField(contype, s"a$i", dt)
-              mg.storeLocal(local)
-              newlocals = newlocals + (x -> local)
+              if fv.contains(x) then
+                val dt = gen(t)
+                val local = mg.newLocal(dt)
+                mg.dup()
+                mg.getField(contype, s"a$i", dt)
+                mg.storeLocal(local)
+                newlocals = newlocals + (x -> local)
             }
             mg.pop()
             gen(b)(mg, ctx, args, newlocals, methodStart)
@@ -502,13 +504,15 @@ object JvmGenerator:
           val contype = cons(ty)(i)._1
           if ts.nonEmpty then mg.checkCast(contype)
           var newlocals = locals
+          val fv = b.fv
           ts.zipWithIndex.foreach { case ((x, t), i) =>
-            val dt = gen(t)
-            val local = mg.newLocal(dt)
-            mg.dup()
-            mg.getField(contype, s"a$i", dt)
-            mg.storeLocal(local)
-            newlocals = newlocals + (x -> local)
+            if fv.contains(x) then
+              val dt = gen(t)
+              val local = mg.newLocal(dt)
+              mg.dup()
+              mg.getField(contype, s"a$i", dt)
+              mg.storeLocal(local)
+              newlocals = newlocals + (x -> local)
           }
           mg.pop()
           gen(b)(mg, ctx, args, newlocals, methodStart)

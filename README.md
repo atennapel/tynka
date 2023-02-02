@@ -22,9 +22,9 @@ TODO:
 - [x] Optimize finite types to `Int`
 - [x] Syntax sugar for datatype definitions
 - [x] Remove primitive Pair type
+- [x] Optimize constructor elimination (only bind used values)
 - [ ] Remove TPair
 - [ ] Optimize single constructor types (product-like)
-- [ ] Optimize constructor elimination (only bind used values)
 - [ ] Irregular/nested datatype recursion
 - [ ] Improve inference for if condition
 - [ ] Rename symbol names in JVM generator
