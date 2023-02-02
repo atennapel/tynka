@@ -39,6 +39,7 @@ object Staging:
     case VSplicePrim0(x: PrimName, as: List[Val1])
     case VApp0(f: Val0, a: Val0)
     case VLam0(fnty: Val1, body: Val0 => Val0)
+    case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
     case VPair0(fst: Val0, snd: Val0, ty: Val1)
     case VFst0(ty: Val1, t: Val0)
@@ -121,8 +122,15 @@ object Staging:
     case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
     case Prim(x)            => VPrim0(x)
     case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
-    case App(f, a, _)       => VApp0(eval0(f), eval0(a))
-    case Proj(t, p, ty)     => vproj0(eval0(t), p, eval1(ty))
+    case Fix(ty, rty, g, x, b, arg) =>
+      VFix0(
+        eval1(ty),
+        eval1(rty),
+        (v, w) => eval0(b)(Def0(Def0(env, v), w)),
+        eval0(arg)
+      )
+    case App(f, a, _)   => VApp0(eval0(f), eval0(a))
+    case Proj(t, p, ty) => vproj0(eval0(t), p, eval1(ty))
     case Let(x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
     case Pair(fst, snd, ty) => VPair0(eval0(fst), eval0(snd), eval1(ty))
@@ -164,7 +172,7 @@ object Staging:
     case Con(ty: IR.GName, ix: Int, as: List[R])
     case Case(ty: IR.GName, rty: IR.TDef, scrut: R, cs: List[RCase])
 
-    case Fix(t1: IR.Ty, t2: IR.TDef, go: IR.LName, x: IR.LName, body: R)
+    case Fix(t1: IR.Ty, t2: IR.TDef, go: IR.LName, x: IR.LName, body: R, arg: R)
 
     case If(ty: IR.TDef, c: R, t: R, f: R)
 
@@ -196,8 +204,8 @@ object Staging:
             s"(${xs.map((x, t) => s"($x : $t)").mkString(" ")}. $b)"
         s"(case $ty $s ${cs.map(csStr).mkString(" ")})"
 
-      case Fix(t1, t2, go, x, b) =>
-        s"(fix ($go : ${IR.TDef(t1, t2)}) ($x : $t1). $b)"
+      case Fix(t1, t2, go, x, b, arg) =>
+        s"(fix (($go : ${IR.TDef(t1, t2)}) ($x : $t1). $b) $arg)"
 
       case If(_, c, t, f) => s"(if $c then $t else $f)"
 
@@ -245,7 +253,8 @@ object Staging:
           b.fvs.filterNot((y, _) => xs.exists((z, _) => z == y))
         )
 
-      case Fix(_, _, go, x, b) => b.fvs.filterNot((y, _) => y == go || y == x)
+      case Fix(_, _, go, x, b, arg) =>
+        b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
 
       case If(_, c, t, f) => c.fvs ++ t.fvs ++ f.fvs
 
@@ -316,14 +325,14 @@ object Staging:
             })
           )
 
-        case Fix(t1, t2, g0, x0, b0) =>
+        case Fix(t1, t2, g0, x0, b0, arg) =>
           val (List((g, _), (x, _)), b) = underN(
             List((g0, IR.TDef(t1, t2)), (x0, IR.TDef(t1))),
             b0,
             sub,
             scope
           )
-          Fix(t1, t2, g, x, b)
+          Fix(t1, t2, g, x, b, arg.subst(sub, scope))
 
         case If(t, c, a, b) =>
           If(t, c.subst(sub, scope), a.subst(sub, scope), b.subst(sub, scope))
@@ -474,23 +483,19 @@ object Staging:
           })
         R.Case(dty, quoteFTy(rty), quoteRep(scrut), ecs)
 
-      case VSplicePrim0(PFix, List(pty, _, rty, b)) =>
-        val qpty = quoteVTy(pty)
-        val qrty = quoteFTy(rty)
-        val go = fresh()
+      case VFix0(ty, rty, b, arg) =>
+        val ta = quoteVTy(ty)
+        val tb = quoteFTy(rty)
+        val g = fresh()
         val x = fresh()
-        val qb = quoteRep(
-          vsplice0(
-            vapp1(vapp1(b, VQuote1(VVar0(l))), VQuote1(VVar0(l + 1)))
-          )
-        )(
+        val qf = quoteRep(b(VVar0(l), VVar0(l + 1)))(
           l + 2,
-          (x, IR.TDef(qpty)) :: (go, IR.TDef(qpty, qrty)) :: ns,
+          (x, IR.TDef(ta)) :: (g, IR.TDef(ta, tb)) :: ns,
           fresh,
           dm
         )
-        R.Fix(qpty, qrty, go, x, qb)
-      case VSplicePrim0(PFix, as) => primOverApp(PFix, 4, as)
+        val qarg = quoteRep(arg)
+        R.Fix(ta, tb, g, x, qf, qarg)
 
       case VSplicePrim0(PCaseBool, List(_, ty, b, t, f)) =>
         val qty = quoteFTy(ty)
@@ -609,7 +614,7 @@ object Staging:
             R.Case(ty, rty, gscrut, cs.map((xs, b) => (xs, go(b.apps(spine)))))
               .lams(vs, IR.TDef(rty.rt))
 
-      case R.Fix(t1, t2, g, x, b0) =>
+      case R.Fix(t1, t2, g, x, b0, arg) =>
         val (vs, spine) = eta(t2.ps)
         val fv = b0.fvs
           .filterNot((y, _) => y == g || y == x)
@@ -625,7 +630,7 @@ object Staging:
           .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
         val b = go(b0.apps(spine).lams(nps, IR.TDef(t2.rt)).subst(Map(g -> gl)))
         addDef(RD.Def(gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
-        gl
+        R.App(gl, go(arg))
 
       case R.If(IR.TDef(ps, rt), c, t, f) =>
         go(c) match

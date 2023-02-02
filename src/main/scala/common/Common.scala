@@ -120,8 +120,6 @@ object Common:
     case PTFun
     case PTPair
 
-    case PFix
-
     case PUnitType
     case PUnit
 
@@ -142,8 +140,6 @@ object Common:
 
       case PTFun  => "TFun"
       case PTPair => "TPair"
-
-      case PFix => "fix"
 
       case PUnitType => "()"
       case PUnit     => "[]"
@@ -166,8 +162,6 @@ object Common:
 
       case "TFun"  => Some(PTFun)
       case "TPair" => Some(PTPair)
-
-      case "fix" => Some(PFix)
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)

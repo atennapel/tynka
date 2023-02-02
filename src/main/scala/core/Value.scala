@@ -16,6 +16,11 @@ object Value:
 
   final case class TConClos(env: Env, cs: List[List[Tm]])
 
+  enum Clos2:
+    case CClos2(env: Env, tm: Tm)
+    case CFun2(fn: (Val, Val) => Val)
+  export Clos2.*
+
   enum Spine:
     case SId
     case SApp(spine: Spine, arg: Val, icit: Icit)
@@ -51,6 +56,7 @@ object Value:
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
+    case VFix(ty: VTy, rty: VTy, g: Bind, x: Bind, b: Clos2, arg: Val)
 
     case VSigma(name: Bind, ty: VTy, body: Clos)
     case VPair(fst: Val, snd: Val, ty: VTy)

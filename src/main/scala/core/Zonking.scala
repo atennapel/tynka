@@ -54,6 +54,15 @@ object Zonking:
     case Pi(x, i, t, b)   => Pi(x, i, zonk(t), zonkLift(b))
     case Lam(x, i, ty, b) => Lam(x, i, zonk(ty), zonkLift(b))
     case App(_, _, _)     => quoteVT(zonkSp(t))
+    case Fix(ty, rty, g, x, b, arg) =>
+      Fix(
+        zonk(ty),
+        zonk(rty),
+        g,
+        x,
+        zonk(b)(l + 2, VVar(l + 1) :: VVar(l) :: e),
+        zonk(arg)
+      )
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
     case Pair(a, b, t)  => Pair(zonk(a), zonk(b), zonk(t))

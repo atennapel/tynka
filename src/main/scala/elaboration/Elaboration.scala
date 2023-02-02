@@ -459,7 +459,7 @@ object Elaboration:
           case VTCon(_, b) => b(sty)
           case _ =>
             error(
-              s"unambigious datatype expected in case but got ${ctx.pretty(sty)}: $tm"
+              s"ambigious datatype in $tm: ${ctx.pretty(sty)}"
             )
         if cs.size != vcs.size then
           error(s"invalid number of cases, expected ${vcs.size}: $tm")
@@ -470,6 +470,15 @@ object Elaboration:
           check(c, cty, STy(rvf))
         }
         Case(ctx.quote(sty), ctx.quote(ty), es, ecs)
+
+      case (S.Fix(g, x, b, arg), _) if !stage.isMeta =>
+        val STy(vf) = stage: @unchecked
+        val (earg, pty) = infer(arg, SVTy())
+        val eb =
+          check(b, ty, STy(vf))(
+            ctx.bind(g, VTFun(pty, vf, ty), SFTy()).bind(x, pty, SVTy())
+          )
+        Fix(ctx.quote(pty), ctx.quote(ty), g, x, eb, earg)
 
       case (S.Quote(t), VLift(vf, a)) => check(t, a, STy(vf)).quote
       case (t, VLift(vf, a))          => check(t, a, STy(vf)).quote
@@ -574,6 +583,16 @@ object Elaboration:
         val t = newMeta(ty, s)
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, ty, s))
         (t, ty)
+
+      case S.Fix(g, x, b, arg) if !s.isMeta =>
+        val STy(vf) = s: @unchecked
+        val (earg, vty) = infer(arg, SVTy())
+        val rty = newMeta(VUTy(vf), SMeta)
+        val vrty = ctx.eval(rty)
+        val ft = VTFun(vty, vf, vrty)
+        val eb =
+          check(b, vrty, STy(vf))(ctx.bind(g, ft, SFTy()).bind(x, vty, SVTy()))
+        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty)
 
       case _ =>
         val (t, a, si) = insert(infer(tm))
@@ -792,6 +811,16 @@ object Elaboration:
         val vm = ctx.eval(m)
         val etm = check(tm, vm, STy(vf))
         (etm, vm, STy(vf))
+
+      case S.Fix(g, x, b, arg) =>
+        val (earg, vty) = infer(arg, SVTy())
+        val vf = ctx.eval(newVF())
+        val rty = newMeta(VUTy(vf), SMeta)
+        val vrty = ctx.eval(rty)
+        val ft = VTFun(vty, vf, vrty)
+        val eb =
+          check(b, vrty, STy(vf))(ctx.bind(g, ft, SFTy()).bind(x, vty, SVTy()))
+        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, STy(vf))
 
       case S.Lift(a) =>
         val vf = newVF()

@@ -30,7 +30,8 @@ object Parser:
         "Ty",
         "tcon",
         "con",
-        "case"
+        "case",
+        "fix"
       ),
       operators = Set(
         "=",
@@ -133,7 +134,9 @@ object Parser:
     private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
 
     lazy val tm: Parsley[Tm] = positioned(
-      attempt(piSigma) <|> let <|> lam <|> ifP <|> tcon <|> con <|> caseP <|>
+      attempt(
+        piSigma
+      ) <|> let <|> lam <|> ifP <|> tcon <|> con <|> caseP <|> fix <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -172,6 +175,16 @@ object Parser:
     private lazy val caseP: Parsley[Tm] = positioned(
       ("case" *> atom <~> many(atom) <~> option(lam)).map {
         case ((scrut, cs), opt) => Case(scrut, cs ++ opt)
+      }
+    )
+
+    private lazy val fix: Parsley[Tm] = positioned(
+      ("fix" *> "(" *> bind <~> bind <~> "." *> tm <* ")" <~> atom <~> many(
+        arg
+      ) <~> option(lam)).map { case (((((g, x), b), arg), args), opt) =>
+        val fn = Fix(g, x, b, arg)
+        (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
+          .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
       }
     )
 

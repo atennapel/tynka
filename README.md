@@ -14,9 +14,9 @@ TODO:
 - [x] JVM bytecode generation
 - [x] Tail recursion
 - [x] Datatypes
-- [ ] Improve `fix` type inference
+- [x] Improve `fix` type inference
+- [ ] Application of quoted functions: ^(A -> B) @ ^A
+- [ ] More primitive operations for Int
 - [ ] See if primitive Unit and Bool can be removed
 - [ ] Fix weakening bug in pretty printing `case`
-- [ ] More primitive operations for Int
 - [ ] Keep generics signature in JVM bytecode output
-- [ ] Application of quoted functions: ^(A -> B) @ ^A

@@ -18,6 +18,11 @@ object Evaluation:
     def apply(v: Val): List[List[Val]] =
       c.cs.map(as => as.map(t => eval(t)(v :: c.env)))
 
+  extension (c: Clos2)
+    def apply(v: Val, w: Val): Val = c match
+      case CClos2(env, tm) => eval(tm)(w :: v :: env)
+      case CFun2(f)        => f(v, w)
+
   // evaluation
   private def vglobal(x: Name): Val =
     val value = getGlobal(x).get.value
@@ -110,6 +115,8 @@ object Evaluation:
     case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
     case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
     case App(f, a, i)     => vapp(eval(f), eval(a), i)
+    case Fix(ty, rty, g, x, b, arg) =>
+      VFix(eval(ty), eval(rty), g, x, CClos2(env, b), eval(arg))
 
     case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
     case Pair(a, b, ty) => VPair(eval(a), eval(b), eval(ty))
@@ -185,6 +192,15 @@ object Evaluation:
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
         Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
+      case VFix(ty, rty, g, x, b, arg) =>
+        Fix(
+          quote(ty, unfold),
+          quote(rty, unfold),
+          g,
+          x,
+          quote(b(VVar(l), VVar(l + 1)), unfold)(l + 2),
+          quote(arg, unfold)
+        )
 
       case VPair(fst, snd, t) =>
         Pair(quote(fst, unfold), quote(snd, unfold), quote(t, unfold))
@@ -216,29 +232,6 @@ object Evaluation:
       (vfun(VVTy(), vpiI("vf", VVF(), vf => vfun(VUTy(vf), VFTy()))), SMeta)
     // Ty Val -> Ty Val -> Ty Val
     case PTPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
-
-    // {A : Ty Val} -> {vf : VF} -> {B : Ty vf} -> ((^A -> ^B) -> ^A -> ^B) -> ^(A -> B)
-    case PFix =>
-      (
-        vpiI(
-          "A",
-          VVTy(),
-          a =>
-            vpiI(
-              "vf",
-              VVF(),
-              vf =>
-                vpiI(
-                  "B",
-                  VUTy(vf),
-                  b =>
-                    val f = vfun(VLift(VVal(), a), VLift(vf, b))
-                    vfun(vfun(f, f), VLift(VFun(), VTFun(a, vf, b)))
-                )
-            )
-        ),
-        SMeta
-      )
 
     case PUnitType => (VVTy(), SMeta)
     case PUnit     => (VUnitType(), SVTy())

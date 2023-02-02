@@ -187,6 +187,15 @@ object Unification:
       case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
+      case VFix(ty, rty, g, x, b, arg) =>
+        Fix(
+          go(ty),
+          go(rty),
+          g,
+          x,
+          go(b(VVar(psub.cod), VVar(psub.lift.cod)))(psub.lift.lift),
+          go(arg)
+        )
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
@@ -353,6 +362,12 @@ object Unification:
       case (VIntLit(a), VIntLit(b)) if a == b => ()
       case (VCon(_, i, as1), VCon(_, j, as2)) if i == j =>
         as1.zip(as2).foreach((a, b) => unify(a, b))
+      case (VFix(a1, b1, _, _, f1, arg1), VFix(a2, b2, _, _, f2, arg2)) =>
+        unify(a1, a2); unify(b1, b2)
+        val v = VVar(l)
+        val w = VVar(l + 1)
+        unify(f1(v, w), f2(v, w))(l + 1)
+        unify(arg1, arg2)
       case (VIrrelevant, _) => ()
       case (_, VIrrelevant) => ()
 
