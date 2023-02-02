@@ -35,6 +35,7 @@ object JvmGenerator:
     case VoidLike
     case UnitLike
     case BoolLike
+    case FiniteLike(n: Int)
     case ProductLike
     case ADT
   import DataKind.*
@@ -137,10 +138,11 @@ object JvmGenerator:
     case TCon(x) =>
       val (t, k) = tcons(x)
       k match
-        case UnitLike => Type.BOOLEAN_TYPE
-        case BoolLike => Type.BOOLEAN_TYPE
-        case VoidLike => Type.BOOLEAN_TYPE
-        case _        => t
+        case UnitLike      => Type.BOOLEAN_TYPE
+        case BoolLike      => Type.BOOLEAN_TYPE
+        case VoidLike      => Type.BOOLEAN_TYPE
+        case FiniteLike(_) => Type.INT_TYPE
+        case _             => t
 
   private def constantValue(e: Let): Option[Any] = e match
     case Let(Nil, Val(v)) => constantValue(v)
@@ -211,15 +213,19 @@ object JvmGenerator:
       mg.endMethod()
     case DData(x, cs) =>
       val kind = cs match
-        case Nil            => VoidLike
-        case List(Nil)      => UnitLike
-        case List(Nil, Nil) => BoolLike
-        case List(_)        => ProductLike
-        case _              => ADT
+        case Nil                        => VoidLike
+        case List(Nil)                  => UnitLike
+        case List(Nil, Nil)             => BoolLike
+        case cs if cs.forall(_.isEmpty) => FiniteLike(cs.size)
+        case List(_)                    => ProductLike
+        case _                          => ADT
       tcons += (x -> (Type.getType(s"L${ctx.moduleName}$$$x;"), kind))
       kind match
-        case BoolLike => ()
-        case _        => genData(x, cs)
+        case VoidLike      => ()
+        case UnitLike      => ()
+        case BoolLike      => ()
+        case FiniteLike(_) => ()
+        case _             => genData(x, cs)
 
   private def genData(dx: GName, cs: List[List[Ty]])(implicit
       cw: ClassWriter,
@@ -456,6 +462,18 @@ object JvmGenerator:
           mg.visitLabel(lFalse)
           gen(cs(1)._2)
           mg.visitLabel(lEnd)
+        case FiniteLike(k) =>
+          if k <= 2 then impossible()
+          gen(scrut)
+          val labels = (0 until k).map(_ => mg.newLabel())
+          mg.visitTableSwitchInsn(0, k - 1, labels.last, labels.toArray*)
+          val lEnd = mg.newLabel()
+          labels.zipWithIndex.foreach { (l, i) =>
+            mg.visitLabel(l)
+            gen(cs(i)._2)
+            mg.visitJumpInsn(GOTO, lEnd)
+          }
+          mg.visitLabel(lEnd)
         case _ =>
           gen(scrut)
           val lEnd = new Label
@@ -537,9 +555,10 @@ object JvmGenerator:
     case Con(ty, i, as) =>
       val (jty, kind) = tcons(ty)
       (kind, as) match
-        case (VoidLike, _) => impossible()
-        case (UnitLike, _) => mg.push(false)
-        case (BoolLike, _) => mg.push(i != 0)
+        case (VoidLike, _)      => impossible()
+        case (UnitLike, _)      => mg.push(false)
+        case (BoolLike, _)      => mg.push(i != 0)
+        case (FiniteLike(_), _) => mg.push(i)
         case (_, Nil) =>
           val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
           mg.getStatic(
@@ -573,5 +592,10 @@ object JvmGenerator:
         case VoidLike => mg.box(Type.BOOLEAN_TYPE)
         case UnitLike => mg.box(Type.BOOLEAN_TYPE)
         case BoolLike => mg.box(Type.BOOLEAN_TYPE)
-        case _        =>
+        case FiniteLike(_) =>
+          mg.invokeStatic(
+            Type.getType(classOf[Integer]),
+            Method.getMethod("Integer valueOf (int)")
+          )
+        case _ =>
     case _ =>

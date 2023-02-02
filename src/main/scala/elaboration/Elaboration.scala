@@ -457,6 +457,8 @@ object Elaboration:
         val (es, sty) = infer(s, SVTy())
         val vcs = force(sty) match
           case VTCon(_, b) => b(sty)
+          case _ if cs eq Nil =>
+            unify(sty, VTCon(DontBind, TConClos(Nil, Nil))); Nil
           case _ =>
             error(
               s"ambigious datatype in $tm: ${ctx.pretty(sty)}"

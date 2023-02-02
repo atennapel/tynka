@@ -1,0 +1,28 @@
+def Void = tcon _.
+def absurd {vf} {A : Ty vf} (x : Void) : A = case x
+
+def Unit = tcon _. ()
+def U: Unit = con #0
+
+def Bool = tcon _. () ()
+def False : Bool = con #0
+def True : Bool = con #1
+
+def (!) (a : Bool) = if a then False else True
+def (&&) (a b : Bool) = if a then b else False
+def (||) (a b : Bool) = if a then True else b
+
+def (+) a b = intAdd a b
+def (-) a b = intSub a b
+def (*) a b = intMul a b
+def (/) a b = intDiv a b
+def (%) a b = intMod a b
+
+def neg n = 0 - n
+
+def (==) a b : Bool = intEq a b
+def (!=) a b : Bool = intNeq a b
+def (<) a b : Bool = intLt a b
+def (>) a b : Bool = intGt a b
+def (<=) a b : Bool = intLeq a b
+def (>=) a b : Bool = intGeq a b

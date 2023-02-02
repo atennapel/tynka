@@ -20,8 +20,11 @@ TODO:
 - [x] Optimize `Bool`-like types
 - [x] Optimize `Unit`-like types
 - [x] Optimize `Void`-like types
-- [ ] Optimize finite types to `Int`
+- [x] Optimize finite types to `Int`
 - [ ] Remove primitive Pair type
+- [ ] Syntax sugar for datatype definitions
+- [ ] Irregular/nested datatype recursion
+- [ ] Improve inference for if condition
 - [ ] Rename symbol names in JVM generator
 - [ ] Optimize single constructor types (product-like)
 - [ ] Add new-types
