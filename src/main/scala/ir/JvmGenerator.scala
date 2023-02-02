@@ -382,19 +382,30 @@ object JvmGenerator:
         new Method(x, gen(rt), ps.map(gen).toArray)
       )
 
-    case PrimApp(PIntLeq, List(a, b)) =>
+    case PrimApp(PIntAdd, List(a, b)) => gen(a); gen(b); mg.visitInsn(IADD)
+    case PrimApp(PIntSub, List(a, b)) => gen(a); gen(b); mg.visitInsn(ISUB)
+    case PrimApp(PIntMul, List(a, b)) => gen(a); gen(b); mg.visitInsn(IMUL)
+    case PrimApp(PIntDiv, List(a, b)) => gen(a); gen(b); mg.visitInsn(IDIV)
+    case PrimApp(PIntMod, List(a, b)) => gen(a); gen(b); mg.visitInsn(IREM)
+    case PrimApp(p, List(a, b)) =>
+      val op = p match
+        case PIntEq  => GeneratorAdapter.EQ
+        case PIntNeq => GeneratorAdapter.NE
+        case PIntLt  => GeneratorAdapter.LT
+        case PIntGt  => GeneratorAdapter.GT
+        case PIntLeq => GeneratorAdapter.LE
+        case PIntGeq => GeneratorAdapter.GE
+        case _       => impossible()
       gen(a); gen(b)
       val skip = mg.newLabel()
       val end = mg.newLabel()
-      mg.ifICmp(GeneratorAdapter.LE, skip)
+      mg.ifICmp(op, skip)
       mg.push(false)
       mg.visitJumpInsn(GOTO, end)
       mg.visitLabel(skip)
       mg.push(true)
       mg.visitLabel(end)
-    case PrimApp(PIntSub, List(a, b)) => gen(a); gen(b); mg.visitInsn(ISUB)
-    case PrimApp(PIntMul, List(a, b)) => gen(a); gen(b); mg.visitInsn(IMUL)
-    case PrimApp(_, _)                => impossible()
+    case PrimApp(_, _) => impossible()
 
     case Fst(ty, v) =>
       gen(v); mg.getField(PAIR_TYPE, "fst", OBJECT_TYPE); mg.unbox(gen(ty))

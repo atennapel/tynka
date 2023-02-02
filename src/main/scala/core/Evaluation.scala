@@ -258,9 +258,21 @@ object Evaluation:
       )
 
     case PInt => (VVTy(), SMeta)
-    case PIntLeq =>
-      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VBool())), SFTy())
-    case PIntSub =>
-      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
-    case PIntMul =>
-      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
+
+    case PIntAdd => intOpType
+    case PIntSub => intOpType
+    case PIntMul => intOpType
+    case PIntDiv => intOpType
+    case PIntMod => intOpType
+
+    case PIntEq  => intOpTypeBool
+    case PIntNeq => intOpTypeBool
+    case PIntLt  => intOpTypeBool
+    case PIntGt  => intOpTypeBool
+    case PIntLeq => intOpTypeBool
+    case PIntGeq => intOpTypeBool
+
+  private val intOpType =
+    (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
+  private val intOpTypeBool =
+    (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VBool())), SFTy())

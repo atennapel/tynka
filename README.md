@@ -15,8 +15,7 @@ TODO:
 - [x] Tail recursion
 - [x] Datatypes
 - [x] Improve `fix` type inference
-- [ ] Application of quoted functions: ^(A -> B) @ ^A
-- [ ] More primitive operations for Int
-- [ ] See if primitive Unit and Bool can be removed
+- [x] More primitive operations for `Int`
+- [ ] See if primitive `Unit` and `Bool` can be removed
 - [ ] Fix weakening bug in pretty printing `case`
 - [ ] Keep generics signature in JVM bytecode output
