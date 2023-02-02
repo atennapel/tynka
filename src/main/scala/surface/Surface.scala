@@ -36,18 +36,22 @@ object Syntax:
   enum Tm:
     case Var(name: Name)
     case Let(name: Name, meta: Boolean, ty: Option[Ty], value: Tm, body: Tm)
-    case U(stage: Stage[Ty])
+    case U(stage: Stage[Tm])
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
-    case Fix(go: Name, name: Name, body: Tm, arg: Tm)
+    case Fix(g: Bind, x: Bind, b: Tm, arg: Tm)
 
     case Sigma(name: Bind, ty: Ty, body: Ty)
     case Pair(fst: Tm, snd: Tm)
     case Proj(tm: Tm, proj: ProjType)
 
     case IntLit(value: Int)
+
+    case TCon(name: Bind, cons: List[List[Ty]])
+    case Con(ix: Int, args: List[Tm])
+    case Case(scrut: Tm, cs: List[Tm])
 
     case Lift(ty: Ty)
     case Quote(tm: Tm)
@@ -66,8 +70,7 @@ object Syntax:
       case Let(x, m, None, v, b) => s"(let $x ${if m then "" else ":"}= $v; $b)"
       case Let(x, m, Some(t), v, b) =>
         s"(let $x : $t ${if m then "" else ":"}= $v; $b)"
-      case U(S0(vf)) => s"(Ty $vf)"
-      case U(S1)     => "Meta"
+      case U(s) => s"$s"
 
       case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
       case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"
@@ -79,7 +82,7 @@ object Syntax:
       case App(f, a, ArgNamed(x))          => s"($f {$x = $a})"
       case App(f, a, ArgIcit(Expl))        => s"($f $a)"
       case App(f, a, ArgIcit(Impl))        => s"($f {$a})"
-      case Fix(go, x, b, arg)              => s"(fix ($go $x. $b) $arg)"
+      case Fix(g, x, b, arg)               => s"(fix ($g $x. $b) $arg)"
 
       case Sigma(DontBind, t, b) => s"($t ** $b)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
@@ -87,6 +90,14 @@ object Syntax:
       case Proj(t, p)            => s"$t$p"
 
       case IntLit(n) => s"$n"
+
+      case TCon(x, Nil) => s"(tcon $x.)"
+      case TCon(x, cs) =>
+        s"(tcon $x. ${cs.map(as => s"(${as.mkString(" ")})").mkString(" ")})"
+      case Con(i, Nil)  => s"(con #$i)"
+      case Con(i, as)   => s"(con #$i ${as.mkString(" ")})"
+      case Case(s, Nil) => s"(case $s)"
+      case Case(s, cs)  => s"(case $s ${cs.mkString(" ")})"
 
       case Lift(t)   => s"^$t"
       case Quote(t)  => s"`$t"

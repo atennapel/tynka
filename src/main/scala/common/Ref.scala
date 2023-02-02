@@ -10,12 +10,12 @@ final case class Ref[T](var value: T):
     value = f(value)
     this
 
-  def setGetOld(x: T): T =
+  def setGetPrevious(x: T): T =
     val cache = value
     value = x
     cache
 
-  def updateGetOld(f: T => T): T =
+  def updateGetPrevious(f: T => T): T =
     val cache = value
     value = f(value)
     cache

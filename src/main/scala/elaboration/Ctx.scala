@@ -17,7 +17,7 @@ import core.Locals.*
 
 import scala.annotation.tailrec
 
-type Types = Map[Name, (Lvl, VTy, Stage[VTy])]
+type Types = Map[Name, (Lvl, VTy, VStage)]
 
 final case class Ctx(
     lvl: Lvl,
@@ -37,7 +37,7 @@ final case class Ctx(
   def bind(
       x: Bind,
       ty: VTy,
-      stage: Stage[VTy],
+      stage: VStage,
       inserted: Boolean = false
   ): Ctx =
     val newtypes = x match
@@ -56,8 +56,8 @@ final case class Ctx(
       x: Name,
       ty: VTy,
       qty: Ty,
-      stage: Stage[VTy],
-      qstage: Stage[Ty],
+      stage: VStage,
+      qstage: CStage,
       value: Val,
       qvalue: Tm
   ): Ctx =
@@ -71,26 +71,27 @@ final case class Ctx(
     )
 
   def eval(tm: Tm): Val = eval0(tm)(env)
-  def eval(s: Stage[Ty]): Stage[VTy] = eval0(s)(env)
+  def eval(s: CStage): VStage = s.map(eval)
   def quote(v: Val): Tm = quote0(v)(lvl)
-  def quote(s: Stage[VTy]): Stage[Ty] = quoteS0(s)(lvl)
+  def quote(s: VStage): CStage = quoteS0(s)(lvl)
   def zonk(t: Tm): Tm = zonk0(t)(lvl, env)
   def zonk(v: Val): Tm = zonk(quote(v))
-  def zonk(v: Stage[Ty]): Stage[Ty] = zonk0(v)(lvl, env)
+  def zonk(s: VStage): CStage = s.map(zonk)
 
   def close(v: Val): Clos = Clos(quote0(v)(lvl + 1))(env)
   def inst(c: Clos): Val = c(VVar(lvl))
 
   def pretty(tm: Tm): String = pretty0(zonk(tm))(names)
   def pretty(v: Val): String = pretty(quote(v))
-  def pretty(s: Stage[VTy]): String = pretty0(zonk(quote(s)))(names)
+  def pretty(s: VStage): String = pretty0(s.map(zonk))(names)
+  def prettyS(s: CStage): String = pretty0(s.map(zonk))(names)
 
   def closeTy(b: Ty): Ty = locals.closeTy(b)
   def closeVTy(b: VTy): VTy =
     val t = closeTy(quote(b))
     eval0(t)(Nil)
 
-  def lookup(x: Name): Option[(Ix, VTy, Stage[VTy])] =
+  def lookup(x: Name): Option[(Ix, VTy, VStage)] =
     types.get(x).map((k, ty, s) => (k.toIx(lvl), ty, s))
 
   def prettyLocals: String =

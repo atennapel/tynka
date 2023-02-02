@@ -33,3 +33,4 @@ metals.sbt
 
 *.txt
 *.class
+test.tynka

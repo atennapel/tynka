@@ -77,6 +77,7 @@ object Common:
       case Impl => s"{$x}"
   export Icit.*
 
+  // pruning
   type Pruning = List[Option[Icit]]
 
   opaque type RevPruning = Pruning
@@ -94,26 +95,30 @@ object Common:
 
   // stages
   enum Stage[+VF]:
-    case S0(vf: VF)
-    case S1 extends Stage[Nothing]
+    case SMeta extends Stage[Nothing]
+    case STy(vf: VF)
 
-    def map[R](f: VF => R): Stage[R] = this match
-      case S0(x) => S0(f(x))
-      case S1    => S1
+    override def toString: String = this match
+      case SMeta   => "Meta"
+      case STy(vf) => s"Ty $vf"
 
-    def isS0: Boolean = this match
-      case S0(_) => true
+    def map[VF2](f: VF => VF2): Stage[VF2] = this match
+      case SMeta   => SMeta
+      case STy(vf) => STy(f(vf))
+
+    def isMeta: Boolean = this match
+      case SMeta => true
       case _     => false
   export Stage.*
 
   // primitives
   enum PrimName:
     case PVF
-    case PV
-    case PF
+    case PVal
+    case PFun
 
-    case PVoid
-    case PAbsurd
+    case PTFun
+    case PTPair
 
     case PUnitType
     case PUnit
@@ -124,35 +129,17 @@ object Common:
     case PCaseBool
 
     case PInt
-    case PPrimIntAdd
-    case PPrimIntMul
-    case PPrimIntSub
-    case PPrimIntDiv
-    case PPrimIntMod
-    case PPrimIntEq
-    case PPrimIntNeq
-    case PPrimIntLt
-    case PPrimIntGt
-    case PPrimIntLeq
-    case PPrimIntGeq
-
-    case PList
-    case PNil
-    case PCons
-    case PCaseList
-
-    case PEither
-    case PLeft
-    case PRight
-    case PCaseEither
+    case PIntLeq
+    case PIntSub
+    case PIntMul
 
     override def toString: String = this match
-      case PVF => "VF"
-      case PV  => "Val"
-      case PF  => "Fun"
+      case PVF  => "VF"
+      case PVal => "Val"
+      case PFun => "Fun"
 
-      case PVoid   => "Void"
-      case PAbsurd => "absurd"
+      case PTFun  => "TFun"
+      case PTPair => "TPair"
 
       case PUnitType => "()"
       case PUnit     => "[]"
@@ -162,51 +149,19 @@ object Common:
       case PFalse    => "False"
       case PCaseBool => "caseBool"
 
-      case PInt        => "Int"
-      case PPrimIntAdd => "primIntAdd"
-      case PPrimIntMul => "primIntMul"
-      case PPrimIntSub => "primIntSub"
-      case PPrimIntDiv => "primIntDiv"
-      case PPrimIntMod => "primIntMod"
-      case PPrimIntEq  => "primIntEq"
-      case PPrimIntNeq => "primIntNeq"
-      case PPrimIntLt  => "primIntLt"
-      case PPrimIntGt  => "primIntGt"
-      case PPrimIntLeq => "primIntLeq"
-      case PPrimIntGeq => "primIntGeq"
-
-      case PList     => "List"
-      case PNil      => "Nil"
-      case PCons     => "::"
-      case PCaseList => "caseList"
-
-      case PEither     => "Either"
-      case PLeft       => "Left"
-      case PRight      => "Right"
-      case PCaseEither => "caseEither"
-
-    def isBinOp: Boolean = this match
-      case PPrimIntAdd => true
-      case PPrimIntMul => true
-      case PPrimIntSub => true
-      case PPrimIntDiv => true
-      case PPrimIntMod => true
-      case PPrimIntEq  => true
-      case PPrimIntNeq => true
-      case PPrimIntLt  => true
-      case PPrimIntGt  => true
-      case PPrimIntLeq => true
-      case PPrimIntGeq => true
-      case _           => false
+      case PInt    => "Int"
+      case PIntLeq => "intLeq"
+      case PIntSub => "intSub"
+      case PIntMul => "intMul"
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
       case "VF"  => Some(PVF)
-      case "Val" => Some(PV)
-      case "Fun" => Some(PF)
+      case "Val" => Some(PVal)
+      case "Fun" => Some(PFun)
 
-      case "Void"   => Some(PVoid)
-      case "absurd" => Some(PAbsurd)
+      case "TFun"  => Some(PTFun)
+      case "TPair" => Some(PTPair)
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)
@@ -216,27 +171,9 @@ object Common:
       case "False"    => Some(PFalse)
       case "caseBool" => Some(PCaseBool)
 
-      case "Int"        => Some(PInt)
-      case "primIntAdd" => Some(PPrimIntAdd)
-      case "primIntMul" => Some(PPrimIntMul)
-      case "primIntSub" => Some(PPrimIntSub)
-      case "primIntDiv" => Some(PPrimIntDiv)
-      case "primIntMod" => Some(PPrimIntMod)
-      case "primIntEq"  => Some(PPrimIntEq)
-      case "primIntNeq" => Some(PPrimIntNeq)
-      case "primIntLt"  => Some(PPrimIntLt)
-      case "primIntGt"  => Some(PPrimIntGt)
-      case "primIntLeq" => Some(PPrimIntLeq)
-      case "primIntGeq" => Some(PPrimIntGeq)
-
-      case "List"     => Some(PList)
-      case "Nil"      => Some(PNil)
-      case "::"       => Some(PCons)
-      case "caseList" => Some(PCaseList)
-
-      case "Either"     => Some(PEither)
-      case "Left"       => Some(PLeft)
-      case "Right"      => Some(PRight)
-      case "caseEither" => Some(PCaseEither)
+      case "Int"    => Some(PInt)
+      case "intLeq" => Some(PIntLeq)
+      case "intSub" => Some(PIntSub)
+      case "intMul" => Some(PIntMul)
 
       case _ => None

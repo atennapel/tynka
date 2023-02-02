@@ -1,43 +1,19 @@
-def (:+:) = Either
 def VTy = Ty Val
+def (*) a b = intMul a b
 
-def Maybe A = () :+: A
-def Nothing {A} : Maybe A = Left []
-def Just {A} (x : ^A) : Maybe A = Right x
+def List A = tcon R. () (A R)
+def Nil {A} : List A = con #0
+def (::) {A} hd tl : List A = con #1 hd tl
 
-def maybe {A : VTy} {vf} {R : Ty vf} (x : Maybe A) (n : R) (j : A -> R) : R =
-  caseEither x (\_. n) j
+def foldr {A : VTy} {vf} {B : Ty vf} (n : B) (c : A -> B -> B) (l : List A) : B =
+  fix (go l. case l n (\hd tl. c hd (go tl))) l
 
-def head {A} (l : List A) : Maybe A =
-  caseList l Nothing (\hd _. Just hd)
-def tail {A} (l : List A) : Maybe (List A) =
-  caseList l Nothing (\_ tl. Just tl)
-def uncons {A} (l : List A) : Maybe (A ** List A) =
-  caseList l Nothing (\hd tl. Just (hd, tl))
+def foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
+  foldr (\acc. acc) (\hd go acc. go (c acc hd)) l n
 
-def foldr {A : VTy} {vf : VF} {B : Ty vf} (nil : B) (cons : A -> B -> B) (l : List A) : B =
-  fix (go l. caseList l nil (\hd tl. cons hd (go tl))) l
-def foldl {A B : VTy} (nil : B) (cons : B -> A -> B) (l : List A) : B =
-  fix (go l. \acc. caseList l acc (\hd tl. go tl (cons acc hd))) l nil
 def map {A B : VTy} (f : A -> B) (l : List A) : List B =
   foldr Nil (\hd tl. f hd :: tl) l
-def filter {A : VTy} (f : A -> Bool) (l : List A) : List A =
-  foldr Nil (\hd tl. if f hd then hd :: tl else tl) l
 
-def (&&) a b = if a then b else False
-def (||) a b = if a then True else b
+def (++) {A : VTy} (a b : List A) : List A = foldr b (::) a
 
-def (+) a b = primIntAdd a b
-def (*) a b = primIntMul a b
-def (-) a b = primIntSub a b
-def (<=) a b = primIntLeq a b
-
-def and = foldl True (&&)
-def or = foldl False (||)
-def sum = foldl 0 (+)
-def product = foldl 1 (*)
-
-def range (n : Int) : List Int =
-  fix (go n. \acc. if n <= 0 then acc else go (n - 1) (n :: acc)) n Nil
-
-def main : Int -> Int := \_. product (range 10)
+def prod (l : List Int) : Int := foldl 1 (*) l

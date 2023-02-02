@@ -3,17 +3,19 @@ package core
 import common.Common.*
 
 object Syntax:
+  type CStage = Stage[Tm]
+
   final case class Defs(defs: List[Def]):
     override def toString: String = defs.mkString("\n")
 
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: Name, ty: Ty, stage: Stage[Ty], value: Tm)
+    case DDef(name: Name, ty: Ty, stage: CStage, value: Tm)
 
     override def toString: String = this match
-      case DDef(x, t, S1, v)    => s"def $x : $t = $v"
-      case DDef(x, t, S0(_), v) => s"def $x : $t := $v"
+      case DDef(x, t, SMeta, v)  => s"def $x : $t = $v"
+      case DDef(x, t, STy(_), v) => s"def $x : $t := $v"
   export Def.*
 
   enum ProjType:
@@ -33,21 +35,23 @@ object Syntax:
     case Var(ix: Ix)
     case Global(name: Name)
     case Prim(name: PrimName)
-    case Let(name: Name, ty: Ty, stage: Stage[Ty], bty: Ty, value: Tm, body: Tm)
-    case U(stage: Stage[Ty])
+    case Let(name: Name, ty: Ty, stage: CStage, bty: Ty, value: Tm, body: Tm)
+    case U(stage: CStage)
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, icit: Icit, fnty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
-    case FunTy(ty: Ty, vf: Ty, rt: Ty)
-    case Fix(go: Name, name: Name, fnty: Ty, body: Tm, arg: Tm)
+    case Fix(ty: Ty, rty: Ty, g: Bind, x: Bind, b: Tm, arg: Tm)
 
     case Sigma(name: Bind, ty: Ty, body: Ty)
     case Pair(fst: Tm, snd: Tm, ty: Ty)
     case Proj(tm: Tm, proj: ProjType, ty: Ty)
-    case PairTy(fst: Ty, snd: Ty)
 
     case IntLit(value: Int)
+
+    case TCon(name: Bind, cons: List[List[Ty]])
+    case Con(ty: Ty, ix: Int, args: List[Tm])
+    case Case(ty: Ty, rty: Ty, scrut: Tm, cs: List[Tm])
 
     case Lift(vf: Ty, tm: Ty)
     case Quote(tm: Tm)
@@ -74,13 +78,12 @@ object Syntax:
       case t        => Splice(t)
 
     override def toString: String = this match
-      case Var(x)                    => s"'$x"
-      case Global(x)                 => s"$x"
-      case Prim(x)                   => s"$x"
-      case Let(x, t, S1, _, v, b)    => s"(let $x : $t = $v; $b)"
-      case Let(x, t, S0(_), _, v, b) => s"(let $x : $t := $v; $b)"
-      case U(S1)                     => "Meta"
-      case U(S0(vf))                 => s"(Ty $vf)"
+      case Var(x)                     => s"'$x"
+      case Global(x)                  => s"$x"
+      case Prim(x)                    => s"$x"
+      case Let(x, t, SMeta, _, v, b)  => s"(let $x : $t = $v; $b)"
+      case Let(x, t, STy(_), _, v, b) => s"(let $x : $t := $v; $b)"
+      case U(s)                       => s"$s"
 
       case Pi(DontBind, Expl, t, b) => s"($t -> $b)"
       case Pi(x, i, t, b)           => s"(${i.wrap(s"$x : $t")} -> $b)"
@@ -88,16 +91,22 @@ object Syntax:
       case Lam(x, Impl, _, b)       => s"(\\{$x}. $b)"
       case App(f, a, Expl)          => s"($f $a)"
       case App(f, a, Impl)          => s"($f {$a})"
-      case FunTy(a, _, b)           => s"($a -> $b)"
-      case Fix(go, x, _, b, arg)    => s"(fix ($go $x. $b) $arg)"
+      case Fix(_, _, g, x, b, arg)  => s"(fix ($g $x. $b) $arg)"
 
       case Sigma(DontBind, t, b) => s"($t ** $b)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
       case Pair(a, b, _)         => s"($a, $b)"
       case Proj(t, p, _)         => s"$t$p"
-      case PairTy(a, b)          => s"($a ** $b)"
 
       case IntLit(n) => s"$n"
+
+      case TCon(x, Nil) => s"(tcon $x.)"
+      case TCon(x, cs) =>
+        s"(tcon $x. ${cs.map(as => s"(${as.mkString(" ")})").mkString(" ")})"
+      case Con(ty, i, Nil)     => s"(con $ty #$i)"
+      case Con(ty, i, as)      => s"(con $ty #$i ${as.mkString(" ")})"
+      case Case(ty, _, s, Nil) => s"(case $ty $s)"
+      case Case(ty, _, s, cs)  => s"(case $ty $s ${cs.mkString(" ")})"
 
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"
@@ -109,3 +118,7 @@ object Syntax:
       case Meta(id)          => s"?$id"
       case AppPruning(t, sp) => s"($t [${sp.reverse.mkString(", ")}])"
   export Tm.*
+
+  def tfun(a: Ty, vf: Ty, b: Ty): Ty =
+    App(App(App(Prim(PTFun), a, Expl), vf, Impl), b, Expl)
+  def tpair(a: Ty, b: Ty): Ty = App(App(Prim(PTPair), a, Expl), b, Expl)

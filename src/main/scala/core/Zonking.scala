@@ -41,8 +41,6 @@ object Zonking:
     case Wk(t)            => zonkSp(t)(l - 1, e.tail).map(Wk(_))
     case t                => Right(zonk(t))
 
-  def zonk(s: Stage[Ty])(implicit l: Lvl, e: Env): Stage[Ty] = s.map(zonk)
-
   def zonk(t: Tm)(implicit l: Lvl, e: Env): Tm = t match
     case Var(ix)    => t
     case Global(x)  => t
@@ -50,29 +48,34 @@ object Zonking:
     case IntLit(n)  => t
     case Irrelevant => t
     case Let(x, t, s, bt, v, b) =>
-      Let(x, zonk(t), zonk(s), zonk(bt), zonk(v), zonkLift(b))
-    case U(s) => U(zonk(s))
+      Let(x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))
+    case U(s) => U(s.map(zonk))
 
     case Pi(x, i, t, b)   => Pi(x, i, zonk(t), zonkLift(b))
-    case FunTy(t, vf, b)  => FunTy(zonk(t), zonk(vf), zonk(b))
     case Lam(x, i, ty, b) => Lam(x, i, zonk(ty), zonkLift(b))
     case App(_, _, _)     => quoteVT(zonkSp(t))
-    case Fix(go, x, t, b, a) =>
+    case Fix(ty, rty, g, x, b, arg) =>
       Fix(
-        go,
+        zonk(ty),
+        zonk(rty),
+        g,
         x,
-        zonk(t),
         zonk(b)(l + 2, VVar(l + 1) :: VVar(l) :: e),
-        zonk(a)
+        zonk(arg)
       )
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
-    case PairTy(t, b)   => PairTy(zonk(t), zonk(b))
     case Pair(a, b, t)  => Pair(zonk(a), zonk(b), zonk(t))
     case Proj(_, _, _) =>
       quoteVT(zonkSp(t)) match
         case Proj(t, p, ty) => Proj(t, p, zonk(ty))
         case t              => t
+
+    case TCon(x, cs) =>
+      TCon(x, cs.map(as => as.map(a => zonk(a)(l + 1, VVar(l) :: e))))
+    case Con(ty, i, as) => Con(zonk(ty), i, as.map(zonk))
+    case Case(ty, rty, scrut, cs) =>
+      Case(zonk(ty), zonk(rty), zonk(scrut), cs.map(zonk))
 
     case Lift(vf, t) => Lift(zonk(vf), zonk(t))
     case Quote(t)    => zonk(t).quote

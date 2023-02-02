@@ -1,11 +1,9 @@
 import surface.Parser.defsParser
-import core.Pretty.pretty
 import common.Debug.*
-import elaboration.Elaboration.{ElaborateError, elaborate}
+import core.Pretty.pretty
 import core.Staging.stage
-import ir.Simplifier.simplify
-import ir.Compiler.compile
-import jvmir.Generator.generate
+import elaboration.Elaboration.*
+import ir.JvmGenerator.generate
 
 import java.io.File
 import scala.io.Source
@@ -31,17 +29,13 @@ object Main:
         s"total time: ${(ptime + etime) / 1000000}ms (${ptime + etime}ns)"
       )
       println(pretty(eds))
+
       println("\nstaging:")
-      val ids = stage(eds)
-      println(ids)
-      println("\nsimplification:")
-      val simp = simplify(ids)
-      println(simp)
-      println("\ncompile to jvm ir:")
-      val jvmir = compile(simp)
-      println(jvmir)
+      val irds = stage(eds)
+      println(irds)
+
       println("\ngenerate JVM bytecode")
-      generate(moduleName, jvmir)
+      generate(moduleName, irds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

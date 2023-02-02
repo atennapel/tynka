@@ -7,7 +7,16 @@ Try it out:
 ```
 sbt "run examples/Test"
 javac jvmstd/Pair.java
-javac jvmstd/List.java
-javac jvmstd/Either.java
 java Test
 ```
+
+TODO:
+- [x] JVM bytecode generation
+- [x] Tail recursion
+- [x] Datatypes
+- [x] Improve `fix` type inference
+- [ ] Application of quoted functions: ^(A -> B) @ ^A
+- [ ] More primitive operations for Int
+- [ ] See if primitive Unit and Bool can be removed
+- [ ] Fix weakening bug in pretty printing `case`
+- [ ] Keep generics signature in JVM bytecode output

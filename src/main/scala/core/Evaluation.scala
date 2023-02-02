@@ -14,6 +14,10 @@ object Evaluation:
       case CClos(env, tm) => eval(tm)(v :: env)
       case CFun(fn)       => fn(v)
 
+  extension (c: TConClos)
+    def apply(v: Val): List[List[Val]] =
+      c.cs.map(as => as.map(t => eval(t)(v :: c.env)))
+
   extension (c: Clos2)
     def apply(v: Val, w: Val): Val = c match
       case CClos2(env, tm) => eval(tm)(w :: v :: env)
@@ -72,12 +76,20 @@ object Evaluation:
         VGlobal(y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
       case _ => impossible()
 
+  private def vcase(ty: VTy, rty: VTy, v: Val, cs: List[Val]): Val = v match
+    case VRigid(hd, sp) => VRigid(hd, SCase(sp, ty, rty, cs))
+    case VFlex(hd, sp)  => VFlex(hd, SCase(sp, ty, rty, cs))
+    case VGlobal(uri, sp, v) =>
+      VGlobal(uri, SCase(sp, ty, rty, cs), () => vcase(v(), ty, rty, cs))
+    case _ => impossible()
+
   def vspine(v: Val, sp: Spine): Val = sp match
-    case SId              => v
-    case SApp(sp, a, i)   => vapp(vspine(v, sp), a, i)
-    case SSplice(sp)      => vsplice(vspine(v, sp))
-    case SProj(sp, proj)  => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as) => vprimelim(x, as, vspine(v, sp))
+    case SId                    => v
+    case SApp(sp, a, i)         => vapp(vspine(v, sp), a, i)
+    case SSplice(sp)            => vsplice(vspine(v, sp))
+    case SProj(sp, proj)        => vproj(vspine(v, sp), proj)
+    case SPrim(sp, x, as)       => vprimelim(x, as, vspine(v, sp))
+    case SCase(sp, ty, rty, cs) => vcase(ty, rty, vspine(v, sp), cs)
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _, _) => v
@@ -93,29 +105,29 @@ object Evaluation:
   private def vprim(x: PrimName): Val = x match
     case _ => VPrim(x)
 
-  def eval(s: Stage[Ty])(implicit env: Env): Stage[VTy] = s match
-    case S1     => S1
-    case S0(vf) => S0(eval(vf))
-
   def eval(tm: Tm)(implicit env: Env): Val = tm match
     case Var(ix)               => env(ix.expose)
     case Global(x)             => vglobal(x)
     case Prim(x)               => vprim(x)
     case Let(_, _, _, _, v, b) => eval(b)(eval(v) :: env)
-    case U(s)                  => VU(eval(s))
+    case U(s)                  => VU(s.map(eval))
 
-    case Pi(x, i, t, b)      => VPi(x, i, eval(t), Clos(b))
-    case FunTy(t, vf, b)     => VFunTy(eval(t), eval(vf), eval(b))
-    case Lam(x, i, ty, b)    => VLam(x, i, eval(ty), Clos(b))
-    case App(f, a, i)        => vapp(eval(f), eval(a), i)
-    case Fix(go, x, t, b, a) => VFix(go, x, eval(t), CClos2(env, b), eval(a))
+    case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
+    case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
+    case App(f, a, i)     => vapp(eval(f), eval(a), i)
+    case Fix(ty, rty, g, x, b, arg) =>
+      VFix(eval(ty), eval(rty), g, x, CClos2(env, b), eval(arg))
 
     case Sigma(x, t, b) => VSigma(x, eval(t), Clos(b))
-    case PairTy(t, b)   => VPairTy(eval(t), eval(b))
     case Pair(a, b, ty) => VPair(eval(a), eval(b), eval(ty))
     case Proj(t, p, _)  => vproj(eval(t), p)
 
     case IntLit(n) => VIntLit(n)
+
+    case TCon(x, cs)    => VTCon(x, TConClos(env, cs))
+    case Con(ty, i, as) => VCon(eval(ty), i, as.map(eval))
+    case Case(ty, rty, scrut, cs) =>
+      vcase(eval(ty), eval(rty), eval(scrut), cs.map(eval))
 
     case Lift(vf, t) => VLift(eval(vf), eval(t))
     case Quote(t)    => vquote(eval(t))
@@ -127,12 +139,13 @@ object Evaluation:
     case Meta(id)         => vmeta(id)
     case AppPruning(t, p) => vappPruning(eval(t), p)
 
-  // quotation
+  // forcing
   enum Unfold:
     case UnfoldAll
     case UnfoldMetas
   export Unfold.*
 
+  // quotation
   @tailrec
   def force(v: Val, unfold: Unfold = UnfoldAll): Val = v match
     case VFlex(id, sp) =>
@@ -153,46 +166,53 @@ object Evaluation:
           App(f, quote(a, unfold), i)
         }
         App(as, quote(hd, sp, unfold), Expl)
+      case SCase(sp, ty, rty, cs) =>
+        Case(
+          quote(ty, unfold),
+          quote(rty, unfold),
+          quote(hd, sp, unfold),
+          cs.map(quote(_, unfold))
+        )
 
   private def quote(hd: Head)(implicit l: Lvl): Tm = hd match
     case HVar(ix) => Var(ix.toIx)
     case HPrim(x) => Prim(x)
 
-  def quoteS(s: Stage[VTy], unfold: Unfold = UnfoldMetas)(implicit
-      l: Lvl
-  ): Stage[Ty] = s match
-    case S1     => S1
-    case S0(vf) => S0(quote(vf, unfold))
+  def quoteS(s: VStage, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): CStage =
+    s.map(v => quote(v, unfold))
 
   def quote(v: Val, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): Tm =
     force(v, unfold) match
       case VRigid(hd, sp)    => quote(quote(hd), sp, unfold)
       case VFlex(id, sp)     => quote(Meta(id), sp, unfold)
       case VGlobal(x, sp, _) => quote(Global(x), sp, unfold)
-      case VU(s)             => U(quoteS(s, unfold))
+      case VU(s)             => U(quoteS(s))
 
       case VLam(x, i, ty, b) =>
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
         Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
-      case VFunTy(t, vf, b) =>
-        FunTy(quote(t, unfold), quote(vf, unfold), quote(b, unfold))
-      case VFix(go, x, t, b, a) =>
+      case VFix(ty, rty, g, x, b, arg) =>
         Fix(
-          go,
+          quote(ty, unfold),
+          quote(rty, unfold),
+          g,
           x,
-          quote(t, unfold),
           quote(b(VVar(l), VVar(l + 1)), unfold)(l + 2),
-          quote(a, unfold)
+          quote(arg, unfold)
         )
 
       case VPair(fst, snd, t) =>
         Pair(quote(fst, unfold), quote(snd, unfold), quote(t, unfold))
       case VSigma(x, t, b) =>
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
-      case VPairTy(t, b) => PairTy(quote(t, unfold), quote(b, unfold))
 
       case VIntLit(n) => IntLit(n)
+
+      case VTCon(x, cs) =>
+        TCon(x, cs(VVar(l)).map(as => as.map(a => quote(a, unfold)(l + 1))))
+      case VCon(ty, i, as) =>
+        Con(quote(ty, unfold), i, as.map(quote(_, unfold)))
 
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
@@ -202,31 +222,24 @@ object Evaluation:
   def nf(tm: Tm)(implicit l: Lvl = lvl0, env: Env = Nil): Tm =
     quote(eval(tm), UnfoldAll)
 
-  def primType(x: PrimName): (VTy, Stage[VTy]) = x match
-    case PVF => (VMetaTy(), S1)
-    case PV  => (VVF(), S1)
-    case PF  => (VVF(), S1)
+  def primType(x: PrimName): (VTy, VStage) = x match
+    case PVF  => (VUMeta(), SMeta)
+    case PVal => (VVF(), SMeta)
+    case PFun => (VVF(), SMeta)
 
-    case PVoid => (VTyV(), S1)
-    // {vf : VF} {A : Ty vf} -> ^Void -> A
-    case PAbsurd =>
-      (
-        vpiI(
-          "vf",
-          VVF(),
-          vf =>
-            vpiI("A", VU(S0(vf)), a => vpi("_", VLift(VV(), VVoid()), _ => a))
-        ),
-        S1
-      )
+    // Ty Val -> {vf : VF} -> Ty vf -> Ty Fun
+    case PTFun =>
+      (vfun(VVTy(), vpiI("vf", VVF(), vf => vfun(VUTy(vf), VFTy()))), SMeta)
+    // Ty Val -> Ty Val -> Ty Val
+    case PTPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 
-    case PUnitType => (VTyV(), S1)
-    case PUnit     => (VUnitType(), S0(VV()))
+    case PUnitType => (VVTy(), SMeta)
+    case PUnit     => (VUnitType(), SVTy())
 
-    case PBool  => (VTyV(), S1)
-    case PTrue  => (VBool(), S0(VV()))
-    case PFalse => (VBool(), S0(VV()))
-    // {vf : VF} {A : Ty vf} -> ^Bool -> ^A -> ^A -> ^A
+    case PBool  => (VVTy(), SMeta)
+    case PTrue  => (VBool(), SVTy())
+    case PFalse => (VBool(), SVTy())
+    // {vf : VF} -> {A : Ty vf} -> ^Bool -> ^A -> ^A -> ^A
     case PCaseBool =>
       (
         vpiI(
@@ -235,156 +248,19 @@ object Evaluation:
           vf =>
             vpiI(
               "A",
-              VU(S0(vf)),
+              VUTy(vf),
               a =>
-                vfun(
-                  VLift(VV(), VBool()),
-                  vfun(VLift(vf, a), vfun(VLift(vf, a), VLift(vf, a)))
-                )
+                val qa = VLift(vf, a)
+                vfun(VLift(VVal(), VBool()), vfun(qa, vfun(qa, qa)))
             )
         ),
-        S1
+        SMeta
       )
 
-    case PInt => (VTyV(), S1)
-    case PPrimIntAdd =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
-    case PPrimIntMul =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
-    case PPrimIntSub =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
-    case PPrimIntDiv =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
-    case PPrimIntMod =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VInt())), S0(VF()))
-    case PPrimIntEq =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
-    case PPrimIntNeq =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
-    case PPrimIntGt =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
-    case PPrimIntLt =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
-    case PPrimIntGeq =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
-    case PPrimIntLeq =>
-      (VFunTy(VInt(), VF(), VFunTy(VInt(), VV(), VBool())), S0(VF()))
-
-    // Ty V -> Ty V
-    case PList => (vfun(VU(S0(VV())), VU(S0(VV()))), S1)
-    // {A : Ty V} -> ^(List A)
-    case PNil => (vpiI("A", VU(S0(VV())), a => VLift(VV(), VList(a))), S1)
-    // {A : Ty V} -> ^A -> ^(List A) -> ^(List A)
-    case PCons =>
-      (
-        vpiI(
-          "A",
-          VU(S0(VV())),
-          a =>
-            vfun(
-              VLift(VV(), a),
-              vfun(VLift(VV(), VList(a)), VLift(VV(), VList(a)))
-            )
-        ),
-        S1
-      )
-    // {A : Ty V} {vf : VF} {R : Ty vf} -> ^(List A) -> ^R -> (^A -> ^(List A) -> ^R) -> ^R
-    case PCaseList =>
-      (
-        vpiI(
-          "A",
-          VU(S0(VV())),
-          a =>
-            vpiI(
-              "vf",
-              VVF(),
-              vf =>
-                vpiI(
-                  "R",
-                  VU(S0(vf)),
-                  r =>
-                    vfun(
-                      VLift(VV(), VList(a)),
-                      vfun(
-                        VLift(vf, r),
-                        vfun(
-                          vfun(
-                            VLift(VV(), a),
-                            vfun(VLift(VV(), VList(a)), VLift(vf, r))
-                          ),
-                          VLift(vf, r)
-                        )
-                      )
-                    )
-                )
-            )
-        ),
-        S1
-      )
-
-    // Ty V -> Ty V -> Ty V
-    case PEither => (vfun(VU(S0(VV())), vfun(VU(S0(VV())), VU(S0(VV())))), S1)
-    // {A : Ty V} {B : Ty V} -> ^A -> ^(Either A B)
-    case PLeft =>
-      (
-        vpiI(
-          "A",
-          VU(S0(VV())),
-          a =>
-            vpiI(
-              "B",
-              VU(S0(VV())),
-              b => vfun(VLift(VV(), a), VLift(VV(), VEither(a, b)))
-            )
-        ),
-        S1
-      )
-    // {A : Ty V} {B : Ty V} -> ^B -> ^(Either A B)
-    case PRight =>
-      (
-        vpiI(
-          "A",
-          VU(S0(VV())),
-          a =>
-            vpiI(
-              "B",
-              VU(S0(VV())),
-              b => vfun(VLift(VV(), b), VLift(VV(), VEither(a, b)))
-            )
-        ),
-        S1
-      )
-    // {A : Ty V} {B : Ty V} {vf : VF} {R : Ty vf} -> ^(Either A B) -> (^A -> ^R) -> (^B -> ^R) -> ^R
-    case PCaseEither =>
-      val tv = VU(S0(VV()))
-      def l(v: VTy): VTy = VLift(VV(), v)
-      (
-        vpiI(
-          "A",
-          tv,
-          a =>
-            vpiI(
-              "B",
-              tv,
-              b =>
-                vpiI(
-                  "vf",
-                  VVF(),
-                  vf =>
-                    vpiI(
-                      "R",
-                      VU(S0(vf)),
-                      r =>
-                        vfun(
-                          l(VEither(a, b)),
-                          vfun(
-                            vfun(l(a), VLift(vf, r)),
-                            vfun(vfun(l(b), VLift(vf, r)), VLift(vf, r))
-                          )
-                        )
-                    )
-                )
-            )
-        ),
-        S1
-      )
+    case PInt => (VVTy(), SMeta)
+    case PIntLeq =>
+      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VBool())), SFTy())
+    case PIntSub =>
+      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
+    case PIntMul =>
+      (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())

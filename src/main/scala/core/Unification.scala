@@ -6,7 +6,6 @@ import Value.*
 import Evaluation.*
 import Metas.*
 import Locals.*
-import elaboration.Ctx.*
 import common.Debug.debug
 
 import scala.annotation.tailrec
@@ -74,7 +73,7 @@ object Unification:
   private def etaExpandMeta(m: MetaId): Val =
     val uns = getMetaUnsolved(m)
     val a = uns.ty
-    def go(a: VTy, s: Stage[VTy], lvl: Lvl, p: Pruning, locals: Locals): Tm =
+    def go(a: VTy, s: VStage, lvl: Lvl, p: Pruning, locals: Locals): Tm =
       force(a) match
         case VPi(x, i, a, b) =>
           Lam(
@@ -86,15 +85,15 @@ object Unification:
               s,
               lvl + 1,
               Some(Expl) :: p,
-              Bound(locals, x, quote(a)(lvl), quoteS(s)(lvl))
+              Bound(locals, x, quote(a)(lvl), s.map(vf => quote(vf)(lvl)))
             )
           )
-        case VLift(vf, a) => go(a, S0(vf), lvl, p, locals).quote
+        case VLift(vf, a) => go(a, STy(vf), lvl, p, locals).quote
         case a =>
           val closed = eval(locals.closeTy(quote(a)(lvl)))(Nil)
           val m = freshMeta(closed, s)
           AppPruning(Meta(m), p)
-    val t = go(a, S1, lvl0, Nil, Empty)
+    val t = go(a, SMeta, lvl0, Nil, Empty)
     val v = eval(t)(Nil)
     solveMeta(m, v)
     v
@@ -152,17 +151,21 @@ object Unification:
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
       case SPrim(sp, x, args) =>
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
+      case SCase(sp, ty, rty, cs) =>
+        or(go(sp), Some((sp, SId))).map((l, r) => (l, SCase(r, ty, rty, cs)))
     go(sp).fold((sp, SId))(x => x)
 
   private def psubst(v: Val)(implicit psub: PSub): Tm =
     def goSp(t: Tm, sp: Spine)(implicit psub: PSub): Tm = sp match
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
-      case SSplice(sp)      => Splice(goSp(t, sp))
+      case SSplice(sp)      => goSp(t, sp).splice
       case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant)
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
+      case SCase(sp, ty, rty, cs) =>
+        Case(go(ty), go(rty), goSp(t, sp), cs.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
@@ -184,21 +187,24 @@ object Unification:
       case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
-      case VFunTy(t, vf, b) => FunTy(go(t), go(vf), go(b))
-      case VFix(g, x, t, b, a) =>
+      case VFix(ty, rty, g, x, b, arg) =>
         Fix(
+          go(ty),
+          go(rty),
           g,
           x,
-          go(t),
-          go(b(VVar(psub.cod), VVar(psub.cod + 1)))(psub.lift.lift),
-          go(a)
+          go(b(VVar(psub.cod), VVar(psub.lift.cod)))(psub.lift.lift),
+          go(arg)
         )
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
-      case VPairTy(fst, snd)  => PairTy(go(fst), go(snd))
 
       case VIntLit(n) => IntLit(n)
+
+      case VTCon(x, cs) =>
+        TCon(x, cs(VVar(psub.cod)).map(as => as.map(a => go(a)(psub.lift))))
+      case VCon(ty, i, as) => Con(go(ty), i, as.map(go))
 
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => go(t).quote
@@ -324,16 +330,20 @@ object Unification:
     case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
       unify(a, b)
       as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
+    case (SCase(s1, t1, _, cs1), SCase(s2, t2, _, cs2)) =>
+      unify(s1, s2); unify(t1, t2)
+      cs1.zip(cs2).foreach((a, b) => unify(a, b))
     case _ => throw UnifyError(s"spine mismatch")
 
   private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =
     val v = VVar(l)
     unify(a(v), b(v))(l + 1)
 
-  def unify(a: Stage[VTy], b: Stage[VTy])(implicit l: Lvl): Unit = (a, b) match
-    case (S1, S1)       => ()
-    case (S0(a), S0(b)) => unify(a, b)
-    case _ => throw UnifyError(s"stage mismatch ${quoteS(a)} ~ ${quoteS(b)}")
+  def unify(a: VStage, b: VStage)(implicit l: Lvl): Unit = (a, b) match
+    case (SMeta, SMeta)   => ()
+    case (STy(a), STy(b)) => unify(a, b)
+    case _ =>
+      throw UnifyError(s"cannot unify ${quoteS(a)} ~ ${quoteS(b)}")
 
   def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
@@ -343,9 +353,6 @@ object Unification:
         unify(a1, a2); unify(b1, b2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
         unify(a1, a2); unify(b1, b2)
-      case (VFunTy(a1, vf1, b1), VFunTy(a2, vf2, b2)) =>
-        unify(a1, a2); unify(vf1, vf2); unify(b1, b2)
-      case (VPairTy(a1, b1), VPairTy(a2, b2)) => unify(a1, a2); unify(b1, b2)
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
       case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
@@ -353,13 +360,27 @@ object Unification:
         unify(vf1, vf2); unify(ty1, ty2)
       case (VQuote(a), VQuote(b))             => unify(a, b)
       case (VIntLit(a), VIntLit(b)) if a == b => ()
-      case (VIrrelevant, VIrrelevant)         => ()
-
-      case (VFix(_, _, _, b1, a1), VFix(_, _, _, b2, a2)) =>
+      case (VCon(_, i, as1), VCon(_, j, as2)) if i == j =>
+        as1.zip(as2).foreach((a, b) => unify(a, b))
+      case (VFix(a1, b1, _, _, f1, arg1), VFix(a2, b2, _, _, f2, arg2)) =>
+        unify(a1, a2); unify(b1, b2)
         val v = VVar(l)
         val w = VVar(l + 1)
-        unify(b1(v, w), b2(v, w))(l + 2)
-        unify(a1, a2)
+        unify(f1(v, w), f2(v, w))(l + 1)
+        unify(arg1, arg2)
+      case (VIrrelevant, _) => ()
+      case (_, VIrrelevant) => ()
+
+      case (VTCon(_, c1), VTCon(_, c2)) =>
+        val cs1 = c1(VVar(l))
+        val cs2 = c2(VVar(l))
+        if cs1.size != cs2.size then
+          throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")
+        cs1.zip(cs2).foreach { (as1, as2) =>
+          if as1.size != as2.size then
+            throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")
+          as1.zip(as2).foreach((a, b) => unify(a, b)(l + 1))
+        }
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)
