@@ -17,5 +17,15 @@ TODO:
 - [x] Improve `fix` type inference
 - [x] More primitive operations for `Int`
 - [x] Fix weakening bug in pretty printing `case`
+- [x] Optimize `Bool`-like types
+- [x] Optimize `Unit`-like types
+- [x] Optimize `Void`-like types
+- [ ] Optimize finite types to `Int`
+- [ ] Rename symbol names in JVM generator
+- [ ] Optimize single constructor types (product-like)
+- [ ] Add new-types
 - [ ] See if primitive `Unit` and `Bool` can be removed
+- [ ] Basic file importing
+- [ ] `Unit` on meta level?
 - [ ] Keep generics signature in JVM bytecode output
+- [ ] Closures, thunks, boxed types, JVM generics

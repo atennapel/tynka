@@ -31,8 +31,16 @@ object JvmGenerator:
     a.substring(0, i)
   }
 
+  private enum DataKind:
+    case VoidLike
+    case UnitLike
+    case BoolLike
+    case ProductLike
+    case ADT
+  import DataKind.*
+
   private final case class Ctx(moduleName: String, moduleType: Type)
-  private val tcons: mutable.Map[GName, Type] = mutable.Map.empty
+  private val tcons: mutable.Map[GName, (Type, DataKind)] = mutable.Map.empty
   private val cons: mutable.Map[GName, mutable.Map[Int, (Type, List[Ty])]] =
     mutable.Map.empty
 
@@ -128,7 +136,12 @@ object JvmGenerator:
     case TInt        => Type.INT_TYPE
     case TPair(_, _) => PAIR_TYPE
     case TCon(x) =>
-      tcons.getOrElseUpdate(x, Type.getType(s"L${ctx.moduleName}$$$x;"))
+      val (t, k) = tcons(x)
+      k match
+        case UnitLike => Type.BOOLEAN_TYPE
+        case BoolLike => Type.BOOLEAN_TYPE
+        case VoidLike => Type.BOOLEAN_TYPE
+        case _        => t
 
   private def constantValue(e: Let): Option[Any] = e match
     case Let(Nil, Val(v)) => constantValue(v)
@@ -197,7 +210,17 @@ object JvmGenerator:
       gen(v)
       mg.returnValue()
       mg.endMethod()
-    case DData(x, cs) => genData(x, cs)
+    case DData(x, cs) =>
+      val kind = cs match
+        case Nil            => VoidLike
+        case List(Nil)      => UnitLike
+        case List(Nil, Nil) => BoolLike
+        case List(_)        => ProductLike
+        case _              => ADT
+      tcons += (x -> (Type.getType(s"L${ctx.moduleName}$$$x;"), kind))
+      kind match
+        case BoolLike => ()
+        case _        => genData(x, cs)
 
   private def genData(dx: GName, cs: List[List[Ty]])(implicit
       cw: ClassWriter,
@@ -423,61 +446,74 @@ object JvmGenerator:
       gen(f)
       mg.visitLabel(lEnd)
 
-    case Case(_, s, Nil) =>
-      val ty = Type.getType(classOf[Exception])
-      mg.newInstance(ty)
-      mg.dup()
-      gen(s)
-      mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
-      mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
-      mg.throwException()
     case Case(ty, scrut, cs) =>
-      val jty = Type.getType(s"L${ctx.moduleName}$$$ty;")
-      gen(scrut)
-      val lEnd = new Label
-      var lNextCase = new Label
-      cs.zipWithIndex.init.foreach { case ((ts, b), i) =>
-        val contype = cons(ty)(i)._1
-        mg.visitLabel(lNextCase)
-        lNextCase = new Label
-        mg.dup()
-        if ts.isEmpty then
-          mg.getStatic(jty, s"$$$i$$", contype)
-          mg.visitJumpInsn(IF_ACMPNE, lNextCase)
-        else
-          mg.instanceOf(contype)
-          mg.visitJumpInsn(IFEQ, lNextCase)
-        if ts.nonEmpty then mg.checkCast(contype)
-        var newlocals = locals
-        ts.zipWithIndex.foreach { case ((x, t), i) =>
-          val dt = gen(t)
-          val local = mg.newLocal(dt)
+      val (jty, kind) = tcons(ty)
+      kind match
+        case VoidLike =>
+          val ty = Type.getType(classOf[Exception])
+          mg.newInstance(ty)
           mg.dup()
-          mg.getField(contype, s"a$i", dt)
-          mg.storeLocal(local)
-          newlocals = newlocals + (x -> local)
-        }
-        mg.pop()
-        gen(b)(mg, ctx, args, newlocals, methodStart)
-        mg.visitJumpInsn(GOTO, lEnd)
-      }
-      mg.visitLabel(lNextCase)
-      val i = cs.size - 1
-      val (ts, b) = cs.last
-      val contype = cons(ty)(i)._1
-      if ts.nonEmpty then mg.checkCast(contype)
-      var newlocals = locals
-      ts.zipWithIndex.foreach { case ((x, t), i) =>
-        val dt = gen(t)
-        val local = mg.newLocal(dt)
-        mg.dup()
-        mg.getField(contype, s"a$i", dt)
-        mg.storeLocal(local)
-        newlocals = newlocals + (x -> local)
-      }
-      mg.pop()
-      gen(b)(mg, ctx, args, newlocals, methodStart)
-      mg.visitLabel(lEnd)
+          gen(scrut)
+          mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
+          mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
+          mg.throwException()
+        case UnitLike => gen(scrut); mg.pop(); gen(cs(0)._2)
+        case BoolLike =>
+          val lFalse = new Label
+          val lEnd = new Label
+          gen(scrut)
+          mg.visitJumpInsn(IFEQ, lFalse)
+          gen(cs(0)._2)
+          mg.visitJumpInsn(GOTO, lEnd)
+          mg.visitLabel(lFalse)
+          gen(cs(1)._2)
+          mg.visitLabel(lEnd)
+        case _ =>
+          gen(scrut)
+          val lEnd = new Label
+          var lNextCase = new Label
+          cs.zipWithIndex.init.foreach { case ((ts, b), i) =>
+            val contype = cons(ty)(i)._1
+            mg.visitLabel(lNextCase)
+            lNextCase = new Label
+            mg.dup()
+            if ts.isEmpty then
+              mg.getStatic(jty, s"$$$i$$", contype)
+              mg.visitJumpInsn(IF_ACMPNE, lNextCase)
+            else
+              mg.instanceOf(contype)
+              mg.visitJumpInsn(IFEQ, lNextCase)
+            if ts.nonEmpty then mg.checkCast(contype)
+            var newlocals = locals
+            ts.zipWithIndex.foreach { case ((x, t), i) =>
+              val dt = gen(t)
+              val local = mg.newLocal(dt)
+              mg.dup()
+              mg.getField(contype, s"a$i", dt)
+              mg.storeLocal(local)
+              newlocals = newlocals + (x -> local)
+            }
+            mg.pop()
+            gen(b)(mg, ctx, args, newlocals, methodStart)
+            mg.visitJumpInsn(GOTO, lEnd)
+          }
+          mg.visitLabel(lNextCase)
+          val i = cs.size - 1
+          val (ts, b) = cs.last
+          val contype = cons(ty)(i)._1
+          if ts.nonEmpty then mg.checkCast(contype)
+          var newlocals = locals
+          ts.zipWithIndex.foreach { case ((x, t), i) =>
+            val dt = gen(t)
+            val local = mg.newLocal(dt)
+            mg.dup()
+            mg.getField(contype, s"a$i", dt)
+            mg.storeLocal(local)
+            newlocals = newlocals + (x -> local)
+          }
+          mg.pop()
+          gen(b)(mg, ctx, args, newlocals, methodStart)
+          mg.visitLabel(lEnd)
 
   private def gen(
       t: Value
@@ -511,26 +547,32 @@ object JvmGenerator:
         )
       )
 
-    case Con(ty, i, Nil) =>
-      val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
-      mg.getStatic(
-        tcons(ty),
-        s"$$$i$$",
-        conType
-      )
     case Con(ty, i, as) =>
-      val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
-      mg.newInstance(conType)
-      mg.dup()
-      as.foreach(gen)
-      mg.invokeConstructor(
-        conType,
-        new Method(
-          "<init>",
-          Type.VOID_TYPE,
-          cons(ty)(i)._2.map(gen).toArray
-        )
-      )
+      val (jty, kind) = tcons(ty)
+      (kind, as) match
+        case (VoidLike, _) => impossible()
+        case (UnitLike, _) => mg.push(false)
+        case (BoolLike, _) => mg.push(i != 0)
+        case (_, Nil) =>
+          val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
+          mg.getStatic(
+            tcons(ty)._1,
+            s"$$$i$$",
+            conType
+          )
+        case _ =>
+          val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
+          mg.newInstance(conType)
+          mg.dup()
+          as.foreach(gen)
+          mg.invokeConstructor(
+            conType,
+            new Method(
+              "<init>",
+              Type.VOID_TYPE,
+              cons(ty)(i)._2.map(gen).toArray
+            )
+          )
 
   private def box(t: Ty)(implicit mg: GeneratorAdapter): Unit = t match
     case TInt =>
@@ -540,4 +582,10 @@ object JvmGenerator:
       )
     case TBool => mg.box(Type.BOOLEAN_TYPE)
     case TUnit => mg.box(Type.BOOLEAN_TYPE)
-    case _     =>
+    case TCon(x) =>
+      tcons(x)._2 match
+        case VoidLike => mg.box(Type.BOOLEAN_TYPE)
+        case UnitLike => mg.box(Type.BOOLEAN_TYPE)
+        case BoolLike => mg.box(Type.BOOLEAN_TYPE)
+        case _        =>
+    case _ =>
