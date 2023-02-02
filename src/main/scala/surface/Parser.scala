@@ -31,7 +31,8 @@ object Parser:
         "tcon",
         "con",
         "case",
-        "fix"
+        "fix",
+        "data"
       ),
       operators = Set(
         "=",
@@ -46,7 +47,8 @@ object Parser:
         "_",
         "^",
         "`",
-        "$"
+        "$",
+        "|"
       ),
       identStart = Predicate(c => c.isLetter || c == '_'),
       identLetter =
@@ -322,7 +324,7 @@ object Parser:
     private def ops(ss: String*): Seq[Ops[Tm, Tm]] = ss.flatMap(opLevel)
 
     // definitions
-    lazy val defs: Parsley[Defs] = many(defP).map(Defs.apply)
+    lazy val defs: Parsley[Defs] = many(defP <|> dataP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
       ("def" *> identOrOp <~> many(defParam) <~> option(
@@ -335,6 +337,15 @@ object Parser:
             ty.map(typeFromParams(ps, _)),
             lamFromDefParams(ps, v, ty.isEmpty)
           )
+        }
+
+    private lazy val dataP: Parsley[Def] =
+      ("data" *> identOrOp <~> many(identOrOp) <~> "=" *> sepBy(
+        identOrOp <~> many(projAtom),
+        "|"
+      ))
+        .map { case ((x, ps), cs) =>
+          DData(x, ps, cs)
         }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)

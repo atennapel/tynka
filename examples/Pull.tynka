@@ -1,6 +1,4 @@
-def List A = tcon R. () (A R)
-def Nil {A} : List A = con #0
-def (::) {A} hd tl : List A = con #1 hd tl
+data List A = Nil | (::) A List
 
 def VTy = Ty Val
 

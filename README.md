@@ -21,8 +21,8 @@ TODO:
 - [x] Optimize `Unit`-like types
 - [x] Optimize `Void`-like types
 - [x] Optimize finite types to `Int`
+- [x] Syntax sugar for datatype definitions
 - [ ] Remove primitive Pair type
-- [ ] Syntax sugar for datatype definitions
 - [ ] Irregular/nested datatype recursion
 - [ ] Improve inference for if condition
 - [ ] Rename symbol names in JVM generator

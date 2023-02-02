@@ -10,10 +10,17 @@ object Syntax:
 
   enum Def:
     case DDef(name: Name, meta: Boolean, ty: Option[Ty], value: Tm)
+    case DData(name: Name, ps: List[Name], cs: List[(Name, List[Ty])])
 
     override def toString: String = this match
       case DDef(x, m, Some(t), v) => s"def $x : $t ${if m then "" else ":"}= $v"
       case DDef(x, m, None, v)    => s"def $x ${if m then "" else ":"}= $v"
+      case DData(x, ps, Nil) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} ="
+      case DData(x, ps, cs) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} = ${cs
+            .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
+            .mkString(" | ")}"
   export Def.*
 
   enum ArgInfo:

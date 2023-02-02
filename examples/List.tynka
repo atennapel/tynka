@@ -1,9 +1,7 @@
 def VTy = Ty Val
 def (*) a b = intMul a b
 
-def List A = tcon R. () (A R)
-def Nil {A} : List A = con #0
-def (::) {A} hd tl : List A = con #1 hd tl
+data List A = Nil | (::) A List
 
 def foldr {A : VTy} {vf} {B : Ty vf} (n : B) (c : A -> B -> B) (l : List A) : B =
   fix (go l. case l n (\hd tl. c hd (go tl))) l

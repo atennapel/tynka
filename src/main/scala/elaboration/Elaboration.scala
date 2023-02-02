@@ -884,7 +884,7 @@ object Elaboration:
       )
     (etm, ety, estage)
 
-  private def elaborate(d: S.Def): Def =
+  private def elaborate(d: S.Def): List[Def] =
     debug(s"elaborate $d")
     d match
       case S.DDef(x, m, t, v) =>
@@ -904,6 +904,35 @@ object Elaboration:
         )
         val ed = DDef(x, ety, estage, etm)
         debug(s"elaborated $ed")
-        ed
+        List(ed)
+      case S.DData(x, ps, cs) =>
+        val vty = S.U(STy(S.Var(Name("Val"))))
+        val tcond = S.DDef(
+          x,
+          true,
+          Some(ps.foldRight(vty)((x, rt) => S.Pi(DoBind(x), Expl, vty, rt))),
+          ps.foldRight(S.TCon(DoBind(x), cs.map(_._2)))((x, b) =>
+            S.Lam(DoBind(x), S.ArgIcit(Expl), None, b)
+          )
+        )
+        val ed = elaborate(tcond)
+        val ecs = cs.zipWithIndex.flatMap { case ((c, ts), i) =>
+          val rt =
+            ps.foldLeft(S.Var(x))((f, x) => S.App(f, S.Var(x), S.ArgIcit(Expl)))
+          def replace(t: S.Ty): S.Ty = t match
+            case S.Pos(p, t)        => S.Pos(p, replace(t))
+            case S.Var(z) if z == x => rt
+            case _                  => t
+          val tsty =
+            ts.foldRight(rt)((t, b) => S.Pi(DontBind, Expl, replace(t), b))
+          val ty = ps.foldRight(tsty)((x, b) => S.Pi(DoBind(x), Impl, vty, b))
+          val ns = ts.zipWithIndex.map((_, i) => Name(s"a$i"))
+          val body = ns.foldRight(S.Con(i, ns.map(S.Var.apply)))((x, b) =>
+            S.Lam(DoBind(x), S.ArgIcit(Expl), None, b)
+          )
+          val cond = S.DDef(c, true, Some(ty), body)
+          elaborate(cond)
+        }
+        ed ++ ecs
 
-  def elaborate(ds: S.Defs): Defs = Defs(ds.toList.map(elaborate))
+  def elaborate(ds: S.Defs): Defs = Defs(ds.toList.flatMap(elaborate))
