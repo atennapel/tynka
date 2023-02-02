@@ -562,10 +562,12 @@ object Elaboration:
               case Some(ty) => checkVTy(ty)
             val va = ctx.eval(a)
             val vf = ctx.eval(newVF())
-            val (eb, rt) =
-              infer(b, STy(vf))(ctx.bind(x, va, SVTy()))
-            val fun = VTFun(va, vf, rt)
-            (Lam(x, i, ctx.quote(fun), eb), fun)
+            val rty0 = ctx.eval(newMeta(VUTy(vf), SMeta))
+            val ctx2 = ctx.bind(x, va, SVTy())
+            val eb0 = check(b, rty0, STy(vf))(ctx2)
+            val (eb, rty) = insert(STy(vf), (eb0, rty0))(ctx2)
+            val fty = VTFun(va, vf, rty)
+            (Lam(x, Expl, ctx.quote(fty), eb), fty)
       case S.Lam(x, S.ArgNamed(_), _, _) => error(s"cannot infer $tm")
 
       case S.Pair(fst, snd) =>
@@ -708,7 +710,9 @@ object Elaboration:
             unify(rvf, VVal())
             val ctx2 = ctx.bind(x, pty, s)
             val vf = ctx.eval(newVF())
-            val (eb, rty) = insert(STy(vf), infer(b, STy(vf))(ctx2))(ctx2)
+            val rty0 = ctx.eval(newMeta(VUTy(vf), SMeta))
+            val eb0 = check(b, rty0, STy(vf))(ctx2)
+            val (eb, rty) = insert(STy(vf), (eb0, rty0))(ctx2)
             val fty = VTFun(pty, vf, rty)
             (Lam(x, Expl, ctx.quote(fty), eb), fty, STy(vf))
       case S.Lam(_, S.ArgNamed(_), _, _) => error(s"cannot infer: $tm")

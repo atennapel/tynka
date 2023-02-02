@@ -16,6 +16,6 @@ TODO:
 - [x] Datatypes
 - [x] Improve `fix` type inference
 - [x] More primitive operations for `Int`
+- [x] Fix weakening bug in pretty printing `case`
 - [ ] See if primitive `Unit` and `Bool` can be removed
-- [ ] Fix weakening bug in pretty printing `case`
 - [ ] Keep generics signature in JVM bytecode output
