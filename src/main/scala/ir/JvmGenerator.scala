@@ -354,7 +354,7 @@ object JvmGenerator:
     case Let(ps, b) =>
       val newlocals = ps.foldLeft(locals) { case (locals, (x, ty, v)) =>
         val vr = mg.newLocal(gen(ty))
-        gen(v)
+        gen(v)(mg, ctx, args, locals, methodStart)
         mg.storeLocal(vr)
         locals + (x -> vr)
       }

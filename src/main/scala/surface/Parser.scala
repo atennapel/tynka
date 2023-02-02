@@ -97,10 +97,9 @@ object Parser:
       })
 
     private lazy val atom: Parsley[Tm] = positioned(
-      attempt("^*" *> atom).map(t => App(Var(Name("^*")), t, ArgIcit(Expl)))
-        <|> ("^" *> atom).map(Lift.apply)
-        <|> ("`" *> atom).map(Quote.apply)
-        <|> ("$" *> atom).map(Splice.apply)
+      ("^" *> projAtom).map(Lift.apply)
+        <|> ("`" *> projAtom).map(Quote.apply)
+        <|> ("$" *> projAtom).map(Splice.apply)
         <|> attempt("(" *> userOp.map(Var.apply) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
@@ -108,7 +107,7 @@ object Parser:
         <|> attempt(holeP)
         <|> nat
         <|> ("Meta" #> U(SMeta))
-        <|> ("Ty" *> atom).map(vf => U(STy(vf)))
+        <|> ("Ty" *> projAtom).map(vf => U(STy(vf)))
         <|> ident.map(Var.apply)
     )
 
@@ -167,19 +166,20 @@ object Parser:
         }
 
     private lazy val tcon: Parsley[Tm] = positioned(
-      ("tcon" *> bind <~> "." *> many("(" *> many(atom) <* ")")).map(TCon.apply)
+      ("tcon" *> bind <~> "." *> many("(" *> many(projAtom) <* ")"))
+        .map(TCon.apply)
     )
     private lazy val con: Parsley[Tm] = positioned(
-      ("con" *> "#" *> natural <~> many(atom)).map(Con.apply)
+      ("con" *> "#" *> natural <~> many(projAtom)).map(Con.apply)
     )
     private lazy val caseP: Parsley[Tm] = positioned(
-      ("case" *> atom <~> many(atom) <~> option(lam)).map {
+      ("case" *> projAtom <~> many(projAtom) <~> option(lam)).map {
         case ((scrut, cs), opt) => Case(scrut, cs ++ opt)
       }
     )
 
     private lazy val fix: Parsley[Tm] = positioned(
-      ("fix" *> "(" *> bind <~> bind <~> "." *> tm <* ")" <~> atom <~> many(
+      ("fix" *> "(" *> bind <~> bind <~> "." *> tm <* ")" <~> projAtom <~> many(
         arg
       ) <~> option(lam)).map { case (((((g, x), b), arg), args), opt) =>
         val fn = Fix(g, x, b, arg)

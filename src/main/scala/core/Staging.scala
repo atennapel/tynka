@@ -611,8 +611,12 @@ object Staging:
             })
           case gscrut =>
             val (vs, spine) = eta(rty.ps)
-            R.Case(ty, rty, gscrut, cs.map((xs, b) => (xs, go(b.apps(spine)))))
-              .lams(vs, IR.TDef(rty.rt))
+            R.Case(
+              ty,
+              IR.TDef(rty.rt),
+              gscrut,
+              cs.map((xs, b) => (xs, go(b.apps(spine))))
+            ).lams(vs, IR.TDef(rty.rt))
 
       case R.Fix(t1, t2, g, x, b0, arg) =>
         val (vs, spine) = eta(t2.ps)
