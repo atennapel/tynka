@@ -141,6 +141,7 @@ object JvmGenerator:
         case VoidLike      => Type.BOOLEAN_TYPE
         case FiniteLike(_) => Type.INT_TYPE
         case _             => t
+    case TBox => OBJECT_TYPE
 
   private def constantValue(e: Let): Option[Any] = e match
     case Let(Nil, Val(v)) => constantValue(v)
@@ -408,6 +409,8 @@ object JvmGenerator:
         new Method(x, gen(rt), ps.map(gen).toArray)
       )
 
+    case Unbox(t, v) => gen(v); unbox(t)
+
     case PrimApp(PIntAdd, List(a, b)) => gen(a); gen(b); mg.visitInsn(IADD)
     case PrimApp(PIntSub, List(a, b)) => gen(a); gen(b); mg.visitInsn(ISUB)
     case PrimApp(PIntMul, List(a, b)) => gen(a); gen(b); mg.visitInsn(IMUL)
@@ -532,6 +535,8 @@ object JvmGenerator:
 
     case Global(x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
 
+    case Box(t, v) => gen(v); box(t)
+
     case IntLit(v)  => mg.push(v)
     case BoolLit(v) => mg.push(v)
 
@@ -563,21 +568,26 @@ object JvmGenerator:
             )
           )
 
-  private def box(t: Ty)(implicit mg: GeneratorAdapter): Unit = t match
-    case TInt =>
-      mg.invokeStatic(
-        Type.getType(classOf[Integer]),
-        Method.getMethod("Integer valueOf (int)")
-      )
-    case TBool => mg.box(Type.BOOLEAN_TYPE)
-    case TCon(x) =>
-      tcons(x)._2 match
-        case VoidLike => mg.box(Type.BOOLEAN_TYPE)
-        case UnitLike => mg.box(Type.BOOLEAN_TYPE)
-        case BoolLike => mg.box(Type.BOOLEAN_TYPE)
-        case FiniteLike(_) =>
-          mg.invokeStatic(
-            Type.getType(classOf[Integer]),
-            Method.getMethod("Integer valueOf (int)")
-          )
-        case _ =>
+  private def box(t: Ty)(implicit ctx: Ctx, mg: GeneratorAdapter): Unit =
+    t match
+      case TInt =>
+        mg.invokeStatic(
+          Type.getType(classOf[Integer]),
+          Method.getMethod("Integer valueOf (int)")
+        )
+      case TBool => mg.box(Type.BOOLEAN_TYPE)
+      case TCon(x) =>
+        tcons(x)._2 match
+          case VoidLike => mg.box(Type.BOOLEAN_TYPE)
+          case UnitLike => mg.box(Type.BOOLEAN_TYPE)
+          case BoolLike => mg.box(Type.BOOLEAN_TYPE)
+          case FiniteLike(_) =>
+            mg.invokeStatic(
+              Type.getType(classOf[Integer]),
+              Method.getMethod("Integer valueOf (int)")
+            )
+          case _ =>
+      case TBox =>
+
+  private def unbox(t: Ty)(implicit ctx: Ctx, mg: GeneratorAdapter): Unit =
+    mg.unbox(gen(t))

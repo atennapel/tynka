@@ -118,6 +118,10 @@ object Common:
     case PFun
     case PTFun
 
+    case PTBox
+    case PBox
+    case PUnbox
+
     case PUnitType
     case PUnit
 
@@ -140,6 +144,10 @@ object Common:
       case PVal  => "Val"
       case PFun  => "Fun"
       case PTFun => "TFun"
+
+      case PTBox  => "Box"
+      case PBox   => "box"
+      case PUnbox => "unbox"
 
       case PUnitType => "()"
       case PUnit     => "[]"
@@ -164,6 +172,10 @@ object Common:
       case "Val"  => Some(PVal)
       case "Fun"  => Some(PFun)
       case "TFun" => Some(PTFun)
+
+      case "Box"   => Some(PTBox)
+      case "box"   => Some(PBox)
+      case "unbox" => Some(PUnbox)
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)

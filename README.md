@@ -22,6 +22,7 @@ TODO:
 - [x] Optimize finite types to `Int`
 - [x] Syntax sugar for datatype definitions
 - [x] Optimize constructor elimination (only bind used values)
+- [x] Boxing
 - [ ] Optimize single constructor types (product-like)
 - [ ] Irregular/nested datatype recursion
 - [ ] Improve inference for if condition
@@ -29,4 +30,5 @@ TODO:
 - [ ] Add new-types
 - [ ] Basic file importing
 - [ ] Keep generics signature in JVM bytecode output
-- [ ] Closures, thunks, boxed types, JVM generics
+- [ ] Records
+- [ ] Closures, thunks, JVM generics

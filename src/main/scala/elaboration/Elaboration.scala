@@ -393,13 +393,18 @@ object Elaboration:
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd, ctx.quote(b)))
 
         case (VU(STy(vf)), VU(SMeta)) => Some(Lift(ctx.quote(vf), t))
+        case (VFlex(_, _), _)         => justAdjust(t, a, st1, b, st2)
+        case (_, VFlex(_, _))         => justAdjust(t, a, st1, b, st2)
         case (VLift(vf1, a), VLift(vf2, b)) =>
           unify(vf1, vf2); unify(a, b); None
-        case (VFlex(_, _), _)  => justAdjust(t, a, st1, b, st2)
-        case (_, VFlex(_, _))  => justAdjust(t, a, st1, b, st2)
-        case (VLift(vf, a), b) => Some(coe(t.splice, a, STy(vf), b, st2))
-        case (a, VLift(vf, b)) => Some(coe(t, a, st1, b, STy(vf)).quote)
-        case _                 => justAdjust(t, a, st1, b, st2)
+        case (VLift(vf, a), b)    => Some(coe(t.splice, a, STy(vf), b, st2))
+        case (a, VLift(vf, b))    => Some(coe(t, a, st1, b, STy(vf)).quote)
+        case (VTBox(a), VTBox(b)) => unify(a, b); None
+        case (VTBox(a), b) =>
+          Some(coe(t.quote.unbox(ctx.quote(a)).splice, a, st1, b, st2))
+        case (a, VTBox(b)) =>
+          Some(coe(t.quote.box(ctx.quote(b)).splice, a, st1, b, st2))
+        case _ => justAdjust(t, a, st1, b, st2)
     go(t, a, st1, b, st2).getOrElse(t)
 
   // checking

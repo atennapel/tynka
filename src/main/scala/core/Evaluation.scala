@@ -234,6 +234,21 @@ object Evaluation:
     case PTFun =>
       (vfun(VVTy(), vpiI("vf", VVF(), vf => vfun(VUTy(vf), VFTy()))), SMeta)
 
+    // Ty Val -> Ty Val
+    case PTBox => (vfun(VVTy(), VVTy()), SMeta)
+    // {A : Ty Val} -> ^A -> ^(Box A)
+    case PBox =>
+      (
+        vpiI("A", VVTy(), a => vfun(VLift(VVal(), a), VLift(VVal(), VTBox(a)))),
+        SMeta
+      )
+    // {A : Ty Val} -> ^(Box A) -> ^A
+    case PUnbox =>
+      (
+        vpiI("A", VVTy(), a => vfun(VLift(VVal(), VTBox(a)), VLift(VVal(), a))),
+        SMeta
+      )
+
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)
 

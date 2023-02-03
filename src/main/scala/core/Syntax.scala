@@ -78,6 +78,9 @@ object Syntax:
       case Quote(t) => t
       case t        => Splice(t)
 
+    def box(t: Ty): Tm = App(App(Prim(PBox), t, Impl), this, Expl)
+    def unbox(t: Ty): Tm = App(App(Prim(PUnbox), t, Impl), this, Expl)
+
     override def toString: String = this match
       case Var(x)                     => s"'$x"
       case Global(x)                  => s"$x"

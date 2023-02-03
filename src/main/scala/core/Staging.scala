@@ -214,6 +214,9 @@ object Staging:
 
     case Fix(t1: IR.Ty, t2: IR.TDef, go: IR.LName, x: IR.LName, body: R, arg: R)
 
+    case Box(t: IR.Ty, v: R)
+    case Unbox(t: IR.Ty, v: R)
+
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
@@ -239,6 +242,9 @@ object Staging:
 
       case Fix(t1, t2, go, x, b, arg) =>
         s"(fix (($go : ${IR.TDef(t1, t2)}) ($x : $t1). $b) $arg)"
+
+      case Box(_, v)   => s"(box $v)"
+      case Unbox(_, v) => s"(unbox $v)"
 
     def lams(ps: List[(IR.LName, IR.Ty)], rt: IR.TDef): R =
       ps.foldRight[(R, IR.TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -281,6 +287,9 @@ object Staging:
 
       case Fix(_, _, go, x, b, arg) =>
         b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
+
+      case Box(_, v)   => v.fvs
+      case Unbox(_, v) => v.fvs
 
     def subst(sub: Map[IR.LName, R]): R =
       subst(
@@ -352,11 +361,15 @@ object Staging:
           )
           Fix(t1, t2, g, x, b, arg.subst(sub, scope))
 
+        case Box(t, v)   => Box(t, v.subst(sub, scope))
+        case Unbox(t, v) => Unbox(t, v.subst(sub, scope))
+
   // quotation
   private type DataMap =
     ArrayBuffer[(Val1 => List[List[Val1]], List[List[IR.Ty]])]
 
   private def tyMatch(a: Val1, b: Val1)(implicit l: Int): Boolean = (a, b) match
+    case (VPrim1(PTBox, List(_)), VPrim1(PTBox, List(_))) => true
     case (VPrim1(x1, as1), VPrim1(x2, as2))
         if x1 == x2 && as1.size == as2.size =>
       as1.zip(as2).forall(tyMatch)
@@ -406,11 +419,12 @@ object Staging:
     (i, s"D$i")
 
   private def quoteVTy(v: Val1)(implicit dm: DataMap): IR.Ty = v match
-    case VPrim1(PInt, Nil) => IR.TInt
-    case VTPair1(a, b)     => IR.TCon(findOrAddData(vpairTy1Clos(a, b))._2)
-    case VTConName1(x)     => IR.TCon(x)
-    case VTCon1(cs)        => IR.TCon(findOrAddData(cs)._2)
-    case _                 => impossible()
+    case VPrim1(PInt, Nil)      => IR.TInt
+    case VTPair1(a, b)          => IR.TCon(findOrAddData(vpairTy1Clos(a, b))._2)
+    case VTConName1(x)          => IR.TCon(x)
+    case VTCon1(cs)             => IR.TCon(findOrAddData(cs)._2)
+    case VPrim1(PTBox, List(_)) => IR.TBox
+    case _                      => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
@@ -500,6 +514,11 @@ object Staging:
         )
         val qarg = quoteRep(arg)
         R.Fix(ta, tb, g, x, qf, qarg)
+
+      case VSplicePrim0(PBox, List(t, v)) =>
+        R.Box(quoteVTy(t), quoteRep(vsplice0(v)))
+      case VSplicePrim0(PUnbox, List(t, v)) =>
+        R.Unbox(quoteVTy(t), quoteRep(vsplice0(v)))
 
       case _ => impossible()
 
@@ -638,6 +657,15 @@ object Staging:
         addDef(RD.Def(gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
         R.App(gl, go(arg))
 
+      case R.Box(t, v) =>
+        go(v) match
+          case R.Unbox(t, v) => v
+          case v             => R.Box(t, v)
+      case R.Unbox(t, v) =>
+        go(v) match
+          case R.Box(t, v) => v
+          case v           => R.Unbox(t, v)
+
       case tm => tm
     go(tm)
 
@@ -685,6 +713,10 @@ object Staging:
         }
         (IR.Con(ty, i, qas), IR.TCon(ty), ds)
 
+      case R.Box(ty, v) =>
+        val (qv, tv, ds) = toIRValue(v)
+        (IR.Box(ty, qv), IR.TBox, ds)
+
       case _ => c2v(tm)
 
   private def v2c(
@@ -709,6 +741,7 @@ object Staging:
     case R.Global(_, _) => v2c(tm)
     case R.IntLit(_)    => v2c(tm)
     case R.Con(_, _, _) => v2c(tm)
+    case R.Box(_, _)    => v2c(tm)
 
     case R.App(_, _) =>
       val (f, as) = tm.flattenApps
@@ -762,6 +795,10 @@ object Staging:
         (ys, toIRLet(b, tail)(newns, defname, fresh))
       )
       (IR.Case(ty, qs, qcs), rty.ty, ds)
+
+    case R.Unbox(ty, v) =>
+      val (qv, tv, ds) = toIRValue(v)
+      (IR.Unbox(ty, qv), ty, ds)
 
     case _ => impossible()
 
