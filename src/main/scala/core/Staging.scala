@@ -2,6 +2,7 @@ package core
 
 import common.Common.*
 import common.Debug.debug
+import common.Ref
 import Syntax.*
 import Globals.getGlobal
 import ir.Syntax as IR
@@ -366,7 +367,7 @@ object Staging:
 
   // quotation
   private type DataMap =
-    ArrayBuffer[(Val1 => List[List[Val1]], List[List[IR.Ty]])]
+    (Ref[Int], ArrayBuffer[(Int, Val1 => List[List[Val1]], List[List[IR.Ty]])])
 
   private def tyMatch(a: Val1, b: Val1)(implicit l: Int): Boolean = (a, b) match
     case (VPrim1(PTBox, List(_)), VPrim1(PTBox, List(_))) => true
@@ -391,7 +392,9 @@ object Staging:
   private def findData(cs: Val1 => List[List[Val1]])(implicit
       dm: DataMap
   ): Int =
-    dm.indexWhere((cs2, _) => dataMatch(cs, cs2)(0))
+    dm._2.find((i, cs2, _) => dataMatch(cs, cs2)(0)) match
+      case Some(p) => p._1
+      case None    => -1
 
   private def addData(
       cs: Val1 => List[List[Val1]],
@@ -402,8 +405,9 @@ object Staging:
     val ix = findData(cs)
     if ix >= 0 then ix
     else
-      val i = dm.size
-      dm += ((cs, k(dm.size)))
+      val i = dm._1.value
+      dm._1.set(i + 1)
+      dm._2 += ((i, cs, k(i)))
       i
 
   private def findOrAddData(cs: Val1 => List[List[Val1]])(implicit
@@ -413,7 +417,8 @@ object Staging:
       cs,
       i => {
         val x = s"D$i"
-        cs(VTConName1(x)).map(as => as.map(quoteVTy))
+        val res = cs(VTConName1(x)).map(as => as.map(quoteVTy))
+        res
       }
     )
     (i, s"D$i")
@@ -490,7 +495,9 @@ object Staging:
         R.Con(findOrAddData(cs)._2, i, as.map(quoteRep))
       case VCase0(VTCon1(tcs), rty, scrut, cs) =>
         val (ix, dty) = findOrAddData(tcs)
-        val ecs = dm(ix)._2
+        val ecs = dm
+          ._2(ix)
+          ._3
           .zip(cs)
           .map((ts, v) => {
             val xs = ts.map(t => (fresh(), t))
@@ -859,8 +866,11 @@ object Staging:
 
   def stage(ds: Defs): IR.Defs =
     implicit val dds: DataMap =
-      ArrayBuffer.empty[(Val1 => List[List[Val1]], List[List[IR.Ty]])]
+      (
+        Ref(0),
+        ArrayBuffer.empty[(Int, Val1 => List[List[Val1]], List[List[IR.Ty]])]
+      )
     val sds = ds.toList.flatMap(stageDef)
     IR.Defs(
-      dds.zipWithIndex.map((cs, i) => IR.DData(s"D$i", cs._2)).toList ++ sds
+      dds._2.map((i, _, cs) => IR.DData(s"D$i", cs)).toList ++ sds
     )

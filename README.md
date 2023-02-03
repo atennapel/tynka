@@ -24,11 +24,11 @@ TODO:
 - [x] Optimize constructor elimination (only bind used values)
 - [x] Boxing
 - [ ] Optimize single constructor types (product-like)
-- [ ] Irregular/nested datatype recursion
-- [ ] Improve inference for if condition
-- [ ] Rename symbol names in JVM generator
 - [ ] Add new-types
+- [ ] Rename symbol names in JVM generator
+- [ ] Improve inference for if condition
 - [ ] Basic file importing
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Records
+- [ ] Irregular/nested datatype recursion
 - [ ] Closures, thunks, JVM generics
