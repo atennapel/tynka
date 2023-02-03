@@ -24,7 +24,7 @@ TODO:
 - [x] Optimize constructor elimination (only bind used values)
 - [x] Boxing
 - [x] Optimize single constructor types (product-like)
-- [ ] Add new-types
+- [x] Add new-types
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
 - [ ] Basic file importing

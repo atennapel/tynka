@@ -37,6 +37,7 @@ object JvmGenerator:
     case BoolLike
     case FiniteLike(n: Int)
     case ProductLike(ts: List[Ty])
+    case NewtypeLike(t: Ty)
     case ADT
   import DataKind.*
 
@@ -136,20 +137,22 @@ object JvmGenerator:
     case TCon(x) =>
       val (t, k) = tcons(x)
       k match
-        case UnitLike      => Type.BOOLEAN_TYPE
-        case BoolLike      => Type.BOOLEAN_TYPE
-        case VoidLike      => Type.BOOLEAN_TYPE
-        case FiniteLike(_) => Type.INT_TYPE
-        case _             => t
+        case UnitLike       => Type.BOOLEAN_TYPE
+        case BoolLike       => Type.BOOLEAN_TYPE
+        case VoidLike       => Type.BOOLEAN_TYPE
+        case FiniteLike(_)  => Type.INT_TYPE
+        case NewtypeLike(t) => gen(t)
+        case _              => t
     case TBox => OBJECT_TYPE
 
   private def constantValue(e: Let): Option[Any] = e match
     case Let(Nil, Val(v)) => constantValue(v)
     case _                => None
   private def constantValue(e: Value): Option[Any] = e match
-    case BoolLit(b) => Some(b)
-    case IntLit(n)  => Some(n)
-    case _          => None
+    case BoolLit(b)         => Some(b)
+    case IntLit(n)          => Some(n)
+    case Con(_, _, List(v)) => constantValue(v)
+    case _                  => None
 
   private type Locals = IntMap[Int]
   private type Args = Int
@@ -216,6 +219,7 @@ object JvmGenerator:
         case List(Nil)                  => UnitLike
         case List(Nil, Nil)             => BoolLike
         case cs if cs.forall(_.isEmpty) => FiniteLike(cs.size)
+        case List(List(t))              => NewtypeLike(t)
         case List(ts)                   => ProductLike(ts)
         case _                          => ADT
       tcons += (x -> (Type.getType(s"L${ctx.moduleName}$$$x;"), kind))
@@ -224,6 +228,7 @@ object JvmGenerator:
         case UnitLike        => ()
         case BoolLike        => ()
         case FiniteLike(_)   => ()
+        case NewtypeLike(_)  => ()
         case ProductLike(ts) => genProduct(x, ts)
         case _               => genData(x, cs)
 
@@ -537,6 +542,17 @@ object JvmGenerator:
             mg.visitJumpInsn(GOTO, lEnd)
           }
           mg.visitLabel(lEnd)
+        case NewtypeLike(_) =>
+          val (List((x, t)), b) = cs.head: @unchecked
+          var newlocals = locals
+          val fv = b.fv
+          if fv.contains(x) then
+            val dt = gen(t)
+            val local = mg.newLocal(dt)
+            gen(scrut)
+            mg.storeLocal(local)
+            newlocals = newlocals + (x -> local)
+          gen(b)(mg, ctx, args, newlocals, methodStart)
         case ProductLike(_) =>
           gen(scrut)
           val (xs, b) = cs.head
@@ -551,6 +567,7 @@ object JvmGenerator:
               mg.storeLocal(local)
               newlocals = newlocals + (x -> local)
           }
+          mg.pop()
           gen(b)(mg, ctx, args, newlocals, methodStart)
         case _ =>
           gen(scrut)
@@ -625,10 +642,11 @@ object JvmGenerator:
     case Con(ty, i, as) =>
       val (jty, kind) = tcons(ty)
       (kind, as) match
-        case (VoidLike, _)      => impossible()
-        case (UnitLike, _)      => mg.push(false)
-        case (BoolLike, _)      => mg.push(i != 0)
-        case (FiniteLike(_), _) => mg.push(i)
+        case (VoidLike, _)       => impossible()
+        case (UnitLike, _)       => mg.push(false)
+        case (BoolLike, _)       => mg.push(i != 0)
+        case (FiniteLike(_), _)  => mg.push(i)
+        case (NewtypeLike(_), _) => gen(as.head)
         case (ProductLike(ts), _) =>
           val conType = Type.getType(s"L${ctx.moduleName}$$$ty;")
           mg.newInstance(conType)
@@ -681,7 +699,8 @@ object JvmGenerator:
               Type.getType(classOf[Integer]),
               Method.getMethod("Integer valueOf (int)")
             )
-          case _ =>
+          case NewtypeLike(t) => box(t)
+          case _              =>
       case TBox =>
 
   private def unbox(t: Ty)(implicit ctx: Ctx, mg: GeneratorAdapter): Unit =
