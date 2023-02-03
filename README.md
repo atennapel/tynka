@@ -23,7 +23,7 @@ TODO:
 - [x] Syntax sugar for datatype definitions
 - [x] Optimize constructor elimination (only bind used values)
 - [x] Boxing
-- [ ] Optimize single constructor types (product-like)
+- [x] Optimize single constructor types (product-like)
 - [ ] Add new-types
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition

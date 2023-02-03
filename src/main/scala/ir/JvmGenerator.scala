@@ -36,7 +36,7 @@ object JvmGenerator:
     case UnitLike
     case BoolLike
     case FiniteLike(n: Int)
-    case ProductLike
+    case ProductLike(ts: List[Ty])
     case ADT
   import DataKind.*
 
@@ -216,15 +216,16 @@ object JvmGenerator:
         case List(Nil)                  => UnitLike
         case List(Nil, Nil)             => BoolLike
         case cs if cs.forall(_.isEmpty) => FiniteLike(cs.size)
-        case List(_)                    => ProductLike
+        case List(ts)                   => ProductLike(ts)
         case _                          => ADT
       tcons += (x -> (Type.getType(s"L${ctx.moduleName}$$$x;"), kind))
       kind match
-        case VoidLike      => ()
-        case UnitLike      => ()
-        case BoolLike      => ()
-        case FiniteLike(_) => ()
-        case _             => genData(x, cs)
+        case VoidLike        => ()
+        case UnitLike        => ()
+        case BoolLike        => ()
+        case FiniteLike(_)   => ()
+        case ProductLike(ts) => genProduct(x, ts)
+        case _               => genData(x, cs)
 
   private def genData(dx: GName, cs: List[List[Ty]])(implicit
       cw: ClassWriter,
@@ -369,6 +370,72 @@ object JvmGenerator:
     bos.write(cw.toByteArray())
     bos.close()
 
+  private def genProduct(dx: GName, as: List[Ty])(implicit
+      ctx: Ctx,
+      outercw: ClassWriter
+  ): Unit =
+    val className = s"${ctx.moduleName}$$$dx"
+    val cw = new ClassWriter(
+      ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES
+    )
+    cw.visit(
+      V1_8,
+      ACC_PUBLIC + ACC_STATIC + ACC_FINAL,
+      className,
+      null,
+      "java/lang/Object",
+      null
+    )
+    // fields
+    as.zipWithIndex.foreach((ty, i) => {
+      cw.visitField(
+        ACC_PUBLIC + ACC_FINAL,
+        s"a$i",
+        gen(ty).getDescriptor,
+        null,
+        null
+      )
+    })
+    // class constructor
+    val m = new Method("<init>", Type.VOID_TYPE, as.map(gen).toArray)
+    val mg: GeneratorAdapter =
+      new GeneratorAdapter(
+        if as.isEmpty then ACC_PROTECTED else ACC_PUBLIC,
+        m,
+        null,
+        null,
+        cw
+      )
+    mg.visitVarInsn(ALOAD, 0)
+    mg.visitMethodInsn(
+      INVOKESPECIAL,
+      "java/lang/Object",
+      "<init>",
+      "()V",
+      false
+    )
+    as.zipWithIndex.foreach((ty, i) => {
+      mg.loadThis()
+      mg.loadArg(i)
+      mg.putField(Type.getType(s"L$className;"), s"a$i", gen(ty))
+    })
+    mg.visitInsn(RETURN)
+    mg.visitMaxs(1, 1)
+    mg.visitEnd()
+    // done
+    cw.visitEnd()
+    outercw.visitInnerClass(
+      className,
+      ctx.moduleName,
+      dx,
+      ACC_PUBLIC + ACC_STATIC
+    )
+    val bos = new BufferedOutputStream(
+      new FileOutputStream(s"$className.class")
+    )
+    bos.write(cw.toByteArray())
+    bos.close()
+
   private def gen(
       t: Let
   )(implicit
@@ -470,6 +537,21 @@ object JvmGenerator:
             mg.visitJumpInsn(GOTO, lEnd)
           }
           mg.visitLabel(lEnd)
+        case ProductLike(_) =>
+          gen(scrut)
+          val (xs, b) = cs.head
+          var newlocals = locals
+          val fv = b.fv
+          xs.zipWithIndex.foreach { case ((x, t), i) =>
+            if fv.contains(x) then
+              val dt = gen(t)
+              val local = mg.newLocal(dt)
+              mg.dup()
+              mg.getField(jty, s"a$i", dt)
+              mg.storeLocal(local)
+              newlocals = newlocals + (x -> local)
+          }
+          gen(b)(mg, ctx, args, newlocals, methodStart)
         case _ =>
           gen(scrut)
           val lEnd = new Label
@@ -547,6 +629,19 @@ object JvmGenerator:
         case (UnitLike, _)      => mg.push(false)
         case (BoolLike, _)      => mg.push(i != 0)
         case (FiniteLike(_), _) => mg.push(i)
+        case (ProductLike(ts), _) =>
+          val conType = Type.getType(s"L${ctx.moduleName}$$$ty;")
+          mg.newInstance(conType)
+          mg.dup()
+          as.foreach(gen)
+          mg.invokeConstructor(
+            conType,
+            new Method(
+              "<init>",
+              Type.VOID_TYPE,
+              ts.map(gen).toArray
+            )
+          )
         case (_, Nil) =>
           val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
           mg.getStatic(
