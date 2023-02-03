@@ -496,7 +496,7 @@ object Elaboration:
         unify(vf, VVal())
         val ea = checkVTy(a)
         val eb = checkVTy(b)
-        tpair(ea, eb)
+        TPair(ea, eb)
 
       case (S.Con(i, as), VTCon(_, b)) =>
         val cs = b(ty)
@@ -718,7 +718,7 @@ object Elaboration:
           case STy(rvf) =>
             unify(rvf, VVal())
             val eb = checkVTy(b)
-            (tpair(ea, eb), VVTy(), SMeta)
+            (TPair(ea, eb), VVTy(), SMeta)
 
       case S.Pair(fst, snd) =>
         val (efst, fstty, s1) = infer(fst)

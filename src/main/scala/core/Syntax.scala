@@ -44,6 +44,7 @@ object Syntax:
     case Fix(ty: Ty, rty: Ty, g: Bind, x: Bind, b: Tm, arg: Tm)
 
     case Sigma(name: Bind, ty: Ty, body: Ty)
+    case TPair(fst: Ty, snd: Ty)
     case Pair(fst: Tm, snd: Tm, ty: Ty)
     case Proj(tm: Tm, proj: ProjType, ty: Ty, pty: Ty)
 
@@ -94,6 +95,7 @@ object Syntax:
       case Fix(_, _, g, x, b, arg)  => s"(fix ($g $x. $b) $arg)"
 
       case Sigma(DontBind, t, b) => s"($t ** $b)"
+      case TPair(fst, snd)       => s"(TPair $fst $snd)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"
       case Pair(a, b, _)         => s"($a, $b)"
       case Proj(t, p, _, _)      => s"$t$p"
@@ -121,4 +123,3 @@ object Syntax:
 
   def tfun(a: Ty, vf: Ty, b: Ty): Ty =
     App(App(App(Prim(PTFun), a, Expl), vf, Impl), b, Expl)
-  def tpair(a: Ty, b: Ty): Ty = App(App(Prim(PTPair), a, Expl), b, Expl)

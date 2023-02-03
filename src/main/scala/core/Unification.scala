@@ -199,6 +199,7 @@ object Unification:
 
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
+      case VTPair(a, b)       => TPair(go(a), go(b))
 
       case VIntLit(n) => IntLit(n)
 
@@ -354,6 +355,7 @@ object Unification:
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
         unify(a1, a2); unify(b1, b2)
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
+      case (VTPair(a1, b1), VTPair(a2, b2))     => unify(a1, a2); unify(b1, b2)
       case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(vf1, ty1), VLift(vf2, ty2)) =>

@@ -65,6 +65,7 @@ object Zonking:
       )
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
+    case TPair(a, b)    => TPair(zonk(a), zonk(b))
     case Pair(a, b, t)  => Pair(zonk(a), zonk(b), zonk(t))
     case Proj(_, _, _, _) =>
       quoteVT(zonkSp(t)) match

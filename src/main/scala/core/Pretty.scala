@@ -100,6 +100,7 @@ object Pretty:
       if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
       else s"(${es.map(pretty).mkString(", ")})"
     case Proj(t, p, _, _) => s"${prettyParen(t)}$p"
+    case TPair(a, b)      => s"TPair ${prettyParen(a)} ${prettyParen(b)}"
 
     case IntLit(n) => s"$n"
 

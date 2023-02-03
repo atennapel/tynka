@@ -27,6 +27,7 @@ object Staging:
     case VLam1(fn: Val1 => Val1)
     case VQuote1(v: Val0)
     case VType1
+    case VTPair1(fst: Val1, snd: Val1)
     case VPair1(fst: Val1, snd: Val1)
     case VTCon1(cs: Val1 => List[List[Val1]])
     case VTConName1(x: IR.GName)
@@ -79,6 +80,7 @@ object Staging:
     case App(f, a, _)          => vapp1(eval1(f), eval1(a))
     case Proj(t, p, _, _)      => vproj1(eval1(t), p)
     case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
+    case TPair(fst, snd)       => VTPair1(eval1(fst), eval1(snd))
     case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
     case TCon(_, cs) =>
       VTCon1(r => cs.map(as => as.map(a => eval1(a)(Def1(env, r)))))
@@ -111,7 +113,7 @@ object Staging:
   private def vpairTy1(a: Val1, b: Val1): Val1 = VTCon1(vpairTy1Clos(a, b))
 
   private def vproj0(v: Val0, p: ProjType, t: Val1, pt: Val1): Val0 =
-    val VPrim1(PTPair, List(a, b)) = pt: @unchecked
+    val VTPair1(a, b) = pt: @unchecked
     (v, p) match
       case (p, Fst) =>
         VCase0(
@@ -175,7 +177,7 @@ object Staging:
     case Let(x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
     case Pair(fst, snd, ty) =>
-      val VPrim1(PTPair, List(a, b)) = eval1(ty): @unchecked
+      val VTPair1(a, b) = eval1(ty): @unchecked
       VCon0(vpairTy1(a, b), 0, List(eval0(fst), eval0(snd)))
     case Splice(t)      => vsplice0(eval1(t))
     case Wk(t)          => eval0(t)(env.tail)
@@ -405,11 +407,10 @@ object Staging:
 
   private def quoteVTy(v: Val1)(implicit dm: DataMap): IR.Ty = v match
     case VPrim1(PInt, Nil) => IR.TInt
-    case VPrim1(PTPair, List(a, b)) =>
-      IR.TCon(findOrAddData(vpairTy1Clos(a, b))._2)
-    case VTConName1(x) => IR.TCon(x)
-    case VTCon1(cs)    => IR.TCon(findOrAddData(cs)._2)
-    case _             => impossible()
+    case VTPair1(a, b)     => IR.TCon(findOrAddData(vpairTy1Clos(a, b))._2)
+    case VTConName1(x)     => IR.TCon(x)
+    case VTCon1(cs)        => IR.TCon(findOrAddData(cs)._2)
+    case _                 => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))

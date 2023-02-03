@@ -21,9 +21,7 @@ TODO:
 - [x] Optimize `Void`-like types
 - [x] Optimize finite types to `Int`
 - [x] Syntax sugar for datatype definitions
-- [x] Remove primitive Pair type
 - [x] Optimize constructor elimination (only bind used values)
-- [ ] Remove TPair
 - [ ] Optimize single constructor types (product-like)
 - [ ] Irregular/nested datatype recursion
 - [ ] Improve inference for if condition

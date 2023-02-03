@@ -119,6 +119,7 @@ object Evaluation:
       VFix(eval(ty), eval(rty), g, x, CClos2(env, b), eval(arg))
 
     case Sigma(x, t, b)   => VSigma(x, eval(t), Clos(b))
+    case TPair(a, b)      => VTPair(eval(a), eval(b))
     case Pair(a, b, ty)   => VPair(eval(a), eval(b), eval(ty))
     case Proj(t, p, _, _) => vproj(eval(t), p)
 
@@ -203,6 +204,7 @@ object Evaluation:
           quote(arg, unfold)
         )
 
+      case VTPair(a, b) => TPair(quote(a, unfold), quote(b, unfold))
       case VPair(fst, snd, t) =>
         Pair(quote(fst, unfold), quote(snd, unfold), quote(t, unfold))
       case VSigma(x, t, b) =>
@@ -231,8 +233,6 @@ object Evaluation:
     // Ty Val -> {vf : VF} -> Ty vf -> Ty Fun
     case PTFun =>
       (vfun(VVTy(), vpiI("vf", VVF(), vf => vfun(VUTy(vf), VFTy()))), SMeta)
-    // Ty Val -> Ty Val -> Ty Val
-    case PTPair => (vfun(VVTy(), vfun(VVTy(), VVTy())), SMeta)
 
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)

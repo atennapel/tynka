@@ -116,9 +116,7 @@ object Common:
     case PVF
     case PVal
     case PFun
-
     case PTFun
-    case PTPair
 
     case PUnitType
     case PUnit
@@ -138,12 +136,10 @@ object Common:
     case PIntGeq
 
     override def toString: String = this match
-      case PVF  => "VF"
-      case PVal => "Val"
-      case PFun => "Fun"
-
-      case PTFun  => "TFun"
-      case PTPair => "TPair"
+      case PVF   => "VF"
+      case PVal  => "Val"
+      case PFun  => "Fun"
+      case PTFun => "TFun"
 
       case PUnitType => "()"
       case PUnit     => "[]"
@@ -164,12 +160,10 @@ object Common:
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
-      case "VF"  => Some(PVF)
-      case "Val" => Some(PVal)
-      case "Fun" => Some(PFun)
-
-      case "TFun"  => Some(PTFun)
-      case "TPair" => Some(PTPair)
+      case "VF"   => Some(PVF)
+      case "Val"  => Some(PVal)
+      case "Fun"  => Some(PFun)
+      case "TFun" => Some(PTFun)
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)

@@ -59,6 +59,7 @@ object Value:
     case VFix(ty: VTy, rty: VTy, g: Bind, x: Bind, b: Clos2, arg: Val)
 
     case VSigma(name: Bind, ty: VTy, body: Clos)
+    case VTPair(fst: VTy, snd: VTy)
     case VPair(fst: Val, snd: Val, ty: VTy)
 
     case VIntLit(value: Int)
@@ -167,14 +168,6 @@ object Value:
             SApp(SApp(SApp(SId, a, Expl), vf, Impl), b, Expl)
           ) =>
         Some((a, vf, b))
-      case _ => None
-
-  object VTPair:
-    def apply(a: Val, b: Val): Val =
-      VRigid(HPrim(PTPair), SApp(SApp(SId, a, Expl), b, Expl))
-    def unapply(value: Val): Option[(Val, Val)] = value match
-      case VRigid(HPrim(PTPair), SApp(SApp(SId, a, Expl), b, Expl)) =>
-        Some((a, b))
       case _ => None
 
   object VUnitType:
