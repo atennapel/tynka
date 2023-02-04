@@ -32,7 +32,8 @@ object Parser:
         "con",
         "case",
         "fix",
-        "data"
+        "data",
+        "include"
       ),
       operators = Set(
         "=",
@@ -64,6 +65,7 @@ object Parser:
     val ident: Parsley[String] = lexer.identifier
     val userOp: Parsley[String] = lexer.userOp
     val natural: Parsley[Int] = lexer.natural
+    val string: Parsley[String] = lexer.stringLiteral
 
     object Implicits:
       given Conversion[String, Parsley[Unit]] with
@@ -77,7 +79,7 @@ object Parser:
     import parsley.combinator.{many, some, option, sepEndBy, sepBy}
     import parsley.Parsley.pos
 
-    import LangLexer.{ident as ident0, userOp as userOp0, natural}
+    import LangLexer.{ident as ident0, userOp as userOp0, natural, string}
     import LangLexer.Implicits.given
 
     private def positioned(p: => Parsley[Tm]): Parsley[Tm] =
@@ -324,7 +326,8 @@ object Parser:
     private def ops(ss: String*): Seq[Ops[Tm, Tm]] = ss.flatMap(opLevel)
 
     // definitions
-    lazy val defs: Parsley[Defs] = many(defP <|> dataP).map(Defs.apply)
+    lazy val defs: Parsley[Defs] =
+      many(defP <|> dataP <|> includeP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
       ("def" *> identOrOp <~> many(defParam) <~> option(
@@ -347,6 +350,9 @@ object Parser:
         .map { case ((x, ps), cs) =>
           DData(x, ps, cs)
         }
+
+    private lazy val includeP: Parsley[Def] =
+      ("include" *> string).map(DInclude.apply)
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)
   lazy val defsParser: Parsley[Defs] = LangLexer.fully(TmParser.defs)

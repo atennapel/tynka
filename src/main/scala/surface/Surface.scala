@@ -8,11 +8,19 @@ object Syntax:
 
     def toList: List[Def] = defs
 
+    def includes: (List[String], Defs) =
+      (
+        defs.flatMap { case DInclude(uri) => Some(uri); case _ => None },
+        Defs(defs.filter { case DInclude(uri) => false; case _ => true })
+      )
+
   enum Def:
+    case DInclude(uri: String)
     case DDef(name: Name, meta: Boolean, ty: Option[Ty], value: Tm)
     case DData(name: Name, ps: List[Name], cs: List[(Name, List[Ty])])
 
     override def toString: String = this match
+      case DInclude(uri)          => s"include \"$uri\""
       case DDef(x, m, Some(t), v) => s"def $x : $t ${if m then "" else ":"}= $v"
       case DDef(x, m, None, v)    => s"def $x ${if m then "" else ":"}= $v"
       case DData(x, ps, Nil) =>

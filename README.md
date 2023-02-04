@@ -25,9 +25,12 @@ TODO:
 - [x] Boxing
 - [x] Optimize single constructor types (product-like)
 - [x] Add new-types
+- [x] Basic file importing
+- [ ] Relative file including
+- [ ] Remove unused defs (starting from main)
+- [ ] Modules, or a way to handle name clashes
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
-- [ ] Basic file importing
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Records
 - [ ] Irregular/nested datatype recursion

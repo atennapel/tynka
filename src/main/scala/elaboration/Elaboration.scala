@@ -16,11 +16,11 @@ import scala.collection.mutable
 
 object Elaboration:
   // errors
-  final case class ElaborateError(pos: PosInfo, msg: String)
+  final case class ElaborateError(pos: PosInfo, uri: String, msg: String)
       extends Exception(msg)
 
   private def error(msg: String)(implicit ctx: Ctx): Nothing =
-    throw ElaborateError(ctx.pos, msg)
+    throw ElaborateError(ctx.pos, null, msg)
 
   // unification
   private def unify(a: VStage, b: VStage)(implicit ctx: Ctx): Unit =
@@ -948,6 +948,7 @@ object Elaboration:
   private def elaborate(d: S.Def): List[Def] =
     debug(s"elaborate $d")
     d match
+      case S.DInclude(_) => Nil
       case S.DDef(x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty()
         if getGlobal(x).isDefined then error(s"duplicate global $x")
@@ -996,4 +997,6 @@ object Elaboration:
         }
         ed ++ ecs
 
-  def elaborate(ds: S.Defs): Defs = Defs(ds.toList.flatMap(elaborate))
+  def elaborate(uri: String, ds: S.Defs): Defs =
+    try Defs(ds.toList.flatMap(elaborate))
+    catch case e: ElaborateError => throw ElaborateError(e.pos, uri, e.msg)

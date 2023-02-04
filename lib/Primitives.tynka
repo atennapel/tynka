@@ -1,3 +1,6 @@
+def VTy = Ty Val
+def FTy = Ty Fun
+
 data Void =
 def absurd {vf} {A : Ty vf} (x : Void) : A = case x
 
@@ -22,3 +25,8 @@ def (<) a b : Bool = intLt a b
 def (>) a b : Bool = intGt a b
 def (<=) a b : Bool = intLeq a b
 def (>=) a b : Bool = intGeq a b
+
+def (|>) {A B} (x : A) (f : A -> B) : B = f x
+def (<|) {A B} (f : A -> B) (x : A) : B = f x
+def (>>) {A B C} (f : A -> B) (g : B -> C) (x : A) : C = g (f x)
+def (<<) {A B C} (f : B -> C) (g : A -> B) (x : A) : C = f (g x)

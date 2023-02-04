@@ -1,5 +1,4 @@
-def VTy = Ty Val
-def (*) a b = intMul a b
+include "lib/Primitives"
 
 data List A = Nil | (::) A List
 
@@ -14,4 +13,5 @@ def map {A B : VTy} (f : A -> B) (l : List A) : List B =
 
 def (++) {A : VTy} (a b : List A) : List A = foldr b (::) a
 
-def prod (l : List Int) : Int := foldl 1 (*) l
+def sum = foldl 0 (+)
+def product = foldl 1 (*)

@@ -484,6 +484,7 @@ object JvmGenerator:
     case Unbox(t, v) => gen(v); unbox(t)
 
     case PrimApp(PIntAdd, List(a, b)) => gen(a); gen(b); mg.visitInsn(IADD)
+    case PrimApp(PIntSub, List(IntLit(0), b)) => gen(b); mg.visitInsn(INEG)
     case PrimApp(PIntSub, List(a, b)) => gen(a); gen(b); mg.visitInsn(ISUB)
     case PrimApp(PIntMul, List(a, b)) => gen(a); gen(b); mg.visitInsn(IMUL)
     case PrimApp(PIntDiv, List(a, b)) => gen(a); gen(b); mg.visitInsn(IDIV)

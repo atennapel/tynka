@@ -1,0 +1,19 @@
+include "lib/Primitives"
+include "lib/List"
+
+def Push A = (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
+
+def up {A : VTy} (as : List A) : Push A = \vf B f b. foldr b f as
+def range (start : Int) (endExclusive : Int) : Push Int =
+  \vf B f b. fix (go c. if c == endExclusive then b else (f c (go (c + 1)))) start
+
+def down {A : VTy} (as : Push A) = as _ _ (::) Nil
+
+def Push-map {A B : VTy} (f : A -> B) (as : Push A) : Push B =
+  \vf R c n. as vf R (\a bs. c (f a) bs) n
+
+def Push-foldl {A B : VTy} (b : B) (f : B -> A -> B) (as : Push A) : B =
+  as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
+
+def Push-sum = Push-foldl 0 (+)
+def Push-product = Push-foldl 1 (*)
