@@ -546,134 +546,141 @@ object Staging:
       case R.IntLit(_)      => true
       case R.Con(_, _, Nil) => true
       case _                => false
-    def go(tm: R): R = tm match
-      case R.App(f, a) =>
-        go(f) match
-          // (let x : t = v; b) a ~> let x : t = v; b a
-          case R.Let(x, t, bt, v, b) =>
-            go(R.Let(x, t, bt.tail, v, R.App(b, a)))
-          // (\(x : t). b) a ~> let x : t = a; b
-          case R.Lam(x, t1, t2, b) => go(R.Let(x, IR.TDef(t1), t2, a, b))
-          case f                   => R.App(f, go(a))
+    def go(tm: R): R =
+      tm match
+        case R.App(f, a) =>
+          go(f) match
+            // (let x : t = v; b) a ~> let x : t = v; b a
+            case R.Let(x, t, bt, v, b) =>
+              go(R.Let(x, t, bt.tail, v, R.App(b, a)))
+            // (\(x : t). b) a ~> let x : t = a; b
+            case R.Lam(x, t1, t2, b) => go(R.Let(x, IR.TDef(t1), t2, a, b))
+            case f                   => R.App(f, go(a))
 
-      case R.PrimApp(p, as) =>
-        (p, as.map(go)) match
-          case (PIntAdd, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a + b)
-          case (PIntAdd, List(a, R.IntLit(0)))           => go(a)
-          case (PIntAdd, List(R.IntLit(0), b))           => go(b)
+        case R.PrimApp(p, as) =>
+          (p, as.map(go)) match
+            case (PIntAdd, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a + b)
+            case (PIntAdd, List(a, R.IntLit(0)))           => go(a)
+            case (PIntAdd, List(R.IntLit(0), b))           => go(b)
 
-          case (PIntSub, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
-          case (PIntSub, List(a, R.IntLit(0)))           => go(a)
+            case (PIntSub, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
+            case (PIntSub, List(a, R.IntLit(0)))           => go(a)
 
-          case (PIntMul, List(_, R.IntLit(0)))           => R.IntLit(0)
-          case (PIntMul, List(R.IntLit(0), _))           => R.IntLit(0)
-          case (PIntMul, List(a, R.IntLit(1)))           => go(a)
-          case (PIntMul, List(R.IntLit(1), a))           => go(a)
-          case (PIntMul, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
+            case (PIntMul, List(_, R.IntLit(0)))           => R.IntLit(0)
+            case (PIntMul, List(R.IntLit(0), _))           => R.IntLit(0)
+            case (PIntMul, List(a, R.IntLit(1)))           => go(a)
+            case (PIntMul, List(R.IntLit(1), a))           => go(a)
+            case (PIntMul, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
 
-          case (PIntDiv, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a / b)
-          case (PIntDiv, List(a, R.IntLit(1)))           => go(a)
+            case (PIntDiv, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a / b)
+            case (PIntDiv, List(a, R.IntLit(1)))           => go(a)
 
-          case (PIntMod, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a % b)
-          case (PIntMod, List(a, R.IntLit(1)))           => R.IntLit(0)
+            case (PIntMod, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a % b)
+            case (PIntMod, List(a, R.IntLit(1)))           => R.IntLit(0)
 
-          case (PIntEq, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a == b)
-          case (PIntNeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a != b)
-          case (PIntLt, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a < b)
-          case (PIntGt, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a > b)
-          case (PIntLeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a <= b)
-          case (PIntGeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a >= b)
+            case (PIntEq, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a == b)
+            case (PIntNeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a != b)
+            case (PIntLt, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a < b)
+            case (PIntGt, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a > b)
+            case (PIntLeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a <= b)
+            case (PIntGeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a >= b)
 
-          case (p, as) => R.PrimApp(p, as)
+            case (p, as) => R.PrimApp(p, as)
 
-      case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
+        case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
 
-      // let y : t2 = (let x : t1 = v; b1); b2 ~> let x : t1 = v; let y : t2 = b1; b2
-      case R.Let(y, t2, bt2, R.Let(x, t1, bt1, v, b1), b2) =>
-        go(R.Let(x, t1, bt2, v, R.Let(y, t2, bt2, b1, b2)))
-      case R.Let(x, t, bt, v0, b) =>
-        val v = go(v0)
-        val c = b.fvs.count((y, _) => x == y)
-        if c == 0 then go(b)
-        else if c == 1 || isSmall(v) then go(b.subst(Map(x -> v)))
-        else if t.ps.isEmpty then
-          val (vs2, spine2) = eta(bt.ps)
-          R.Let(
-            x,
-            t,
-            bt,
-            go(v),
-            go(b.apps(spine2))
-          ).lams(vs2, IR.TDef(bt.rt))
-        else
-          val (vs, spine) = eta(t.ps)
-          val fv = v.fvs
+        // let y : t2 = (let x : t1 = v; b1); b2 ~> let x : t1 = v; let y : t2 = b1; b2
+        case R.Let(y, t2, bt2, R.Let(x, t1, bt1, v, b1), b2) =>
+          go(R.Let(x, t1, bt2, v, R.Let(y, t2, bt2, b1, b2)))
+        case R.Let(x, t, bt, v0, b) =>
+          val v = go(v0)
+          val c = b.fvs.count((y, _) => x == y)
+          if c == 0 then go(b)
+          else if c == 1 || isSmall(v) then go(b.subst(Map(x -> v)))
+          else if t.ps.isEmpty then
+            val (vs2, spine2) = eta(bt.ps)
+            R.Let(
+              x,
+              t,
+              bt,
+              go(v),
+              go(b.apps(spine2))
+            ).lams(vs2, IR.TDef(bt.rt))
+          else
+            val (vs, spine) = eta(t.ps)
+            val fv = v.fvs
+              .map((x, t) => (x, t.ty))
+              .distinctBy((y, _) => y)
+            val nps = fv ++ vs
+            val args = nps.zipWithIndex.map { case ((x, _), ix) =>
+              x -> ix
+            }.toMap
+            val (gx, addDef) = emit()
+            addDef(
+              RD.Def(
+                gx,
+                true,
+                IR.TDef(fv.map(_._2), t),
+                go(v.apps(spine).lams(nps, IR.TDef(t.rt)))
+              )
+            )
+            val gl = R
+              .Global(gx, IR.TDef(nps.map(_._2), t.rt))
+              .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
+            val (vs2, spine2) = eta(bt.ps)
+            go(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, IR.TDef(bt.rt)))
+
+        case R.Con(ty, i, as) => R.Con(ty, i, as.map(go))
+        case R.Case(ty, rty, scrut, cs) =>
+          go(scrut) match
+            case R.BoolLit(false) => go(cs(0)._2)
+            case R.BoolLit(true)  => go(cs(1)._2)
+            case R.Con(_, i, as) =>
+              val (xs, b) = cs(i)
+              go(xs.zip(as).foldRight(b) { case (((x, t), v), b) =>
+                R.Let(x, IR.TDef(t), rty, v, b)
+              })
+            case gscrut =>
+              val (vs, spine) = eta(rty.ps)
+              R
+                .Case(
+                  ty,
+                  IR.TDef(rty.rt),
+                  gscrut,
+                  cs.map((xs, b) => (xs, go(b.apps(spine))))
+                )
+                .lams(vs, IR.TDef(rty.rt))
+
+        case R.Fix(t1, t2, g, x, b0, arg) =>
+          val (vs, spine) = eta(t2.ps)
+          val fv = b0.fvs
+            .filterNot((y, _) => y == g || y == x)
             .map((x, t) => (x, t.ty))
             .distinctBy((y, _) => y)
-          val nps = fv ++ vs
+          val nps = fv ++ List((x, t1)) ++ vs
           val args = nps.zipWithIndex.map { case ((x, _), ix) =>
             x -> ix
           }.toMap
           val (gx, addDef) = emit()
-          addDef(
-            RD.Def(
-              gx,
-              true,
-              IR.TDef(fv.map(_._2), t),
-              go(v.apps(spine).lams(nps, IR.TDef(t.rt)))
-            )
-          )
           val gl = R
-            .Global(gx, IR.TDef(nps.map(_._2), t.rt))
+            .Global(gx, IR.TDef(nps.map(_._2), t2.rt))
             .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
-          val (vs2, spine2) = eta(bt.ps)
-          go(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, IR.TDef(bt.rt)))
+          val b = go(
+            b0.apps(spine).lams(nps, IR.TDef(t2.rt)).subst(Map(g -> gl))
+          )
+          addDef(RD.Def(gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
+          R.App(gl, go(arg))
 
-      case R.Con(ty, i, as) => R.Con(ty, i, as.map(go))
-      case R.Case(ty, rty, scrut, cs) =>
-        go(scrut) match
-          case R.Con(_, i, as) =>
-            val (xs, b) = cs(i)
-            go(xs.zip(as).foldRight(b) { case (((x, t), v), b) =>
-              R.Let(x, IR.TDef(t), rty, v, b)
-            })
-          case gscrut =>
-            val (vs, spine) = eta(rty.ps)
-            R.Case(
-              ty,
-              IR.TDef(rty.rt),
-              gscrut,
-              cs.map((xs, b) => (xs, go(b.apps(spine))))
-            ).lams(vs, IR.TDef(rty.rt))
+        case R.Box(t, v) =>
+          go(v) match
+            case R.Unbox(t, v) => v
+            case v             => R.Box(t, v)
+        case R.Unbox(t, v) =>
+          go(v) match
+            case R.Box(t, v) => v
+            case v           => R.Unbox(t, v)
 
-      case R.Fix(t1, t2, g, x, b0, arg) =>
-        val (vs, spine) = eta(t2.ps)
-        val fv = b0.fvs
-          .filterNot((y, _) => y == g || y == x)
-          .map((x, t) => (x, t.ty))
-          .distinctBy((y, _) => y)
-        val nps = fv ++ List((x, t1)) ++ vs
-        val args = nps.zipWithIndex.map { case ((x, _), ix) =>
-          x -> ix
-        }.toMap
-        val (gx, addDef) = emit()
-        val gl = R
-          .Global(gx, IR.TDef(nps.map(_._2), t2.rt))
-          .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
-        val b = go(b0.apps(spine).lams(nps, IR.TDef(t2.rt)).subst(Map(g -> gl)))
-        addDef(RD.Def(gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
-        R.App(gl, go(arg))
-
-      case R.Box(t, v) =>
-        go(v) match
-          case R.Unbox(t, v) => v
-          case v             => R.Box(t, v)
-      case R.Unbox(t, v) =>
-        go(v) match
-          case R.Box(t, v) => v
-          case v           => R.Unbox(t, v)
-
-      case tm => tm
+        case tm => tm
     go(tm)
 
   // to IR
@@ -710,7 +717,8 @@ object Staging:
         val ty = t.ty
         (IR.Global(x, ty), ty, Nil)
 
-      case R.IntLit(v) => (IR.IntLit(v), IR.TInt, Nil)
+      case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
+      case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
 
       case R.Con(ty, i, as) =>
         val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
@@ -747,6 +755,7 @@ object Staging:
     case R.Var(_, _)    => v2c(tm)
     case R.Global(_, _) => v2c(tm)
     case R.IntLit(_)    => v2c(tm)
+    case R.BoolLit(_)   => v2c(tm)
     case R.Con(_, _, _) => v2c(tm)
     case R.Box(_, _)    => v2c(tm)
 
@@ -834,11 +843,11 @@ object Staging:
       dm: DataMap
   ): R =
     val (ps, spine) = eta(ty.ps)
-    lambdaLift(
-      quoteRep(eval0(tm)(Empty))(lvl0, Nil, fresh, dm)
-        .apps(spine)
-        .lams(ps, IR.TDef(ty.rt))
-    )
+    val quoted = quoteRep(eval0(tm)(Empty))(lvl0, Nil, fresh, dm)
+      .apps(spine)
+      .lams(ps, IR.TDef(ty.rt))
+    val lifted = lambdaLift(quoted)
+    lifted
 
   private def newFresh(): Fresh =
     var n = 0
@@ -855,7 +864,7 @@ object Staging:
       val nds = ArrayBuffer.empty[RD]
       implicit val emit: Emit = () => {
         val c = n2
-        n2 + 1
+        n2 += 1
         (s"$x$$$c", d => { nds += d; () })
       }
       val ty = stageFTy(t)

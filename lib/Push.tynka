@@ -5,7 +5,11 @@ def Push A = (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B
 
 def up {A : VTy} (as : List A) : Push A = \vf B f b. foldr b f as
 def range (start : Int) (endExclusive : Int) : Push Int =
-  \vf B f b. fix (go c. if c == endExclusive then b else (f c (go (c + 1)))) start
+  \vf B f b.
+    if start > endExclusive then
+      fix (go c. if c <= endExclusive then b else (f c (go (c - 1)))) start
+    else
+      fix (go c. if c >= endExclusive then b else (f c (go (c + 1)))) start
 
 def down {A : VTy} (as : Push A) = as _ _ (::) Nil
 
