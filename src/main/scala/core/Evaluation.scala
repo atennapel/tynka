@@ -267,6 +267,35 @@ object Evaluation:
     case PIntLeq => intOpTypeBool
     case PIntGeq => intOpTypeBool
 
+    // VTy -> VTy
+    case PIO => (vfun(VVTy(), VVTy()), SMeta)
+    // {A : VTy} -> ^A -> ^(IO A)
+    case PReturnIO =>
+      (
+        vpiI("A", VVTy(), a => vfun(VLift(VVal(), a), VLift(VVal(), VIO(a)))),
+        SMeta
+      )
+    // {A B : VTy} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
+    case PBindIO =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "B",
+              VVTy(),
+              b =>
+                val iob = VLift(VVal(), VIO(b))
+                vfun(
+                  VLift(VVal(), VIO(a)),
+                  vfun(vfun(VLift(VVal(), a), iob), iob)
+                )
+            )
+        ),
+        SMeta
+      )
+
   private val intOpType =
     (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
   private val intOpTypeBool =

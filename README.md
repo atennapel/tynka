@@ -31,6 +31,7 @@ TODO:
 - [ ] Modules, or a way to handle name clashes
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
+- [ ] Lambdas after operators (e.g. >>=)
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Records
 - [ ] Irregular/nested datatype recursion

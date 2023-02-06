@@ -139,6 +139,10 @@ object Common:
     case PIntLeq
     case PIntGeq
 
+    case PIO
+    case PReturnIO
+    case PBindIO
+
     override def toString: String = this match
       case PVF   => "VF"
       case PVal  => "Val"
@@ -165,6 +169,10 @@ object Common:
       case PIntGt  => "intGt"
       case PIntLeq => "intLeq"
       case PIntGeq => "intGeq"
+
+      case PIO       => "IO"
+      case PReturnIO => "returnIO"
+      case PBindIO   => "bindIO"
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
@@ -193,5 +201,9 @@ object Common:
       case "intGt"  => Some(PIntGt)
       case "intLeq" => Some(PIntLeq)
       case "intGeq" => Some(PIntGeq)
+
+      case "IO"       => Some(PIO)
+      case "returnIO" => Some(PReturnIO)
+      case "bindIO"   => Some(PBindIO)
 
       case _ => None

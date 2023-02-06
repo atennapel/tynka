@@ -218,6 +218,9 @@ object Staging:
     case Box(t: IR.Ty, v: R)
     case Unbox(t: IR.Ty, v: R)
 
+    case ReturnIO(t: IR.Ty, v: R)
+    case BindIO(a: IR.Ty, b: IR.Ty, c: R, x: IR.LName, k: R)
+
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
@@ -246,6 +249,9 @@ object Staging:
 
       case Box(_, v)   => s"(box $v)"
       case Unbox(_, v) => s"(unbox $v)"
+
+      case ReturnIO(_, v)        => s"(returnIO $v)"
+      case BindIO(_, _, c, x, k) => s"(bindIO $c ($x. $k))"
 
     def lams(ps: List[(IR.LName, IR.Ty)], rt: IR.TDef): R =
       ps.foldRight[(R, IR.TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -291,6 +297,9 @@ object Staging:
 
       case Box(_, v)   => v.fvs
       case Unbox(_, v) => v.fvs
+
+      case ReturnIO(_, v)        => v.fvs
+      case BindIO(_, _, c, x, k) => c.fvs ++ k.fvs.filterNot((y, _) => x == y)
 
     def subst(sub: Map[IR.LName, R]): R =
       subst(
@@ -365,6 +374,11 @@ object Staging:
         case Box(t, v)   => Box(t, v.subst(sub, scope))
         case Unbox(t, v) => Unbox(t, v.subst(sub, scope))
 
+        case ReturnIO(t, v) => ReturnIO(t, v.subst(sub, scope))
+        case BindIO(a, b, c, x0, k0) =>
+          val (List((x, _)), k) = underN(List((x0, IR.TDef(a))), k0, sub, scope)
+          BindIO(a, b, c.subst(sub, scope), x, k)
+
   // quotation
   private type DataMap =
     (Ref[Int], ArrayBuffer[(Int, Val1 => List[List[Val1]], List[List[IR.Ty]])])
@@ -429,6 +443,7 @@ object Staging:
     case VTConName1(x)          => IR.TCon(x)
     case VTCon1(cs)             => IR.TCon(findOrAddData(cs)._2)
     case VPrim1(PTBox, List(_)) => IR.TBox
+    case VPrim1(PIO, List(t))   => quoteVTy(t)
     case _                      => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
@@ -526,6 +541,26 @@ object Staging:
         R.Box(quoteVTy(t), quoteRep(vsplice0(v)))
       case VSplicePrim0(PUnbox, List(t, v)) =>
         R.Unbox(quoteVTy(t), quoteRep(vsplice0(v)))
+
+      case VSplicePrim0(PReturnIO, List(t, v)) =>
+        R.ReturnIO(quoteVTy(t), quoteRep(vsplice0(v)))
+      case VSplicePrim0(PBindIO, List(a, b, c, k)) =>
+        val ta = quoteVTy(a)
+        val x = fresh()
+        val qc = quoteRep(vsplice0(c))
+        val qk = quoteRep(vsplice0(vapp1(k, VQuote1(VVar0(l)))))(
+          l + 1,
+          (x, IR.TDef(ta)) :: ns,
+          fresh,
+          dm
+        )
+        R.BindIO(
+          ta,
+          quoteVTy(b),
+          qc,
+          x,
+          qk
+        )
 
       case _ => impossible()
 
@@ -680,6 +715,12 @@ object Staging:
             case R.Box(t, v) => v
             case v           => R.Unbox(t, v)
 
+        case R.ReturnIO(t, v) => R.ReturnIO(t, go(v))
+        case R.BindIO(a, b, c, x, k) =>
+          go(c) match
+            case R.ReturnIO(_, v) => go(R.Let(x, IR.TDef(a), IR.TDef(b), v, k))
+            case gc               => R.BindIO(a, b, gc, x, go(k))
+
         case tm => tm
     go(tm)
 
@@ -732,6 +773,8 @@ object Staging:
         val (qv, tv, ds) = toIRValue(v)
         (IR.Box(ty, qv), IR.TBox, ds)
 
+      case R.ReturnIO(_, v) => toIRValue(v)
+
       case _ => c2v(tm)
 
   private def v2c(
@@ -752,12 +795,13 @@ object Staging:
       defname: IR.GName,
       fresh: Fresh
   ): (IR.Comp, IR.Ty, Lets) = tm match
-    case R.Var(_, _)    => v2c(tm)
-    case R.Global(_, _) => v2c(tm)
-    case R.IntLit(_)    => v2c(tm)
-    case R.BoolLit(_)   => v2c(tm)
-    case R.Con(_, _, _) => v2c(tm)
-    case R.Box(_, _)    => v2c(tm)
+    case R.Var(_, _)      => v2c(tm)
+    case R.Global(_, _)   => v2c(tm)
+    case R.IntLit(_)      => v2c(tm)
+    case R.BoolLit(_)     => v2c(tm)
+    case R.Con(_, _, _)   => v2c(tm)
+    case R.Box(_, _)      => v2c(tm)
+    case R.ReturnIO(_, _) => v2c(tm)
 
     case R.App(_, _) =>
       val (f, as) = tm.flattenApps
@@ -815,6 +859,13 @@ object Staging:
     case R.Unbox(ty, v) =>
       val (qv, tv, ds) = toIRValue(v)
       (IR.Unbox(ty, qv), ty, ds)
+
+    case R.BindIO(a, b, c, x, k) =>
+      // bindIO {A} {B} c (x. b) ~> let x : A = c; b
+      val y = fresh()
+      val (qc, tc, ds1) = toIRComp(c, false)
+      val (qk, tk, ds2) = toIRComp(k, tail)(ns + (x -> y), defname, fresh)
+      (qk, tk, ds1 ++ List((y, tc, qc)) ++ ds2)
 
     case _ => impossible()
 
