@@ -447,30 +447,6 @@ object JvmGenerator:
 
     case Unbox(t, v) => gen(v); mg.unbox(gen(t))
 
-    case PrimApp(PIntAdd, List(a, b)) => gen(a); gen(b); mg.visitInsn(IADD)
-    case PrimApp(PIntSub, List(IntLit(0), b)) => gen(b); mg.visitInsn(INEG)
-    case PrimApp(PIntSub, List(a, b)) => gen(a); gen(b); mg.visitInsn(ISUB)
-    case PrimApp(PIntMul, List(a, b)) => gen(a); gen(b); mg.visitInsn(IMUL)
-    case PrimApp(PIntDiv, List(a, b)) => gen(a); gen(b); mg.visitInsn(IDIV)
-    case PrimApp(PIntMod, List(a, b)) => gen(a); gen(b); mg.visitInsn(IREM)
-    case PrimApp(p, List(a, b)) =>
-      val op = p match
-        case PIntEq  => GeneratorAdapter.EQ
-        case PIntNeq => GeneratorAdapter.NE
-        case PIntLt  => GeneratorAdapter.LT
-        case PIntGt  => GeneratorAdapter.GT
-        case PIntLeq => GeneratorAdapter.LE
-        case PIntGeq => GeneratorAdapter.GE
-        case _       => impossible()
-      gen(a); gen(b)
-      val skip = mg.newLabel()
-      val end = mg.newLabel()
-      mg.ifICmp(op, skip)
-      mg.push(false)
-      mg.visitJumpInsn(GOTO, end)
-      mg.visitLabel(skip)
-      mg.push(true)
-      mg.visitLabel(end)
     case PrimApp(_, _) => impossible()
 
     case Case(ty, scrut, cs) =>
@@ -587,6 +563,23 @@ object JvmGenerator:
 
     case Foreign(_, "cast", List((v, _)))       => gen(v)
     case Foreign(_, "returnVoid", List((v, _))) =>
+    case Foreign(_, op, as) if op.startsWith("op:") =>
+      op.drop(3).toIntOption match
+        case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
+        case _       => impossible()
+    case Foreign(_, op, as) if op.startsWith("branch:") =>
+      op.drop(7).toIntOption match
+        case Some(n) =>
+          as.foreach((v, _) => gen(v))
+          val skip = mg.newLabel()
+          val end = mg.newLabel()
+          mg.ifICmp(n, skip)
+          mg.push(false)
+          mg.visitJumpInsn(GOTO, end)
+          mg.visitLabel(skip)
+          mg.push(true)
+          mg.visitLabel(end)
+        case _ => impossible()
     case Foreign(rt @ TForeign(_), "instantiate", as) =>
       val ty = gen(rt)
       mg.newInstance(ty)

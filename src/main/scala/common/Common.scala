@@ -127,20 +127,6 @@ object Common:
 
     case PLabel
 
-    case PInt
-    case PIntAdd
-    case PIntSub
-    case PIntMul
-    case PIntDiv
-    case PIntMod
-
-    case PIntEq
-    case PIntNeq
-    case PIntLt
-    case PIntGt
-    case PIntLeq
-    case PIntGeq
-
     case PIO
     case PReturnIO
     case PBindIO
@@ -161,20 +147,6 @@ object Common:
       case PUnit     => "[]"
 
       case PLabel => "Label"
-
-      case PInt    => "Int"
-      case PIntAdd => "intAdd"
-      case PIntSub => "intSub"
-      case PIntMul => "intMul"
-      case PIntDiv => "intDiv"
-      case PIntMod => "intMod"
-
-      case PIntEq  => "intEq"
-      case PIntNeq => "intNeq"
-      case PIntLt  => "intLt"
-      case PIntGt  => "intGt"
-      case PIntLeq => "intLeq"
-      case PIntGeq => "intGeq"
 
       case PIO       => "IO"
       case PReturnIO => "returnIO"
@@ -197,20 +169,6 @@ object Common:
       case "[]" => Some(PUnit)
 
       case "Label" => Some(PLabel)
-
-      case "Int"    => Some(PInt)
-      case "intAdd" => Some(PIntAdd)
-      case "intSub" => Some(PIntSub)
-      case "intMul" => Some(PIntMul)
-      case "intDiv" => Some(PIntDiv)
-      case "intMod" => Some(PIntMod)
-
-      case "intEq"  => Some(PIntEq)
-      case "intNeq" => Some(PIntNeq)
-      case "intLt"  => Some(PIntLt)
-      case "intGt"  => Some(PIntGt)
-      case "intLeq" => Some(PIntLeq)
-      case "intGeq" => Some(PIntGeq)
 
       case "IO"       => Some(PIO)
       case "returnIO" => Some(PReturnIO)

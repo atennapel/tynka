@@ -1,4 +1,4 @@
-include "lib/JVM"
+include "lib/Prelude"
 
 def main := javaMain \_.
   getLn U >>= \x.

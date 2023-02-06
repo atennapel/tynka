@@ -455,7 +455,6 @@ object Staging:
     (i, s"D$i")
 
   private def quoteVTy(v: Val1)(implicit dm: DataMap): IR.Ty = v match
-    case VPrim1(PInt, Nil)      => IR.TInt
     case VTPair1(a, b)          => IR.TCon(findOrAddData(vpairTy1Clos(a, b))._2)
     case VTConName1(x)          => IR.TCon(x)
     case VTCon1(cs)             => IR.TCon(findOrAddData(cs)._2)
@@ -600,6 +599,7 @@ object Staging:
       case R.Var(_, _)      => true
       case R.Global(_, _)   => true
       case R.IntLit(_)      => true
+      case R.BoolLit(_)     => true
       case R.Con(_, _, Nil) => true
       case _                => false
     def go(tm: R): R =
@@ -615,32 +615,6 @@ object Staging:
 
         case R.PrimApp(p, as) =>
           (p, as.map(go)) match
-            case (PIntAdd, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a + b)
-            case (PIntAdd, List(a, R.IntLit(0)))           => go(a)
-            case (PIntAdd, List(R.IntLit(0), b))           => go(b)
-
-            case (PIntSub, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
-            case (PIntSub, List(a, R.IntLit(0)))           => go(a)
-
-            case (PIntMul, List(_, R.IntLit(0)))           => R.IntLit(0)
-            case (PIntMul, List(R.IntLit(0), _))           => R.IntLit(0)
-            case (PIntMul, List(a, R.IntLit(1)))           => go(a)
-            case (PIntMul, List(R.IntLit(1), a))           => go(a)
-            case (PIntMul, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
-
-            case (PIntDiv, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a / b)
-            case (PIntDiv, List(a, R.IntLit(1)))           => go(a)
-
-            case (PIntMod, List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a % b)
-            case (PIntMod, List(a, R.IntLit(1)))           => R.IntLit(0)
-
-            case (PIntEq, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a == b)
-            case (PIntNeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a != b)
-            case (PIntLt, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a < b)
-            case (PIntGt, List(R.IntLit(a), R.IntLit(b)))  => R.BoolLit(a > b)
-            case (PIntLeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a <= b)
-            case (PIntGeq, List(R.IntLit(a), R.IntLit(b))) => R.BoolLit(a >= b)
-
             case (p, as) => R.PrimApp(p, as)
 
         case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
@@ -742,7 +716,51 @@ object Staging:
             case R.ReturnIO(_, v) => go(R.Let(x, IR.TDef(a), IR.TDef(b), v, k))
             case gc               => R.BindIO(a, b, gc, x, go(k))
 
-        case R.Foreign(rt, l, as) => R.Foreign(rt, l, as.map(go))
+        case R.Foreign(rt, l, as) =>
+          (l, as.map(go)) match
+            // +
+            case ("op:96", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a + b)
+            case ("op:96", List(a, R.IntLit(0)))           => a
+            case ("op:96", List(R.IntLit(0), b))           => b
+            // -
+            case ("op:100", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
+            case ("op:100", List(R.IntLit(0), b)) =>
+              go(R.Foreign(rt, "op:116", List(b)))
+            case ("op:100", List(a, R.IntLit(0))) => go(a)
+            // *
+            case ("op:104", List(_, R.IntLit(0)))           => R.IntLit(0)
+            case ("op:104", List(R.IntLit(0), _))           => R.IntLit(0)
+            case ("op:104", List(a, R.IntLit(1)))           => go(a)
+            case ("op:104", List(R.IntLit(1), a))           => go(a)
+            case ("op:104", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a * b)
+            // /
+            case ("op:108", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a / b)
+            case ("op:108", List(a, R.IntLit(1)))           => go(a)
+            // %
+            case ("op:112", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a % b)
+            case ("op:112", List(a, R.IntLit(1)))           => R.IntLit(0)
+            // neg
+            case ("op:116", List(R.IntLit(a))) => R.IntLit(-a)
+            // ==
+            case ("branch:153", List(R.IntLit(a), R.IntLit(b))) =>
+              R.BoolLit(a == b)
+            // !=
+            case ("branch:154", List(R.IntLit(a), R.IntLit(b))) =>
+              R.BoolLit(a != b)
+            // <
+            case ("branch:155", List(R.IntLit(a), R.IntLit(b))) =>
+              R.BoolLit(a < b)
+            // >
+            case ("branch:157", List(R.IntLit(a), R.IntLit(b))) =>
+              R.BoolLit(a > b)
+            // <=
+            case ("branch:158", List(R.IntLit(a), R.IntLit(b))) =>
+              R.BoolLit(a <= b)
+            // >=
+            case ("branch:156", List(R.IntLit(a), R.IntLit(b))) =>
+              R.BoolLit(a >= b)
+
+            case (l, as) => R.Foreign(rt, l, as)
 
         case tm => tm
     go(tm)
@@ -837,27 +855,6 @@ object Staging:
           }
           (IR.GlobalApp(x, t, tail && x == defname, qas), t.rt, ds)
         case _ => impossible()
-    case R.PrimApp(p, as) =>
-      val rt = p match
-        case PIntAdd => IR.TInt
-        case PIntSub => IR.TInt
-        case PIntMul => IR.TInt
-        case PIntDiv => IR.TInt
-        case PIntMod => IR.TInt
-
-        case PIntEq  => IR.TBool
-        case PIntNeq => IR.TBool
-        case PIntLt  => IR.TBool
-        case PIntGt  => IR.TBool
-        case PIntLeq => IR.TBool
-        case PIntGeq => IR.TBool
-        case _       => impossible()
-      val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
-        case ((as, ds), a) =>
-          val (qa, ta, nds) = toIRValue(a)
-          (as ++ List(qa), ds ++ nds)
-      }
-      (IR.PrimApp(p, qas), rt, ds)
 
     case R.Let(x, t, bt, v, b) =>
       val (qv, tv, ds1) = toIRComp(v, false)

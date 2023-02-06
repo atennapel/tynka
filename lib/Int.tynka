@@ -1,0 +1,22 @@
+include "lib/JVM"
+
+def (+) a b = intAdd a b
+def (-) a b = intSub a b
+def (*) a b = intMul a b
+def (/) a b = intDiv a b
+def (%) a b = intMod a b
+
+def neg n = intNeg n
+
+def (==) a b : Bool = intEq a b
+def (!=) a b : Bool = intNeq a b
+def (<) a b : Bool = intLt a b
+def (>) a b : Bool = intGt a b
+def (<=) a b : Bool = intLeq a b
+def (>=) a b : Bool = intGeq a b
+
+def foldrInt {vf} {R : Ty vf} (n : Int) (z : R) (s : Int -> R -> R) : R =
+  fix (go n. if n <= 0 then z else (s n (go (n - 1)))) n
+
+def foldlInt {R : VTy} (n : Int) (z : R) (s : Int -> R -> R) : R =
+  fix (go n. \acc. if n <= 0 then acc else go (n - 1) (s n acc)) n z

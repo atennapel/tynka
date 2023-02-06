@@ -1,4 +1,4 @@
-include "lib/Primitives"
+include "lib/Prelude"
 include "lib/List"
 
 def Push A = (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B

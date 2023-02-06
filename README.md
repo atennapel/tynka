@@ -32,7 +32,6 @@ TODO:
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
 - [ ] Value level strings
-- [ ] Can we move primitive Int operations to foreign calls?
 - [ ] Value level syntax for unit
 - [ ] Arrays
 - [ ] Should foreign always return in IO?

@@ -192,10 +192,8 @@ object Value:
     def apply(): Val = VTCon(DontBind, TConClos(Nil, List(Nil)))
 
   object VInt:
-    def apply(): Val = VRigid(HPrim(PInt), SId)
-    def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PInt), SId) => true
-      case _                        => false
+    def apply(): Val =
+      VRigid(HPrim(PForeignType), SApp(SId, VLabelLit("I"), Expl))
 
   object VLabel:
     def apply(): Val = VRigid(HPrim(PLabel), SId)

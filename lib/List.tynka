@@ -1,4 +1,4 @@
-include "lib/Primitives"
+include "lib/Prelude"
 
 data List A = Nil | (::) A List
 

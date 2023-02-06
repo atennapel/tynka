@@ -265,21 +265,6 @@ object Evaluation:
 
     case PLabel => (VUMeta(), SMeta)
 
-    case PInt => (VVTy(), SMeta)
-
-    case PIntAdd => intOpType
-    case PIntSub => intOpType
-    case PIntMul => intOpType
-    case PIntDiv => intOpType
-    case PIntMod => intOpType
-
-    case PIntEq  => intOpTypeBool
-    case PIntNeq => intOpTypeBool
-    case PIntLt  => intOpTypeBool
-    case PIntGt  => intOpTypeBool
-    case PIntLeq => intOpTypeBool
-    case PIntGeq => intOpTypeBool
-
     // VTy -> VTy
     case PIO => (vfun(VVTy(), VVTy()), SMeta)
     // {A : VTy} -> ^A -> ^(IO A)
@@ -311,8 +296,3 @@ object Evaluation:
 
     // Label -> VTy
     case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
-
-  private val intOpType =
-    (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())
-  private val intOpTypeBool =
-    (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VBool())), SFTy())

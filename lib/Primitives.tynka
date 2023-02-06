@@ -11,31 +11,10 @@ def (!) (a : Bool) = if a then False else True
 def (&&) (a b : Bool) = if a then b else False
 def (||) (a b : Bool) = if a then True else b
 
-def (+) a b = intAdd a b
-def (-) a b = intSub a b
-def (*) a b = intMul a b
-def (/) a b = intDiv a b
-def (%) a b = intMod a b
-
-def neg n = 0 - n
-
-def (==) a b : Bool = intEq a b
-def (!=) a b : Bool = intNeq a b
-def (<) a b : Bool = intLt a b
-def (>) a b : Bool = intGt a b
-def (<=) a b : Bool = intLeq a b
-def (>=) a b : Bool = intGeq a b
-
 def (|>) {A B} (x : A) (f : A -> B) : B = f x
 def (<|) {A B} (f : A -> B) (x : A) : B = f x
 def (>>) {A B C} (f : A -> B) (g : B -> C) (x : A) : C = g (f x)
 def (<<) {A B C} (f : B -> C) (g : A -> B) (x : A) : C = f (g x)
-
-def foldrInt {vf} {R : Ty vf} (n : Int) (z : R) (s : Int -> R -> R) : R =
-  fix (go n. if n <= 0 then z else (s n (go (n - 1)))) n
-
-def foldlInt {R : VTy} (n : Int) (z : R) (s : Int -> R -> R) : R =
-  fix (go n. \acc. if n <= 0 then acc else go (n - 1) (s n acc)) n z
 
 def (>>=) {A B : VTy} (c : IO A) (k : A -> IO B) : IO B = bindIO c k
 def (>>>) {A B : VTy} (c : IO A) (k : IO B) : IO B = c >>= (\_. k)
