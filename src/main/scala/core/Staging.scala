@@ -32,6 +32,7 @@ object Staging:
     case VPair1(fst: Val1, snd: Val1)
     case VTCon1(cs: Val1 => List[List[Val1]])
     case VTConName1(x: IR.GName)
+    case VLabelLit1(v: String)
   import Val1.*
 
   private enum Val0:
@@ -85,8 +86,9 @@ object Staging:
     case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
     case TCon(_, cs) =>
       VTCon1(r => cs.map(as => as.map(a => eval1(a)(Def1(env, r)))))
-    case Quote(t) => VQuote1(eval0(t))
-    case Wk(t)    => eval1(t)(env.tail)
+    case Quote(t)    => VQuote1(eval0(t))
+    case LabelLit(v) => VLabelLit1(v)
+    case Wk(t)       => eval1(t)(env.tail)
 
     case U(_)           => VType1
     case Pi(_, _, _, _) => VType1

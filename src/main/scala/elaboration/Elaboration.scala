@@ -669,6 +669,7 @@ object Elaboration:
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
       case S.Hole(ox)     => error(s"cannot infer hole $tm")
       case S.IntLit(n)    => (IntLit(n), VInt(), SVTy())
+      case S.LabelLit(v)  => (LabelLit(v), VLabel(), SMeta)
       case S.U(SMeta)     => (U(SMeta), VUMeta(), SMeta)
       case S.U(STy(vf)) =>
         val evf = check(vf, VVF(), SMeta)

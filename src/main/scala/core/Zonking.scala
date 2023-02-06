@@ -42,11 +42,12 @@ object Zonking:
     case t                   => Right(zonk(t))
 
   def zonk(t: Tm)(implicit l: Lvl, e: Env): Tm = t match
-    case Var(ix)    => t
-    case Global(x)  => t
-    case Prim(x)    => t
-    case IntLit(n)  => t
-    case Irrelevant => t
+    case Var(ix)     => t
+    case Global(x)   => t
+    case Prim(x)     => t
+    case IntLit(n)   => t
+    case LabelLit(_) => t
+    case Irrelevant  => t
     case Let(x, t, s, bt, v, b) =>
       Let(x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))
     case U(s) => U(s.map(zonk))

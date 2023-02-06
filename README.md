@@ -32,6 +32,7 @@ TODO:
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
 - [ ] Lambdas after operators (e.g. >>=)
+- [ ] Value level strings
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Records
 - [ ] Irregular/nested datatype recursion

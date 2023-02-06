@@ -125,6 +125,8 @@ object Common:
     case PUnitType
     case PUnit
 
+    case PLabel
+
     case PInt
     case PIntAdd
     case PIntSub
@@ -155,6 +157,8 @@ object Common:
 
       case PUnitType => "()"
       case PUnit     => "[]"
+
+      case PLabel => "Label"
 
       case PInt    => "Int"
       case PIntAdd => "intAdd"
@@ -187,6 +191,8 @@ object Common:
 
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)
+
+      case "Label" => Some(PLabel)
 
       case "Int"    => Some(PInt)
       case "intAdd" => Some(PIntAdd)

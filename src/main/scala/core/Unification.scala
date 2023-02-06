@@ -201,7 +201,8 @@ object Unification:
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
       case VTPair(a, b)       => TPair(go(a), go(b))
 
-      case VIntLit(n) => IntLit(n)
+      case VIntLit(n)   => IntLit(n)
+      case VLabelLit(v) => LabelLit(v)
 
       case VTCon(x, cs) =>
         TCon(x, cs(VVar(psub.cod)).map(as => as.map(a => go(a)(psub.lift))))
@@ -360,8 +361,9 @@ object Unification:
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
         unify(vf1, vf2); unify(ty1, ty2)
-      case (VQuote(a), VQuote(b))             => unify(a, b)
-      case (VIntLit(a), VIntLit(b)) if a == b => ()
+      case (VQuote(a), VQuote(b))                 => unify(a, b)
+      case (VIntLit(a), VIntLit(b)) if a == b     => ()
+      case (VLabelLit(a), VLabelLit(b)) if a == b => ()
       case (VCon(_, i, as1), VCon(_, j, as2)) if i == j =>
         as1.zip(as2).foreach((a, b) => unify(a, b))
       case (VFix(a1, b1, _, _, f1, arg1), VFix(a2, b2, _, _, f2, arg2)) =>

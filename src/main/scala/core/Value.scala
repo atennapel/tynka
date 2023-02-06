@@ -63,6 +63,7 @@ object Value:
     case VPair(fst: Val, snd: Val, ty: VTy)
 
     case VIntLit(value: Int)
+    case VLabelLit(value: String)
 
     case VTCon(name: Bind, cs: TConClos)
     case VCon(ty: VTy, ix: Int, args: List[Val])
@@ -190,6 +191,12 @@ object Value:
     def unapply(value: Val): Boolean = value match
       case VRigid(HPrim(PInt), SId) => true
       case _                        => false
+
+  object VLabel:
+    def apply(): Val = VRigid(HPrim(PLabel), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PLabel), SId) => true
+      case _                          => false
 
   object VTBox:
     def apply(t: Val): Val = VRigid(HPrim(PTBox), SApp(SId, t, Expl))

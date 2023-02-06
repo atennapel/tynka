@@ -123,7 +123,8 @@ object Evaluation:
     case Pair(a, b, ty)   => VPair(eval(a), eval(b), eval(ty))
     case Proj(t, p, _, _) => vproj(eval(t), p)
 
-    case IntLit(n) => VIntLit(n)
+    case IntLit(n)   => VIntLit(n)
+    case LabelLit(l) => VLabelLit(l)
 
     case TCon(x, cs)    => VTCon(x, TConClos(env, cs))
     case Con(ty, i, as) => VCon(eval(ty), i, as.map(eval))
@@ -210,7 +211,8 @@ object Evaluation:
       case VSigma(x, t, b) =>
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
 
-      case VIntLit(n) => IntLit(n)
+      case VIntLit(n)   => IntLit(n)
+      case VLabelLit(v) => LabelLit(v)
 
       case VTCon(x, cs) =>
         TCon(x, cs(VVar(l)).map(as => as.map(a => quote(a, unfold)(l + 1))))
@@ -251,6 +253,8 @@ object Evaluation:
 
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)
+
+    case PLabel => (VUMeta(), SMeta)
 
     case PInt => (VVTy(), SMeta)
 
