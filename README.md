@@ -39,3 +39,5 @@ TODO:
 - [ ] Records
 - [ ] Irregular/nested datatype recursion
 - [ ] Closures, thunks, JVM generics
+- [ ] Delay IO execution
+- [ ] Coercion over constructors

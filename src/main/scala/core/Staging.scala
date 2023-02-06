@@ -402,11 +402,15 @@ object Staging:
 
   private def tyMatch(a: Val1, b: Val1)(implicit l: Int): Boolean = (a, b) match
     case (VPrim1(PTBox, List(_)), VPrim1(PTBox, List(_))) => true
+    case (VPrim1(PIO, List(a)), VPrim1(PIO, List(b)))     => tyMatch(a, b)
+    case (VPrim1(PIO, List(a)), b)                        => tyMatch(a, b)
+    case (a, VPrim1(PIO, List(b)))                        => tyMatch(a, b)
     case (VPrim1(x1, as1), VPrim1(x2, as2))
         if x1 == x2 && as1.size == as2.size =>
       as1.zip(as2).forall(tyMatch)
     case (VTCon1(cs1), VTCon1(cs2))     => dataMatch(cs1, cs2)
     case (VTConName1(x), VTConName1(y)) => x == y
+    case (VLabelLit1(x), VLabelLit1(y)) => x == y
     case _                              => false
   private def dataMatch(
       a: Val1 => List[List[Val1]],
@@ -713,8 +717,8 @@ object Staging:
         case R.ReturnIO(t, v) => R.ReturnIO(t, go(v))
         case R.BindIO(a, b, c, x, k) =>
           go(c) match
-            case R.ReturnIO(_, v) => go(R.Let(x, IR.TDef(a), IR.TDef(b), v, k))
-            case gc               => R.BindIO(a, b, gc, x, go(k))
+            // case R.ReturnIO(_, v) => go(R.Let(x, IR.TDef(a), IR.TDef(b), v, k))
+            case gc => R.BindIO(a, b, gc, x, go(k))
 
         case R.Foreign(rt, l, as) =>
           (l, as.map(go)) match

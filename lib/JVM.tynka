@@ -34,7 +34,7 @@ def strAppend (a b : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.concat" a b
 
 -- IO
-def putLn {A : VTy} (x : Box A) : IO Unit =
+def putLn {A : VTy} (x : A) : IO Unit =
   let out = foreign (Foreign "Ljava/io/PrintStream;") "getStatic:java.lang.System.out";
   let u = foreign Unit "invokeVirtualVoid:java.io.PrintStream.println" out x;
   returnIO u

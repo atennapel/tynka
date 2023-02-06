@@ -16,6 +16,9 @@ def (<|) {A B} (f : A -> B) (x : A) : B = f x
 def (>>) {A B C} (f : A -> B) (g : B -> C) (x : A) : C = g (f x)
 def (<<) {A B C} (f : B -> C) (g : A -> B) (x : A) : C = f (g x)
 
+def id {vf} {A : Ty vf} (x : A) : A = x 
+
 def (>>=) {A B : VTy} (c : IO A) (k : A -> IO B) : IO B = bindIO c k
 def (>>>) {A B : VTy} (c : IO A) (k : IO B) : IO B = c >>= (\_. k)
 def mapIO {A B : VTy} (f : A -> B) (c : IO A) : IO B = c >>= (\x. returnIO (f x))
+def joinIO {A B : VTy} (c : IO (IO A)) : IO A = c >>= id
