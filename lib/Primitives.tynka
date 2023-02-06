@@ -37,5 +37,6 @@ def foldrInt {vf} {R : Ty vf} (n : Int) (z : R) (s : Int -> R -> R) : R =
 def foldlInt {R : VTy} (n : Int) (z : R) (s : Int -> R -> R) : R =
   fix (go n. \acc. if n <= 0 then acc else go (n - 1) (s n acc)) n z
 
-def (>>=) {A B : VTy} (c : IO A) (k : A -> IO B) : IO B = bindIO c k 
+def (>>=) {A B : VTy} (c : IO A) (k : A -> IO B) : IO B = bindIO c k
+def (>>>) {A B : VTy} (c : IO A) (k : IO B) : IO B = c >>= (\_. k)
 def mapIO {A B : VTy} (f : A -> B) (c : IO A) : IO B = c >>= (\x. returnIO (f x))

@@ -1,0 +1,28 @@
+include "lib/Primitives"
+
+def JavaStr = Foreign "Ljava/lang/String;"
+def JavaVoid = Foreign "V"
+def JavaArgs = Foreign "[Ljava/lang/String;"
+
+def javaReturnVoid (x : IO Unit) : JavaVoid =
+  foreign JavaVoid "returnVoid" x
+
+def javaMain (action : JavaArgs -> IO Unit) : ^(JavaArgs -> JavaVoid) =
+  \args. javaReturnVoid (action args)
+
+def equals {A : VTy} (x y : Box A) : Bool =
+  foreign Bool "invokeVirtual:java.lang.Object.equals" x y
+
+def putLn {A : VTy} (x : Box A) : IO Unit =
+  let out = foreign (Foreign "Ljava/io/PrintStream;") "getStatic:java.lang.System.out";
+  let u = foreign Unit "invokeVirtualVoid:java.io.PrintStream.println" out x;
+  returnIO u
+
+def getLn (_ : Unit) : IO JavaStr =
+  let in = foreign (Foreign "Ljava/io/InputStream;") "getStatic:java.lang.System.in";
+  let scanner = foreign (Foreign "Ljava/util/Scanner;") "instantiate" in;
+  let input = foreign JavaStr "invokeVirtual:java.util.Scanner.nextLine" scanner;
+  returnIO input
+
+def strAppend (a b : JavaStr) : JavaStr =
+  foreign JavaStr "invokeVirtual:java.lang.String.concat" a b

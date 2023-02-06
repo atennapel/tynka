@@ -73,6 +73,8 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case Foreign(rt: Ty, label: Tm, args: List[Tm])
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -119,6 +121,9 @@ object Syntax:
       case Lift(t)   => s"^$t"
       case Quote(t)  => s"`$t"
       case Splice(t) => s"$$$t"
+
+      case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
+      case Foreign(rt, l, as)  => s"(foreign $rt $l ${as.mkString(" ")})"
 
       case Hole(None)    => "_"
       case Hole(Some(x)) => s"_$x"

@@ -123,6 +123,11 @@ object Pretty:
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"
 
+    case Foreign(rt, cmd, Nil) =>
+      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)}"
+    case Foreign(rt, cmd, as) =>
+      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)} ${as.map(a => prettyParen(a)).mkString(" ")}"
+
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"
 

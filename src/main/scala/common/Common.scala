@@ -145,6 +145,8 @@ object Common:
     case PReturnIO
     case PBindIO
 
+    case PForeignType
+
     override def toString: String = this match
       case PVF   => "VF"
       case PVal  => "Val"
@@ -177,6 +179,8 @@ object Common:
       case PIO       => "IO"
       case PReturnIO => "returnIO"
       case PBindIO   => "bindIO"
+
+      case PForeignType => "Foreign"
   export PrimName.*
   object PrimName:
     def apply(x: Name): Option[PrimName] = x.expose match
@@ -211,5 +215,7 @@ object Common:
       case "IO"       => Some(PIO)
       case "returnIO" => Some(PReturnIO)
       case "bindIO"   => Some(PBindIO)
+
+      case "Foreign" => Some(PForeignType)
 
       case _ => None

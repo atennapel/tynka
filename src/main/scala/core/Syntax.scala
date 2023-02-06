@@ -59,6 +59,8 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case Foreign(rt: Ty, cmd: Tm, args: List[Tm])
+
     case Wk(tm: Tm)
 
     case Meta(id: MetaId)
@@ -118,6 +120,9 @@ object Syntax:
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"
       case Splice(t)  => s"$$$t"
+
+      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
+      case Foreign(rt, cmd, as)  => s"(foreign $rt $cmd ${as.mkString(" ")})"
 
       case Wk(t)      => s"(Wk $t)"
       case Irrelevant => "Ir"

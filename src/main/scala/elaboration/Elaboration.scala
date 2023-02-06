@@ -905,6 +905,12 @@ object Elaboration:
         val (et2, a2) = adjustStage(et, a, SMeta, STy(vf))
         (et2, a2, STy(vf))
 
+      case S.Foreign(rt, l, as) =>
+        val ert = checkVTy(rt)
+        val el = check(l, VLabel(), SMeta)
+        val eas = as.map(a => infer(a, SVTy())._1)
+        (Foreign(ert, el, eas), ctx.eval(ert), SVTy())
+
   // elaboration
   private def prettyHoles(implicit ctx0: Ctx): String =
     holes.toList

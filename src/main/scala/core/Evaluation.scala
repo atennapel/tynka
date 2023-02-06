@@ -135,6 +135,8 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
+    case Foreign(rt, cmd, as) => VForeign(eval(rt), eval(cmd), as.map(eval))
+
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
 
@@ -222,6 +224,13 @@ object Evaluation:
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
 
+      case VForeign(rt, cmd, as) =>
+        Foreign(
+          quote(rt, unfold),
+          quote(cmd, unfold),
+          as.map(a => quote(a, unfold))
+        )
+
       case VIrrelevant => Irrelevant
 
   def nf(tm: Tm)(implicit l: Lvl = lvl0, env: Env = Nil): Tm =
@@ -299,6 +308,9 @@ object Evaluation:
         ),
         SMeta
       )
+
+    // Label -> VTy
+    case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
 
   private val intOpType =
     (VTFun(VInt(), VFun(), VTFun(VInt(), VVal(), VInt())), SFTy())

@@ -211,6 +211,8 @@ object Unification:
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => go(t).quote
 
+      case VForeign(rt, cmd, as) => Foreign(go(rt), go(cmd), as.map(go))
+
       case VIrrelevant => Irrelevant
     go(v)
 
@@ -374,6 +376,11 @@ object Unification:
         unify(arg1, arg2)
       case (VIrrelevant, _) => ()
       case (_, VIrrelevant) => ()
+      case (VForeign(rt1, cmd1, as1), VForeign(rt2, cmd2, as2))
+          if as1.size == as2.size =>
+        unify(rt1, rt2)
+        unify(cmd1, cmd2)
+        as1.zip(as2).foreach((a, b) => unify(a, b))
 
       case (VTCon(_, c1), VTCon(_, c2)) =>
         val cs1 = c1(VVar(l))

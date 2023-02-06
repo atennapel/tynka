@@ -71,6 +71,8 @@ object Value:
     case VLift(vf: VTy, tm: VTy)
     case VQuote(tm: Val)
 
+    case VForeign(rt: VTy, l: Val, args: List[Val])
+
     case VIrrelevant
   export Val.*
 
@@ -186,6 +188,9 @@ object Value:
   object VBool:
     def apply(): Val = VTCon(DontBind, TConClos(Nil, List(Nil, Nil)))
 
+  object VUnitTypeVTy:
+    def apply(): Val = VTCon(DontBind, TConClos(Nil, List(Nil)))
+
   object VInt:
     def apply(): Val = VRigid(HPrim(PInt), SId)
     def unapply(value: Val): Boolean = value match
@@ -209,3 +214,9 @@ object Value:
     def unapply(value: Val): Option[Val] = value match
       case VRigid(HPrim(PIO), SApp(SId, t, Expl)) => Some(t)
       case _                                      => None
+
+  object VForeignType:
+    def apply(t: Val): Val = VRigid(HPrim(PForeignType), SApp(SId, t, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PForeignType), SApp(SId, t, Expl)) => Some(t)
+      case _                                               => None

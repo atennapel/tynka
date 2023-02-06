@@ -47,6 +47,7 @@ object Staging:
     case VIntLit0(n: Int)
     case VCon0(ty: Val1, ix: Int, as: List[Val0])
     case VCase0(ty: Val1, rty: Val1, scrut: Val0, cs: List[Val0])
+    case VForeign0(ty: Val1, cmd: String, as: List[Val0])
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -188,6 +189,11 @@ object Staging:
     case Con(ty, i, as) => VCon0(eval1(ty), i, as.map(eval0))
     case Case(ty, rty, s, cs) =>
       VCase0(eval1(ty), eval1(rty), eval0(s), cs.map(eval0))
+    case Foreign(rt, cmd, as) =>
+      val l = eval1(cmd) match
+        case VLabelLit1(v) => v
+        case _             => impossible()
+      VForeign0(eval1(rt), l, as.map(eval0))
     case _ => impossible()
 
   // intermediate rep
@@ -223,6 +229,8 @@ object Staging:
     case ReturnIO(t: IR.Ty, v: R)
     case BindIO(a: IR.Ty, b: IR.Ty, c: R, x: IR.LName, k: R)
 
+    case Foreign(rt: IR.Ty, cmd: String, as: List[R])
+
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
@@ -254,6 +262,9 @@ object Staging:
 
       case ReturnIO(_, v)        => s"(returnIO $v)"
       case BindIO(_, _, c, x, k) => s"(bindIO $c ($x. $k))"
+
+      case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
+      case Foreign(rt, l, as)  => s"(foreign $rt $l ${as.mkString(" ")})"
 
     def lams(ps: List[(IR.LName, IR.Ty)], rt: IR.TDef): R =
       ps.foldRight[(R, IR.TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -302,6 +313,8 @@ object Staging:
 
       case ReturnIO(_, v)        => v.fvs
       case BindIO(_, _, c, x, k) => c.fvs ++ k.fvs.filterNot((y, _) => x == y)
+
+      case Foreign(_, _, as) => as.flatMap(_.fvs)
 
     def subst(sub: Map[IR.LName, R]): R =
       subst(
@@ -381,6 +394,8 @@ object Staging:
           val (List((x, _)), k) = underN(List((x0, IR.TDef(a))), k0, sub, scope)
           BindIO(a, b, c.subst(sub, scope), x, k)
 
+        case Foreign(rt, l, as) => Foreign(rt, l, as.map(_.subst(sub, scope)))
+
   // quotation
   private type DataMap =
     (Ref[Int], ArrayBuffer[(Int, Val1 => List[List[Val1]], List[List[IR.Ty]])])
@@ -446,7 +461,8 @@ object Staging:
     case VTCon1(cs)             => IR.TCon(findOrAddData(cs)._2)
     case VPrim1(PTBox, List(_)) => IR.TBox
     case VPrim1(PIO, List(t))   => quoteVTy(t)
-    case _                      => impossible()
+    case VPrim1(PForeignType, List(VLabelLit1(s))) => IR.TForeign(s)
+    case _                                         => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
@@ -563,6 +579,9 @@ object Staging:
           x,
           qk
         )
+
+      case VForeign0(ty, cmd, as) =>
+        R.Foreign(quoteVTy(ty), cmd, as.map(quoteRep))
 
       case _ => impossible()
 
@@ -723,6 +742,8 @@ object Staging:
             case R.ReturnIO(_, v) => go(R.Let(x, IR.TDef(a), IR.TDef(b), v, k))
             case gc               => R.BindIO(a, b, gc, x, go(k))
 
+        case R.Foreign(rt, l, as) => R.Foreign(rt, l, as.map(go))
+
         case tm => tm
     go(tm)
 
@@ -868,6 +889,14 @@ object Staging:
       val (qc, tc, ds1) = toIRComp(c, false)
       val (qk, tk, ds2) = toIRComp(k, tail)(ns + (x -> y), defname, fresh)
       (qk, tk, ds1 ++ List((y, tc, qc)) ++ ds2)
+
+    case R.Foreign(rt, l, as0) =>
+      val (as, ds) = as0.foldLeft[(List[(IR.Value, IR.Ty)], Lets)]((Nil, Nil)) {
+        case ((as, ds), v) =>
+          val (qv, tv, ds1) = toIRValue(v)
+          (as ++ List((qv, tv)), ds ++ ds1)
+      }
+      (IR.Foreign(rt, l, as), rt, ds)
 
     case _ => impossible()
 

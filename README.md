@@ -5,8 +5,8 @@ We have a language with two layers, one compile-time layer with full dependent t
 
 Try it out:
 ```
-sbt "run examples/Push"
-java Test
+sbt "run examples/IO"
+java IO
 ```
 
 TODO:
@@ -33,6 +33,10 @@ TODO:
 - [ ] Improve inference for if condition
 - [ ] Lambdas after operators (e.g. >>=)
 - [ ] Value level strings
+- [ ] Can we move primitive Int operations to foreign calls?
+- [ ] Value level syntax for unit
+- [ ] Arrays
+- [ ] Should foreign always return in IO?
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Records
 - [ ] Irregular/nested datatype recursion

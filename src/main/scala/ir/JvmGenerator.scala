@@ -10,6 +10,7 @@ import org.objectweb.asm.commons.*
 
 import scala.collection.mutable
 import scala.collection.immutable.IntMap
+import scala.annotation.tailrec
 
 import java.util.function.Function
 import java.lang.invoke.LambdaMetafactory
@@ -77,44 +78,6 @@ object JvmGenerator:
     con.visitMaxs(1, 1)
     con.visitEnd()
 
-    // main method
-    val m = new Method(
-      "main",
-      Type.VOID_TYPE,
-      List(Type.getType("[Ljava/lang/String;")).toArray
-    )
-    val main: GeneratorAdapter =
-      new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC, m, null, null, cw)
-    main.visitFieldInsn(
-      GETSTATIC,
-      "java/lang/System",
-      "out",
-      "Ljava/io/PrintStream;"
-    )
-    main.push(0)
-    main.invokeStatic(
-      ctx.moduleType,
-      new Method("main", Type.INT_TYPE, List(Type.INT_TYPE).toArray)
-    )
-    main.invokeStatic(
-      Type.getType(classOf[Integer]),
-      Method.getMethod("Integer valueOf (int)")
-    )
-    main.invokeVirtual(
-      Type.getType(classOf[Object]),
-      Method.getMethod("String toString ()")
-    )
-    main.visitMethodInsn(
-      INVOKEVIRTUAL,
-      "java/io/PrintStream",
-      "println",
-      "(Ljava/lang/String;)V",
-      false
-    )
-    main.visitInsn(RETURN)
-    main.visitMaxs(3, 1)
-    main.visitEnd
-
     // generate definitions
     ds.toList.foreach(gen)
 
@@ -143,7 +106,8 @@ object JvmGenerator:
         case FiniteLike(_)  => Type.INT_TYPE
         case NewtypeLike(t) => gen(t)
         case _              => t
-    case TBox => OBJECT_TYPE
+    case TBox           => OBJECT_TYPE
+    case TForeign(desc) => Type.getType(desc)
 
   private def constantValue(e: Let): Option[Any] = e match
     case Let(Nil, Val(v)) => constantValue(v)
@@ -481,7 +445,7 @@ object JvmGenerator:
         new Method(x, gen(rt), ps.map(gen).toArray)
       )
 
-    case Unbox(t, v) => gen(v); unbox(t)
+    case Unbox(t, v) => gen(v); mg.unbox(gen(t))
 
     case PrimApp(PIntAdd, List(a, b)) => gen(a); gen(b); mg.visitInsn(IADD)
     case PrimApp(PIntSub, List(IntLit(0), b)) => gen(b); mg.visitInsn(INEG)
@@ -621,6 +585,52 @@ object JvmGenerator:
           gen(b)(mg, ctx, args, newlocals, methodStart)
           mg.visitLabel(lEnd)
 
+    case Foreign(_, "cast", List((v, _)))       => gen(v)
+    case Foreign(_, "returnVoid", List((v, _))) =>
+    case Foreign(rt @ TForeign(_), "instantiate", as) =>
+      val ty = gen(rt)
+      mg.newInstance(ty)
+      mg.dup()
+      as.foreach((v, _) => gen(v))
+      mg.invokeConstructor(
+        ty,
+        Method("<init>", Type.VOID_TYPE, as.map((_, t) => gen(t)).toArray)
+      )
+    case Foreign(rt, cmd0, as) =>
+      val s = cmd0.split("\\:")
+      val cmd = s.head
+      val arg = s.tail.mkString(":")
+      (cmd, arg, as) match
+        case ("getStatic", arg, Nil) =>
+          val ss = arg.split("\\.")
+          val owner = s"L${ss.init.mkString("/")};"
+          val member = ss.last
+          mg.getStatic(Type.getType(owner), member, gen(rt))
+        case ("invokeVirtual", arg, as) =>
+          val ss = arg.split("\\.")
+          val owner = s"L${ss.init.mkString("/")};"
+          val member = ss.last
+          as.foreach((v, _) => gen(v))
+          mg.invokeVirtual(
+            Type.getType(owner),
+            Method(member, gen(rt), as.tail.map((_, t) => gen(t)).toArray)
+          )
+        case ("invokeVirtualVoid", arg, as) =>
+          val ss = arg.split("\\.")
+          val owner = s"L${ss.init.mkString("/")};"
+          val member = ss.last
+          as.foreach((v, _) => gen(v))
+          mg.invokeVirtual(
+            Type.getType(owner),
+            Method(
+              member,
+              Type.VOID_TYPE,
+              as.tail.map((_, t) => gen(t)).toArray
+            )
+          )
+          mg.push(false)
+        case _ => impossible()
+
   private def gen(
       t: Value
   )(implicit
@@ -635,7 +645,7 @@ object JvmGenerator:
 
     case Global(x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
 
-    case Box(t, v) => gen(v); box(t)
+    case Box(t, v) => gen(v); mg.box(gen(t))
 
     case IntLit(v)  => mg.push(v)
     case BoolLit(v) => mg.push(v)
@@ -681,28 +691,3 @@ object JvmGenerator:
               cons(ty)(i)._2.map(gen).toArray
             )
           )
-
-  private def box(t: Ty)(implicit ctx: Ctx, mg: GeneratorAdapter): Unit =
-    t match
-      case TInt =>
-        mg.invokeStatic(
-          Type.getType(classOf[Integer]),
-          Method.getMethod("Integer valueOf (int)")
-        )
-      case TBool => mg.box(Type.BOOLEAN_TYPE)
-      case TCon(x) =>
-        tcons(x)._2 match
-          case VoidLike => mg.box(Type.BOOLEAN_TYPE)
-          case UnitLike => mg.box(Type.BOOLEAN_TYPE)
-          case BoolLike => mg.box(Type.BOOLEAN_TYPE)
-          case FiniteLike(_) =>
-            mg.invokeStatic(
-              Type.getType(classOf[Integer]),
-              Method.getMethod("Integer valueOf (int)")
-            )
-          case NewtypeLike(t) => box(t)
-          case _              =>
-      case TBox =>
-
-  private def unbox(t: Ty)(implicit ctx: Ctx, mg: GeneratorAdapter): Unit =
-    mg.unbox(gen(t))

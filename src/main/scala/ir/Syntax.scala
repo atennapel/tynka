@@ -11,12 +11,14 @@ object Syntax:
     case TInt
     case TCon(name: GName)
     case TBox
+    case TForeign(cls: String)
 
     override def toString: String = this match
-      case TBool   => "Bool"
-      case TInt    => "Int"
-      case TCon(x) => s"$x"
-      case TBox    => s"Box"
+      case TBool         => "Bool"
+      case TInt          => "Int"
+      case TCon(x)       => s"$x"
+      case TBox          => s"Box"
+      case TForeign(cls) => s"Foreign($cls)"
   export Ty.*
 
   final case class TDef(ps: List[Ty], rt: Ty):
@@ -110,6 +112,8 @@ object Syntax:
 
     case Unbox(ty: Ty, v: Value)
 
+    case Foreign(rt: Ty, cmd: String, args: List[(Value, Ty)])
+
     override def toString: String = this match
       case Val(v) => s"$v"
       case GlobalApp(x, _, tc, as) =>
@@ -122,7 +126,10 @@ object Syntax:
           case (xs, b) =>
             s"(${xs.map((x, t) => s"($x : $t)").mkString(" ")}. $b)"
         s"(case $ty $s ${cs.map(csStr).mkString(" ")})"
-      case Unbox(_, v) => s"(unbox $v)"
+      case Unbox(_, v)           => s"(unbox $v)"
+      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
+      case Foreign(rt, cmd, as) =>
+        s"(foreign $rt $cmd ${as.map((v, t) => s"$v").mkString(" ")})"
 
     def fv: Set[LName] = this match
       case Val(v)                 => v.fv
@@ -130,4 +137,5 @@ object Syntax:
       case PrimApp(_, as)         => as.flatMap(_.fv).toSet
       case Case(_, s, cs) => s.fv ++ cs.flatMap((xs, b) => b.fv -- xs.map(_._1))
       case Unbox(_, v)    => v.fv
+      case Foreign(_, _, as) => as.flatMap(_._1.fv).toSet
   export Comp.*
