@@ -240,7 +240,7 @@ object Parser:
       )
 
     private lazy val app: Parsley[Tm] =
-      precedence[Tm](appAtom)(
+      precedence[Tm](appAtom <|> lam)(
         ops(
           "`@#?,.",
           "*/%",

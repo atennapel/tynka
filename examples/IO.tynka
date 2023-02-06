@@ -1,6 +1,6 @@
 include "lib/JVM"
 
 def main := javaMain \_.
-  getLn U >>= (\x.
-    let t = strAppend x x;
-    putLn t)
+  getLn U >>= \x.
+  getLn U >>= \y.
+  putLn (strAppend x y)

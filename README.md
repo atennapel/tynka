@@ -31,7 +31,6 @@ TODO:
 - [ ] Modules, or a way to handle name clashes
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
-- [ ] Lambdas after operators (e.g. >>=)
 - [ ] Value level strings
 - [ ] Can we move primitive Int operations to foreign calls?
 - [ ] Value level syntax for unit
