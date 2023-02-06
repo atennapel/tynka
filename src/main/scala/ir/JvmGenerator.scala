@@ -470,11 +470,11 @@ object JvmGenerator:
   ): Unit = comp match
     case Val(v) => gen(v)
 
-    case GlobalApp(x, TDef(ps, rt), true, as) =>
+    case GlobalApp(x, TDef(ps, rt), true, as) if x == mg.getName =>
       as.foreach(gen)
       Range.inclusive(args - 1, 0, -1).foreach(i => mg.storeArg(i))
       mg.visitJumpInsn(GOTO, methodStart)
-    case GlobalApp(x, TDef(ps, rt), false, as) =>
+    case GlobalApp(x, TDef(ps, rt), _, as) =>
       as.foreach(gen)
       mg.invokeStatic(
         ctx.moduleType,

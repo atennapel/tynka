@@ -16,7 +16,7 @@ object Main:
     try
       val etimeStart = System.nanoTime()
       val (filename, eds) = load(filename0)
-      val moduleName = filename.dropRight(6).split("/").last
+      val moduleName = filename.split("/").last
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
 

@@ -30,3 +30,9 @@ def (|>) {A B} (x : A) (f : A -> B) : B = f x
 def (<|) {A B} (f : A -> B) (x : A) : B = f x
 def (>>) {A B C} (f : A -> B) (g : B -> C) (x : A) : C = g (f x)
 def (<<) {A B C} (f : B -> C) (g : A -> B) (x : A) : C = f (g x)
+
+def foldrInt {vf} {R : Ty vf} (n : Int) (z : R) (s : Int -> R -> R) : R =
+  fix (go n. if n <= 0 then z else (s n (go (n - 1)))) n
+
+def foldlInt {R : VTy} (n : Int) (z : R) (s : Int -> R -> R) : R =
+  fix (go n. \acc. if n <= 0 then acc else go (n - 1) (s n acc)) n z
