@@ -26,9 +26,11 @@ TODO:
 - [x] Optimize single constructor types (product-like)
 - [x] Add new-types
 - [x] Basic file importing
+- [x] Modules, or a way to handle name clashes
+- [ ] Cannot access operators in modules
+- [ ] Do not export imported definitions
 - [ ] Relative file including
 - [ ] Remove unused defs (starting from main)
-- [ ] Modules, or a way to handle name clashes
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
 - [ ] Value level strings

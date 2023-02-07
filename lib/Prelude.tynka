@@ -1,3 +1,3 @@
-include "lib/Primitives"
-include "lib/JVM"
-include "lib/Int"
+import "lib/Primitives" (...)
+import "lib/JVM" (...)
+import "lib/Int" (...)

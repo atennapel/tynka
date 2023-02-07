@@ -1,5 +1,5 @@
-include "lib/Prelude"
-include "lib/List"
+import "lib/Prelude" (...)
+import "lib/List" (...)
 
 def main := javaMain \_.
   traverseIO_ putLn #[1, 2, 3]

@@ -73,7 +73,7 @@ object Syntax:
 
   enum Value:
     case Var(name: LName)
-    case Global(name: GName, ty: Ty)
+    case Global(module: GName, name: GName, ty: Ty)
 
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
@@ -83,8 +83,8 @@ object Syntax:
     case Box(ty: Ty, value: Value)
 
     override def toString: String = this match
-      case Var(x)       => s"'$x"
-      case Global(x, _) => s"$x"
+      case Var(x)          => s"'$x"
+      case Global(m, x, _) => s"$m:$x"
 
       case IntLit(v)  => s"$v"
       case BoolLit(v) => if v then "True" else "False"
@@ -105,7 +105,13 @@ object Syntax:
   enum Comp:
     case Val(value: Value)
 
-    case GlobalApp(name: GName, ty: TDef, tc: Boolean, as: List[Value])
+    case GlobalApp(
+        module: GName,
+        name: GName,
+        ty: TDef,
+        tc: Boolean,
+        as: List[Value]
+    )
     case PrimApp(name: PrimName, args: List[Value])
 
     case Case(ty: GName, scrut: Value, cs: List[CaseEntry])
@@ -116,8 +122,8 @@ object Syntax:
 
     override def toString: String = this match
       case Val(v) => s"$v"
-      case GlobalApp(x, _, tc, as) =>
-        s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
+      case GlobalApp(m, x, _, tc, as) =>
+        s"(${if tc then "[tailcall] " else ""}$m:$x ${as.mkString(" ")})"
       case PrimApp(f, as)   => s"($f ${as.mkString(" ")})"
       case Case(ty, s, Nil) => s"(case $ty $s)"
       case Case(ty, s, cs) =>
@@ -132,9 +138,9 @@ object Syntax:
         s"(foreign $rt $cmd ${as.map((v, t) => s"$v").mkString(" ")})"
 
     def fv: Set[LName] = this match
-      case Val(v)                 => v.fv
-      case GlobalApp(_, _, _, as) => as.flatMap(_.fv).toSet
-      case PrimApp(_, as)         => as.flatMap(_.fv).toSet
+      case Val(v)                    => v.fv
+      case GlobalApp(_, _, _, _, as) => as.flatMap(_.fv).toSet
+      case PrimApp(_, as)            => as.flatMap(_.fv).toSet
       case Case(_, s, cs) => s.fv ++ cs.flatMap((xs, b) => b.fv -- xs.map(_._1))
       case Unbox(_, v)    => v.fv
       case Foreign(_, _, as) => as.flatMap(_._1.fv).toSet

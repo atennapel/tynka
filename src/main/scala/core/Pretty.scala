@@ -48,7 +48,7 @@ object Pretty:
   ): String =
     tm match
       case Var(_)              => pretty(tm)
-      case Global(_)           => pretty(tm)
+      case Global(_, _)        => pretty(tm)
       case Prim(_)             => pretty(tm)
       case Pair(_, _, _)       => pretty(tm)
       case Proj(_, _, _, _)    => pretty(tm)
@@ -75,9 +75,9 @@ object Pretty:
   def pretty(s: CStage)(implicit ns: List[Name]): String = s"${s.map(pretty)}"
 
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
-    case Var(ix)   => s"${ns(ix.expose)}"
-    case Global(x) => s"$x"
-    case Prim(x)   => s"$x"
+    case Var(ix)      => s"${ns(ix.expose)}"
+    case Global(m, x) => s"$m:$x"
+    case Prim(x)      => s"$x"
     case Let(x0, t, s, _, v, b) =>
       val x = x0.fresh
       val ss = s match

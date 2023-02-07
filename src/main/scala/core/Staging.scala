@@ -37,7 +37,7 @@ object Staging:
 
   private enum Val0:
     case VVar0(lvl: Lvl)
-    case VGlobal0(x: Name, ty: Val1)
+    case VGlobal0(m: String, x: Name, ty: Val1)
     case VPrim0(x: PrimName)
     case VSplicePrim0(x: PrimName, as: List[Val1])
     case VApp0(f: Val0, a: Val0)
@@ -77,7 +77,7 @@ object Staging:
 
   private def eval1(t: Tm)(implicit env: Env): Val1 = t match
     case Var(x)                => vvar1(x)
-    case Global(x)             => eval1(getGlobal(x).get.tm)
+    case Global(m, x)          => eval1(getGlobal(m, x).get.tm)
     case Prim(x)               => VPrim1(x, Nil)
     case Lam(_, _, _, b)       => VLam1(clos1(b))
     case App(f, a, _)          => vapp1(eval1(f), eval1(a))
@@ -165,9 +165,9 @@ object Staging:
     v => eval0(t)(Def0(env, v))
 
   private def eval0(t: Tm)(implicit env: Env): Val0 = t match
-    case Var(x)             => vvar0(x)
-    case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
-    case Prim(x)            => VPrim0(x)
+    case Var(x)       => vvar0(x)
+    case Global(m, x) => VGlobal0(m, x, eval1(getGlobal(m, x).get.ty)(Empty))
+    case Prim(x)      => VPrim0(x)
     case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
     case Fix(ty, rty, g, x, b, arg) =>
       VFix0(
@@ -208,7 +208,7 @@ object Staging:
   private type RCase = (List[(IR.LName, IR.Ty)], R)
   private enum R:
     case Var(name: IR.LName, ty: IR.TDef)
-    case Global(name: IR.GName, ty: IR.TDef)
+    case Global(m: IR.GName, name: IR.GName, ty: IR.TDef)
 
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
@@ -232,8 +232,8 @@ object Staging:
     case Foreign(rt: IR.Ty, cmd: String, as: List[R])
 
     override def toString: String = this match
-      case Var(x, _)    => s"'$x"
-      case Global(x, _) => s"$x"
+      case Var(x, _)       => s"'$x"
+      case Global(m, x, _) => s"$m:$x"
 
       case IntLit(v)  => s"$v"
       case BoolLit(b) => if b then "True" else "False"
@@ -288,8 +288,8 @@ object Staging:
       case t => (t, Nil)
 
     def fvs: List[(IR.LName, IR.TDef)] = this match
-      case Var(x, t)    => List((x, t))
-      case Global(x, _) => Nil
+      case Var(x, t)       => List((x, t))
+      case Global(_, _, _) => Nil
 
       case IntLit(n)  => Nil
       case BoolLit(n) => Nil
@@ -348,8 +348,8 @@ object Staging:
             else go(ps, nps ++ List((x, t)), sub - x, scope + x)
         go(ps, Nil, sub, scope)
       this match
-        case Var(x, _)    => sub.get(x).getOrElse(this)
-        case Global(x, _) => this
+        case Var(x, _)       => sub.get(x).getOrElse(this)
+        case Global(_, _, _) => this
 
         case IntLit(n)  => this
         case BoolLit(n) => this
@@ -473,7 +473,7 @@ object Staging:
 
   private type NS = List[(IR.LName, IR.TDef)]
   private type Fresh = () => IR.LName
-  private type Emit = () => (IR.GName, RD => Unit)
+  private type Emit = () => (IR.GName, IR.GName, RD => Unit)
 
   private def primOverApp(p: PrimName, n: Int, as: List[Val1])(implicit
       l: Lvl,
@@ -491,7 +491,7 @@ object Staging:
       case VVar0(lvl) =>
         val (x, t) = ns(lvl.toIx.expose)
         R.Var(x, t)
-      case VGlobal0(x, t) => R.Global(x.expose, quoteFTy(t))
+      case VGlobal0(m, x, t) => R.Global(m, x.expose, quoteFTy(t))
 
       case VIntLit0(v) => R.IntLit(v)
 
@@ -600,12 +600,12 @@ object Staging:
     (vs, spine)
   private def lambdaLift(tm: R)(implicit fresh: Fresh, emit: Emit): R =
     def isSmall(v: R): Boolean = v match
-      case R.Var(_, _)      => true
-      case R.Global(_, _)   => true
-      case R.IntLit(_)      => true
-      case R.BoolLit(_)     => true
-      case R.Con(_, _, Nil) => true
-      case _                => false
+      case R.Var(_, _)       => true
+      case R.Global(_, _, _) => true
+      case R.IntLit(_)       => true
+      case R.BoolLit(_)      => true
+      case R.Con(_, _, Nil)  => true
+      case _                 => false
     def go(tm: R): R =
       tm match
         case R.App(f, a) =>
@@ -649,7 +649,7 @@ object Staging:
             val args = nps.zipWithIndex.map { case ((x, _), ix) =>
               x -> ix
             }.toMap
-            val (gx, addDef) = emit()
+            val (m, gx, addDef) = emit()
             addDef(
               RD.Def(
                 gx,
@@ -659,7 +659,7 @@ object Staging:
               )
             )
             val gl = R
-              .Global(gx, IR.TDef(nps.map(_._2), t.rt))
+              .Global(m, gx, IR.TDef(nps.map(_._2), t.rt))
               .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
             val (vs2, spine2) = eta(bt.ps)
             go(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, IR.TDef(bt.rt)))
@@ -695,9 +695,9 @@ object Staging:
           val args = nps.zipWithIndex.map { case ((x, _), ix) =>
             x -> ix
           }.toMap
-          val (gx, addDef) = emit()
+          val (m, gx, addDef) = emit()
           val gl = R
-            .Global(gx, IR.TDef(nps.map(_._2), t2.rt))
+            .Global(m, gx, IR.TDef(nps.map(_._2), t2.rt))
             .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
           val b = go(
             b0.apps(spine).lams(nps, IR.TDef(t2.rt)).subst(Map(g -> gl))
@@ -799,9 +799,9 @@ object Staging:
         val ty = t.ty
         val y = ns(x)
         (IR.Var(y), ty, Nil)
-      case R.Global(x, t) =>
+      case R.Global(m, x, t) =>
         val ty = t.ty
-        (IR.Global(x, ty), ty, Nil)
+        (IR.Global(m, x, ty), ty, Nil)
 
       case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
       case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
@@ -840,24 +840,24 @@ object Staging:
       defname: IR.GName,
       fresh: Fresh
   ): (IR.Comp, IR.Ty, Lets) = tm match
-    case R.Var(_, _)      => v2c(tm)
-    case R.Global(_, _)   => v2c(tm)
-    case R.IntLit(_)      => v2c(tm)
-    case R.BoolLit(_)     => v2c(tm)
-    case R.Con(_, _, _)   => v2c(tm)
-    case R.Box(_, _)      => v2c(tm)
-    case R.ReturnIO(_, _) => v2c(tm)
+    case R.Var(_, _)       => v2c(tm)
+    case R.Global(_, _, _) => v2c(tm)
+    case R.IntLit(_)       => v2c(tm)
+    case R.BoolLit(_)      => v2c(tm)
+    case R.Con(_, _, _)    => v2c(tm)
+    case R.Box(_, _)       => v2c(tm)
+    case R.ReturnIO(_, _)  => v2c(tm)
 
     case R.App(_, _) =>
       val (f, as) = tm.flattenApps
       f match
-        case R.Global(x, t) =>
+        case R.Global(m, x, t) =>
           val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
             case ((as, ds), a) =>
               val (qa, ta, nds) = toIRValue(a)
               (as ++ List(qa), ds ++ nds)
           }
-          (IR.GlobalApp(x, t, tail && x == defname, qas), t.rt, ds)
+          (IR.GlobalApp(m, x, t, tail && x == defname, qas), t.rt, ds)
         case _ => impossible()
 
     case R.Let(x, t, bt, v, b) =>
@@ -940,7 +940,9 @@ object Staging:
       c
     }
 
-  private def stageDef(d: Def)(implicit dm: DataMap): List[IR.Def] = d match
+  private def stageDef(module: String, d: Def)(implicit
+      dm: DataMap
+  ): List[IR.Def] = d match
     case DDef(x, t, st @ STy(_), v) =>
       implicit val fresh: Fresh = newFresh()
       var n2 = 0
@@ -948,7 +950,7 @@ object Staging:
       implicit val emit: Emit = () => {
         val c = n2
         n2 += 1
-        (s"$x$$$c", d => { nds += d; () })
+        (module, s"$x$$$c", d => { nds += d; () })
       }
       val ty = stageFTy(t)
       val value = stageRep(ty, v)
@@ -956,13 +958,13 @@ object Staging:
       (nds.toList ++ List(rd)).map(d => toIRDef(d)(newFresh()))
     case _ => Nil
 
-  def stage(ds: Defs): IR.Defs =
+  def stage(module: String, ds: Defs): IR.Defs =
     implicit val dds: DataMap =
       (
         Ref(0),
         ArrayBuffer.empty[(Int, Val1 => List[List[Val1]], List[List[IR.Ty]])]
       )
-    val sds = ds.toList.flatMap(stageDef)
+    val sds = ds.toList.flatMap(d => stageDef(module, d))
     IR.Defs(
       dds._2.map((i, _, cs) => IR.DData(s"D$i", cs)).toList ++ sds
     )

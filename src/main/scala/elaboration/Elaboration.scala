@@ -680,12 +680,20 @@ object Elaboration:
             val (t, u) = primType(p)
             (Prim(p), t, u)
           case None =>
-            ctx.lookup(x) match
-              case Some((ix, ty, u)) => (Var(ix), ty, u)
-              case None =>
-                getGlobal(x) match
-                  case Some(e) => (Global(x), e.vty, e.vstage)
-                  case None    => error(s"undefined variable $x")
+            if !x.isOperator && x.expose.contains(":") then
+              val s = x.expose.split("\\:")
+              val mod = s.head
+              val y = Name(s.tail.mkString(":"))
+              getGlobal(mod, y) match
+                case Some(e) => (Global(mod, y), e.vty, e.vstage)
+                case None    => error(s"undefined variable $x")
+            else
+              ctx.lookup(x) match
+                case Some((ix, ty, u)) => (Var(ix), ty, u)
+                case None =>
+                  getGlobal(ctx.module, x) match
+                    case Some(e) => (Global(ctx.module, x), e.vty, e.vstage)
+                    case None    => error(s"undefined variable $x")
 
       case S.Let(x, m, t, v, b) =>
         val stage1 = if m then SMeta else STy(newVF())
@@ -952,16 +960,28 @@ object Elaboration:
       )
     (etm, ety, estage)
 
-  private def elaborate(d: S.Def): List[Def] =
-    debug(s"elaborate $d")
+  private def elaborate(module: String, d: S.Def): List[Def] =
+    debug(s"elaborate $module $d")
     d match
-      case S.DInclude(_) => Nil
-      case S.DDef(x, m, t, v) =>
-        implicit val ctx: Ctx = Ctx.empty()
-        if getGlobal(x).isDefined then error(s"duplicate global $x")
+      case S.DImport(_, _, false, Nil) => Nil
+      case S.DImport(pos, m, all, xs0) =>
+        implicit val ctx: Ctx = Ctx.empty(module, pos)
+        val xs = if all then allNamesFromModule(m) else xs0
+        xs.map { x =>
+          // if getGlobal(module, x).isDefined then error(s"cannot redefine $x")
+          getGlobal(m, x) match
+            case None => error(s"module $m does not contain $x")
+            case Some(e) =>
+              setGlobal(e.copy(module = module))
+              DDef(x, e.ty, e.stage, e.tm)
+        }
+      case S.DDef(pos, x, m, t, v) =>
+        implicit val ctx: Ctx = Ctx.empty(module, pos)
+        if getGlobal(module, x).isDefined then error(s"duplicate global $x")
         val (etm, ety, estage) = elaborate(v, t, m)
         setGlobal(
           GlobalEntry(
+            module,
             x,
             etm,
             ety,
@@ -974,9 +994,10 @@ object Elaboration:
         val ed = DDef(x, ety, estage, etm)
         debug(s"elaborated $ed")
         List(ed)
-      case S.DData(x, ps, cs) =>
+      case S.DData(pos, x, ps, cs) =>
         val vty = S.U(STy(S.Var(Name("Val"))))
         val tcond = S.DDef(
+          pos,
           x,
           true,
           Some(ps.foldRight(vty)((x, rt) => S.Pi(DoBind(x), Expl, vty, rt))),
@@ -984,7 +1005,7 @@ object Elaboration:
             S.Lam(DoBind(x), S.ArgIcit(Expl), None, b)
           )
         )
-        val ed = elaborate(tcond)
+        val ed = elaborate(module, tcond)
         val ecs = cs.zipWithIndex.flatMap { case ((c, ts), i) =>
           val rt =
             ps.foldLeft(S.Var(x))((f, x) => S.App(f, S.Var(x), S.ArgIcit(Expl)))
@@ -999,11 +1020,11 @@ object Elaboration:
           val body = ns.foldRight(S.Con(i, ns.map(S.Var.apply)))((x, b) =>
             S.Lam(DoBind(x), S.ArgIcit(Expl), None, b)
           )
-          val cond = S.DDef(c, true, Some(ty), body)
-          elaborate(cond)
+          val cond = S.DDef(pos, c, true, Some(ty), body)
+          elaborate(module, cond)
         }
         ed ++ ecs
 
-  def elaborate(uri: String, ds: S.Defs): Defs =
-    try Defs(ds.toList.flatMap(elaborate))
+  def elaborate(module: String, uri: String, ds: S.Defs): Defs =
+    try Defs(ds.toList.flatMap(d => elaborate(module, d)))
     catch case e: ElaborateError => throw ElaborateError(e.pos, uri, e.msg)

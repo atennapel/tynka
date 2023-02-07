@@ -1,6 +1,6 @@
-include "lib/Prelude"
-include "lib/List"
-include "lib/Push"
+import "lib/Prelude" (...)
+import "lib/List" (List, Nil, (::))
+import "lib/Push" (Push)
 
 def Step A S = (vf : VF) (R : Ty vf) -> R -> (A -> S -> R) -> R
 

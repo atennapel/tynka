@@ -24,16 +24,16 @@ object Evaluation:
       case CFun2(f)        => f(v, w)
 
   // evaluation
-  private def vglobal(x: Name): Val =
-    val value = getGlobal(x).get.value
-    VGlobal(x, SId, () => value)
+  private def vglobal(m: String, x: Name): Val =
+    val value = getGlobal(m, x).get.value
+    VGlobal(m, x, SId, () => value)
 
   def vapp(f: Val, a: Val, i: Icit): Val = f match
     case VLam(_, _, _, b) => b(a)
     case VRigid(hd, sp)   => VRigid(hd, SApp(sp, a, i))
     case VFlex(hd, sp)    => VFlex(hd, SApp(sp, a, i))
-    case VGlobal(uri, sp, v) =>
-      VGlobal(uri, SApp(sp, a, i), () => vapp(v(), a, i))
+    case VGlobal(m, x, sp, v) =>
+      VGlobal(m, x, SApp(sp, a, i), () => vapp(v(), a, i))
     case _ => impossible()
 
   def vappE(f: Val, a: Val): Val = vapp(f, a, Expl)
@@ -48,39 +48,39 @@ object Evaluation:
         case Named(x, i) => vproj(snd, Named(x, i - 1))
     case VRigid(hd, sp) => VRigid(hd, SProj(sp, p))
     case VFlex(hd, sp)  => VFlex(hd, SProj(sp, p))
-    case VGlobal(uri, sp, v) =>
-      VGlobal(uri, SProj(sp, p), () => vproj(v(), p))
+    case VGlobal(m, x, sp, v) =>
+      VGlobal(m, x, SProj(sp, p), () => vproj(v(), p))
     case _ => impossible()
 
   def vfst(v: Val): Val = vproj(v, Fst)
   def vsnd(v: Val): Val = vproj(v, Snd)
 
   def vquote(v: Val): Val = v match
-    case VRigid(hd, SSplice(sp))     => VRigid(hd, sp)
-    case VFlex(hd, SSplice(sp))      => VFlex(hd, sp)
-    case VGlobal(hd, SSplice(sp), v) => VGlobal(hd, sp, () => vquote(v()))
-    case v                           => VQuote(v)
+    case VRigid(hd, SSplice(sp))        => VRigid(hd, sp)
+    case VFlex(hd, SSplice(sp))         => VFlex(hd, sp)
+    case VGlobal(m, hd, SSplice(sp), v) => VGlobal(m, hd, sp, () => vquote(v()))
+    case v                              => VQuote(v)
 
   def vsplice(v: Val): Val = v match
-    case VQuote(v)         => v
-    case VRigid(hd, sp)    => VRigid(hd, SSplice(sp))
-    case VFlex(hd, sp)     => VFlex(hd, SSplice(sp))
-    case VGlobal(x, sp, v) => VGlobal(x, SSplice(sp), () => vsplice(v()))
-    case _                 => impossible()
+    case VQuote(v)            => v
+    case VRigid(hd, sp)       => VRigid(hd, SSplice(sp))
+    case VFlex(hd, sp)        => VFlex(hd, SSplice(sp))
+    case VGlobal(m, x, sp, v) => VGlobal(m, x, SSplice(sp), () => vsplice(v()))
+    case _                    => impossible()
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
     (x, force(v), as) match
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
-      case (_, VGlobal(y, sp, v), _) =>
-        VGlobal(y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
+      case (_, VGlobal(m, y, sp, v), _) =>
+        VGlobal(m, y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
       case _ => impossible()
 
   private def vcase(ty: VTy, rty: VTy, v: Val, cs: List[Val]): Val = v match
     case VRigid(hd, sp) => VRigid(hd, SCase(sp, ty, rty, cs))
     case VFlex(hd, sp)  => VFlex(hd, SCase(sp, ty, rty, cs))
-    case VGlobal(uri, sp, v) =>
-      VGlobal(uri, SCase(sp, ty, rty, cs), () => vcase(v(), ty, rty, cs))
+    case VGlobal(m, x, sp, v) =>
+      VGlobal(m, x, SCase(sp, ty, rty, cs), () => vcase(v(), ty, rty, cs))
     case _ => impossible()
 
   def vspine(v: Val, sp: Spine): Val = sp match
@@ -107,7 +107,7 @@ object Evaluation:
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
     case Var(ix)               => env(ix.expose)
-    case Global(x)             => vglobal(x)
+    case Global(m, x)          => vglobal(m, x)
     case Prim(x)               => vprim(x)
     case Let(_, _, _, _, v, b) => eval(b)(eval(v) :: env)
     case U(s)                  => VU(s.map(eval))
@@ -156,8 +156,8 @@ object Evaluation:
       getMeta(id) match
         case Solved(v, _, _) => force(vspine(v, sp), unfold)
         case Unsolved(_, _)  => v
-    case VGlobal(_, _, v) if unfold == UnfoldAll => force(v(), UnfoldAll)
-    case _                                       => v
+    case VGlobal(_, _, _, v) if unfold == UnfoldAll => force(v(), UnfoldAll)
+    case _                                          => v
 
   private def quote(hd: Tm, sp: Spine, unfold: Unfold)(implicit l: Lvl): Tm =
     sp match
@@ -188,10 +188,10 @@ object Evaluation:
 
   def quote(v: Val, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): Tm =
     force(v, unfold) match
-      case VRigid(hd, sp)    => quote(quote(hd), sp, unfold)
-      case VFlex(id, sp)     => quote(Meta(id), sp, unfold)
-      case VGlobal(x, sp, _) => quote(Global(x), sp, unfold)
-      case VU(s)             => U(quoteS(s))
+      case VRigid(hd, sp)       => quote(quote(hd), sp, unfold)
+      case VFlex(id, sp)        => quote(Meta(id), sp, unfold)
+      case VGlobal(m, x, sp, _) => quote(Global(m, x), sp, unfold)
+      case VU(s)                => U(quoteS(s))
 
       case VLam(x, i, ty, b) =>
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))

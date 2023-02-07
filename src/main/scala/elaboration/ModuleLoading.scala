@@ -55,18 +55,18 @@ object ModuleLoading:
       debug(s"load uris: $uri")
       val filename = transformFilename(uri)
       val text = Source.fromURL(filename).mkString
-      val tm = defsParser
+      val defs = defsParser
         .parse(text)
         .toTry
         .get
-      val (uris, defs) = tm.includes
+      val uris = defs.imports
       urimap.put(uri, Entry(uri, filename, defs, uris.toSet))
       uris.filter(!urimap.contains(_)).foreach(loadUris)
 
   private def loadUri(uri: String): C.Defs =
     debug(s"load uri: $uri")
     val entry = urimap(uri)
-    val eds = elaborate(transformFilename(uri), entry.defs)
+    val eds = elaborate(uri, transformFilename(uri), entry.defs)
     debug(s"loaded uri: $uri")
     eds
 

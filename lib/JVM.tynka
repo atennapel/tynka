@@ -1,4 +1,4 @@
-include "lib/Primitives"
+import "lib/Primitives" (...)
 
 -- int
 def Int = Foreign "I"

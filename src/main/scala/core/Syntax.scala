@@ -33,7 +33,7 @@ object Syntax:
   type Ty = Tm
   enum Tm:
     case Var(ix: Ix)
-    case Global(name: Name)
+    case Global(module: String, name: Name)
     case Prim(name: PrimName)
     case Let(name: Name, ty: Ty, stage: CStage, bty: Ty, value: Tm, body: Tm)
     case U(stage: CStage)
@@ -86,7 +86,7 @@ object Syntax:
 
     override def toString: String = this match
       case Var(x)                     => s"'$x"
-      case Global(x)                  => s"$x"
+      case Global(m, x)               => s"$m:$x"
       case Prim(x)                    => s"$x"
       case Let(x, t, SMeta, _, v, b)  => s"(let $x : $t = $v; $b)"
       case Let(x, t, STy(_), _, v, b) => s"(let $x : $t := $v; $b)"

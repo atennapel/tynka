@@ -25,6 +25,7 @@ final case class Ctx(
     locals: Locals,
     pruning: Pruning,
     types: Types,
+    module: String,
     pos: PosInfo
 ):
   def names: List[Name] = locals.names
@@ -49,6 +50,7 @@ final case class Ctx(
       Bound(locals, x, quote(ty), quote(stage)),
       Some(Expl) :: pruning,
       newtypes,
+      module,
       pos
     )
 
@@ -67,6 +69,7 @@ final case class Ctx(
       Defined(locals, x, qty, qstage, qvalue),
       None :: pruning,
       types + (x -> (lvl, ty, stage)),
+      module,
       pos
     )
 
@@ -105,5 +108,5 @@ final case class Ctx(
     go(locals).mkString("\n")
 
 object Ctx:
-  def empty(pos: PosInfo = (-1, -1)): Ctx =
-    Ctx(lvl0, Nil, Empty, Nil, Map.empty, pos)
+  def empty(module: String, pos: PosInfo): Ctx =
+    Ctx(lvl0, Nil, Empty, Nil, Map.empty, module, pos)

@@ -182,7 +182,7 @@ object Unification:
         val inner2 = goSp(Meta(m), sp)
         goSp(inner2, outer)
 
-      case VGlobal(x, sp, _) => goSp(Global(x), sp)
+      case VGlobal(m, x, sp, _) => goSp(Global(m, x), sp)
 
       case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, ty, b) =>
@@ -409,11 +409,12 @@ object Unification:
       case (VUnit(), _) => ()
       case (_, VUnit()) => ()
 
-      case (VGlobal(x1, sp1, v1), VGlobal(x2, sp2, v2)) if x1 == x2 =>
+      case (VGlobal(m1, x1, sp1, v1), VGlobal(m2, x2, sp2, v2))
+          if m1 == m2 && x1 == x2 =>
         try unify(sp1, sp2)
         catch case _: UnifyError => unify(v1(), v2())
-      case (VGlobal(_, _, v), VGlobal(_, _, w)) => unify(v(), w())
-      case (VGlobal(_, _, v), w)                => unify(v(), w)
-      case (w, VGlobal(_, _, v))                => unify(w, v())
+      case (VGlobal(_, _, _, v), VGlobal(_, _, _, w)) => unify(v(), w())
+      case (VGlobal(_, _, _, v), w)                   => unify(v(), w)
+      case (w, VGlobal(_, _, _, v))                   => unify(w, v())
 
       case (_, _) => throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")

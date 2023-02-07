@@ -1,4 +1,4 @@
-include "lib/JVM"
+import "lib/JVM" (...)
 
 def (+) a b = intAdd a b
 def (-) a b = intSub a b

@@ -23,11 +23,11 @@ object Main:
       println(pretty(eds))
 
       println("\nstaging:")
-      val irds = stage(eds)
+      val irds = stage(filename, eds)
       println(irds)
 
       println("\ngenerate JVM bytecode")
-      generate(moduleName, irds)
+      generate(filename, irds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)
@@ -38,4 +38,5 @@ object Main:
           stream.close()
           println(lineSrc)
           println(s"${" " * (col - 1)}^")
+          println(s"in ${err.uri}")
         if isDebug then err.printStackTrace()

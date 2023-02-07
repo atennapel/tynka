@@ -7,9 +7,10 @@ import Value.*
 import scala.collection.mutable
 
 object Globals:
-  private val map: mutable.Map[Name, GlobalEntry] = mutable.Map.empty
+  private val map: mutable.Map[(String, Name), GlobalEntry] = mutable.Map.empty
 
   case class GlobalEntry(
+      module: String,
       name: Name,
       tm: Tm,
       ty: Ty,
@@ -19,7 +20,14 @@ object Globals:
       vstage: VStage
   )
 
-  def setGlobal(entry: GlobalEntry): Unit = map.put(entry.name, entry)
-  def getGlobal(x: Name): Option[GlobalEntry] = map.get(x)
+  def setGlobal(entry: GlobalEntry): Unit =
+    map.put((entry.module, entry.name), entry)
+  def getGlobal(m: String, x: Name): Option[GlobalEntry] = map.get((m, x))
 
   def resetGlobals(): Unit = map.clear()
+
+  def allEntriesFromModule(m: String): List[GlobalEntry] =
+    map.values.filter(e => e.module == m).toList
+
+  def allNamesFromModule(m: String): List[Name] =
+    allEntriesFromModule(m).map(_.name).toList

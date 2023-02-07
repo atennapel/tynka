@@ -8,24 +8,39 @@ object Syntax:
 
     def toList: List[Def] = defs
 
-    def includes: (List[String], Defs) =
+    def imports: List[String] =
       (
-        defs.flatMap { case DInclude(uri) => Some(uri); case _ => None },
-        Defs(defs.filter { case DInclude(uri) => false; case _ => true })
+        defs.flatMap {
+          case DImport(_, uri, _, _) => Some(uri); case _ => None
+        }
       )
 
   enum Def:
-    case DInclude(uri: String)
-    case DDef(name: Name, meta: Boolean, ty: Option[Ty], value: Tm)
-    case DData(name: Name, ps: List[Name], cs: List[(Name, List[Ty])])
+    case DImport(pos: PosInfo, uri: String, all: Boolean, names: List[Name])
+    case DDef(
+        pos: PosInfo,
+        name: Name,
+        meta: Boolean,
+        ty: Option[Ty],
+        value: Tm
+    )
+    case DData(
+        pos: PosInfo,
+        name: Name,
+        ps: List[Name],
+        cs: List[(Name, List[Ty])]
+    )
 
     override def toString: String = this match
-      case DInclude(uri)          => s"include \"$uri\""
-      case DDef(x, m, Some(t), v) => s"def $x : $t ${if m then "" else ":"}= $v"
-      case DDef(x, m, None, v)    => s"def $x ${if m then "" else ":"}= $v"
-      case DData(x, ps, Nil) =>
+      case DImport(_, uri, true, _) => s"import \"$uri\" (...)"
+      case DImport(_, uri, _, Nil)  => s"import \"$uri\""
+      case DImport(_, uri, _, xs)   => s"import \"$uri\" (${xs.mkString(", ")})"
+      case DDef(_, x, m, Some(t), v) =>
+        s"def $x : $t ${if m then "" else ":"}= $v"
+      case DDef(_, x, m, None, v) => s"def $x ${if m then "" else ":"}= $v"
+      case DData(_, x, ps, Nil) =>
         s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} ="
-      case DData(x, ps, cs) =>
+      case DData(_, x, ps, cs) =>
         s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} = ${cs
             .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
             .mkString(" | ")}"

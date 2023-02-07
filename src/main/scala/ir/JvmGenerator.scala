@@ -434,11 +434,11 @@ object JvmGenerator:
   ): Unit = comp match
     case Val(v) => gen(v)
 
-    case GlobalApp(x, TDef(ps, rt), true, as) if x == mg.getName =>
+    case GlobalApp(_, x, TDef(ps, rt), true, as) if x == mg.getName =>
       as.foreach(gen)
       Range.inclusive(args - 1, 0, -1).foreach(i => mg.storeArg(i))
       mg.visitJumpInsn(GOTO, methodStart)
-    case GlobalApp(x, TDef(ps, rt), _, as) =>
+    case GlobalApp(_, x, TDef(ps, rt), _, as) =>
       as.foreach(gen)
       mg.invokeStatic(
         ctx.moduleType,
@@ -636,7 +636,7 @@ object JvmGenerator:
     case Var(x) if x < args => mg.loadArg(x)
     case Var(x)             => mg.loadLocal(locals(x))
 
-    case Global(x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
+    case Global(_, x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
 
     case Box(t, v) => gen(v); mg.box(gen(t))
 

@@ -33,7 +33,7 @@ object Parser:
         "case",
         "fix",
         "data",
-        "include",
+        "import",
         "foreign"
       ),
       operators = Set(
@@ -53,8 +53,9 @@ object Parser:
         "|"
       ),
       identStart = Predicate(c => c.isLetter || c == '_'),
-      identLetter =
-        Predicate(c => c.isLetterOrDigit || c == '_' || c == '\'' || c == '-'),
+      identLetter = Predicate(c =>
+        c.isLetterOrDigit || c == '_' || c == '\'' || c == '-' || c == '/' || c == ':'
+      ),
       opStart = Predicate(userOps.contains(_)),
       opLetter = Predicate(userOpsTail.contains(_)),
       space = Predicate(isWhitespace)
@@ -338,11 +339,12 @@ object Parser:
       many(defP <|> dataP <|> includeP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
-      ("def" *> identOrOp <~> many(defParam) <~> option(
+      (pos <~> "def" *> identOrOp <~> many(defParam) <~> option(
         ":" *> tm
       ) <~> (":=" #> false <|> "=" #> true) <~> tm)
-        .map { case ((((x, ps), ty), m), v) =>
+        .map { case (((((pos, x), ps), ty), m), v) =>
           DDef(
+            pos,
             x,
             m,
             ty.map(typeFromParams(ps, _)),
@@ -351,16 +353,23 @@ object Parser:
         }
 
     private lazy val dataP: Parsley[Def] =
-      ("data" *> identOrOp <~> many(identOrOp) <~> "=" *> sepBy(
+      (pos <~> "data" *> identOrOp <~> many(identOrOp) <~> "=" *> sepBy(
         identOrOp <~> many(projAtom),
         "|"
       ))
-        .map { case ((x, ps), cs) =>
-          DData(x, ps, cs)
+        .map { case (((pos, x), ps), cs) =>
+          DData(pos, x, ps, cs)
         }
 
     private lazy val includeP: Parsley[Def] =
-      ("include" *> string).map(DInclude.apply)
+      (pos <~> "import" *> string <~> option(
+        "(" *> ("..." #> Left(()) <|> sepEndBy(identOrOp, ",")
+          .map(Right.apply)) <* ")"
+      )).map {
+        case ((pos, m), None)            => DImport(pos, m, false, Nil)
+        case ((pos, m), Some(Left(_)))   => DImport(pos, m, true, Nil)
+        case ((pos, m), Some(Right(xs))) => DImport(pos, m, false, xs)
+      }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)
   lazy val defsParser: Parsley[Defs] = LangLexer.fully(TmParser.defs)
