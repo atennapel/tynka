@@ -70,6 +70,15 @@ object Evaluation:
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
     (x, force(v), as) match
+      case (PEqLabel, VLabelLit(a), List((VLabelLit(b), _))) =>
+        if a == b then
+          vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => t)))
+        else vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => f)))
+      case (PAppendLabel, VLabelLit(""), List((b, _))) => b
+      case (PAppendLabel, _, List((VLabelLit(""), _))) => v
+      case (PAppendLabel, VLabelLit(a), List((VLabelLit(b), _))) =>
+        VLabelLit(a + b)
+
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
       case (_, VGlobal(m, y, sp, v), _) =>
@@ -103,6 +112,24 @@ object Evaluation:
       case _                        => impossible()
 
   private def vprim(x: PrimName): Val = x match
+    case PEqLabel =>
+      vlam(
+        "a",
+        VIrrelevant,
+        a =>
+          vlam("b", VIrrelevant, b => vprimelim(PEqLabel, List((b, Expl)), a))
+      )
+    case PAppendLabel =>
+      vlam(
+        "a",
+        VIrrelevant,
+        a =>
+          vlam(
+            "b",
+            VIrrelevant,
+            b => vprimelim(PAppendLabel, List((b, Expl)), a)
+          )
+      )
     case _ => VPrim(x)
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
@@ -263,7 +290,9 @@ object Evaluation:
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)
 
-    case PLabel => (VUMeta(), SMeta)
+    case PLabel       => (VUMeta(), SMeta)
+    case PEqLabel     => (vfun(VLabel(), vfun(VLabel(), vcbool)), SMeta)
+    case PAppendLabel => (vfun(VLabel(), vfun(VLabel(), VLabel())), SMeta)
 
     // VTy -> VTy
     case PIO => (vfun(VVTy(), VVTy()), SMeta)
@@ -296,3 +325,6 @@ object Evaluation:
 
     // Label -> VTy
     case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
+
+  // (R : Meta) -> R -> R -> R
+  val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))

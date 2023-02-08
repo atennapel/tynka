@@ -3,19 +3,21 @@ import "lib/Primitives" (...)
 -- int
 def Int = Foreign "I"
 
-def intAdd (a b : Int) = foreign Int "op:96" a b
-def intSub (a b : Int) = foreign Int "op:100" a b
-def intMul (a b : Int) = foreign Int "op:104" a b
-def intDiv (a b : Int) = foreign Int "op:108" a b
-def intMod (a b : Int) = foreign Int "op:112" a b
-def intNeg (a : Int) = foreign Int "op:116" a
+def binopInt op (a b : Int) = foreign Int (appendLabel "op:" op) a b
+def intAdd = binopInt "96"
+def intSub = binopInt "100"
+def intMul = binopInt "104"
+def intDiv = binopInt "108"
+def intMod = binopInt "112"
+def intNeg = binopInt "116"
 
-def intEq (a b : Int) = foreign Bool "branch:153" a b
-def intNeq (a b : Int) = foreign Bool "branch:154" a b
-def intLt (a b : Int) = foreign Bool "branch:155" a b
-def intGt (a b : Int) = foreign Bool "branch:157" a b
-def intLeq (a b : Int) = foreign Bool "branch:158" a b
-def intGeq (a b : Int) = foreign Bool "branch:156" a b
+def branchInt op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
+def intEq = branchInt "153"
+def intNeq = branchInt "154"
+def intLt = branchInt "155"
+def intGeq = branchInt "156"
+def intGt = branchInt "157"
+def intLeq = branchInt "158"
 
 -- JVM specifics
 def JavaVoid = Foreign "V"

@@ -59,8 +59,15 @@ object Staging:
     go(env, ix.expose)
 
   private def vapp1(f: Val1, a: Val1): Val1 = (f, a) match
-    case (VLam1(f), _)               => f(a)
-    case (VPrim1(x, as), _)          => VPrim1(x, as ++ List(a))
+    case (VLam1(f), _) => f(a)
+    case (VPrim1(x, as), _) =>
+      (x, as ++ List(a)) match
+        case (PEqLabel, List(VLabelLit1(a), VLabelLit1(b))) =>
+          if a == b then VLam1(r => VLam1(a => VLam1(b => a)))
+          else VLam1(r => VLam1(a => VLam1(b => b)))
+        case (PAppendLabel, List(VLabelLit1(a), VLabelLit1(b))) =>
+          VLabelLit1(a + b)
+        case _ => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()

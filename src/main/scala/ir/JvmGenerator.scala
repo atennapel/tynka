@@ -466,10 +466,10 @@ object JvmGenerator:
           val lEnd = new Label
           gen(scrut)
           mg.visitJumpInsn(IFEQ, lFalse)
-          gen(cs(0)._2)
+          gen(cs(1)._2)
           mg.visitJumpInsn(GOTO, lEnd)
           mg.visitLabel(lFalse)
-          gen(cs(1)._2)
+          gen(cs(0)._2)
           mg.visitLabel(lEnd)
         case FiniteLike(k) =>
           if k <= 2 then impossible()

@@ -28,6 +28,7 @@ TODO:
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
 - [ ] Cannot access operators in modules
+- [ ] Public/private definitions
 - [ ] Do not export imported definitions
 - [ ] Relative file including
 - [ ] Remove unused defs (starting from main)
@@ -43,3 +44,4 @@ TODO:
 - [ ] Closures, thunks, JVM generics
 - [ ] Delay IO execution
 - [ ] Coercion over constructors
+- [ ] Dependency ordering of surface definitions

@@ -1,5 +1,5 @@
 import "lib/Prelude" (...)
-import "lib/List" (...)
+import "lib/Push" (...)
 
 def main := javaMain \_.
-  traverseIO_ putLn #[1, 2, 3]
+  foldIO_ putLn (range 1 10)

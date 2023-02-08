@@ -126,6 +126,8 @@ object Common:
     case PUnit
 
     case PLabel
+    case PEqLabel
+    case PAppendLabel
 
     case PIO
     case PReturnIO
@@ -146,7 +148,9 @@ object Common:
       case PUnitType => "()"
       case PUnit     => "[]"
 
-      case PLabel => "Label"
+      case PLabel       => "Label"
+      case PEqLabel     => "eqLabel"
+      case PAppendLabel => "appendLabel"
 
       case PIO       => "IO"
       case PReturnIO => "returnIO"
@@ -168,7 +172,9 @@ object Common:
       case "()" => Some(PUnitType)
       case "[]" => Some(PUnit)
 
-      case "Label" => Some(PLabel)
+      case "Label"       => Some(PLabel)
+      case "eqLabel"     => Some(PEqLabel)
+      case "appendLabel" => Some(PAppendLabel)
 
       case "IO"       => Some(PIO)
       case "returnIO" => Some(PReturnIO)
