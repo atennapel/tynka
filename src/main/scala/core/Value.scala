@@ -63,7 +63,7 @@ object Value:
     case VPair(fst: Val, snd: Val, ty: VTy)
 
     case VIntLit(value: Int)
-    case VLabelLit(value: String)
+    case VStringLit(value: String)
 
     case VTCon(name: Bind, cs: TConClos)
     case VCon(ty: VTy, ix: Int, args: List[Val])
@@ -193,7 +193,24 @@ object Value:
 
   object VInt:
     def apply(): Val =
-      VRigid(HPrim(PForeignType), SApp(SId, VLabelLit("I"), Expl))
+      VRigid(HPrim(PForeignType), SApp(SId, VStringLit("I"), Expl))
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PForeignType), SApp(SId, VStringLit("I"), Expl)) => true
+      case _ => false
+
+  object VString:
+    def apply(): Val =
+      VRigid(
+        HPrim(PForeignType),
+        SApp(SId, VStringLit("Ljava/lang/String;"), Expl)
+      )
+    def unapply(value: Val): Boolean = value match
+      case VRigid(
+            HPrim(PForeignType),
+            SApp(SId, VStringLit("Ljava/lang/String;"), Expl)
+          ) =>
+        true
+      case _ => false
 
   object VLabel:
     def apply(): Val = VRigid(HPrim(PLabel), SId)

@@ -27,6 +27,7 @@ TODO:
 - [x] Add new-types
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
+- [x] Value level strings
 - [ ] Cannot access operators in modules
 - [ ] Public/private definitions
 - [ ] Do not export imported definitions
@@ -34,7 +35,6 @@ TODO:
 - [ ] Remove unused defs (starting from main)
 - [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
-- [ ] Value level strings
 - [ ] Value level syntax for unit
 - [ ] Arrays
 - [ ] Should foreign always return in IO?

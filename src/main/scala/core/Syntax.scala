@@ -49,7 +49,7 @@ object Syntax:
     case Proj(tm: Tm, proj: ProjType, ty: Ty, pty: Ty)
 
     case IntLit(value: Int)
-    case LabelLit(value: String)
+    case StringLit(value: String)
 
     case TCon(name: Bind, cons: List[List[Ty]])
     case Con(ty: Ty, ix: Int, args: List[Tm])
@@ -106,8 +106,8 @@ object Syntax:
       case Pair(a, b, _)         => s"($a, $b)"
       case Proj(t, p, _, _)      => s"$t$p"
 
-      case IntLit(n)   => s"$n"
-      case LabelLit(v) => s"\"$v\""
+      case IntLit(n)    => s"$n"
+      case StringLit(v) => s"\"$v\""
 
       case TCon(x, Nil) => s"(tcon $x.)"
       case TCon(x, cs) =>

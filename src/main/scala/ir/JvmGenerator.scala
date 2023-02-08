@@ -640,8 +640,9 @@ object JvmGenerator:
 
     case Box(t, v) => gen(v); mg.box(gen(t))
 
-    case IntLit(v)  => mg.push(v)
-    case BoolLit(v) => mg.push(v)
+    case IntLit(v)    => mg.push(v)
+    case BoolLit(v)   => mg.push(v)
+    case StringLit(v) => mg.push(v)
 
     case Con(ty, i, as) =>
       val (jty, kind) = tcons(ty)

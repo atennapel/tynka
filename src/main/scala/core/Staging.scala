@@ -32,7 +32,7 @@ object Staging:
     case VPair1(fst: Val1, snd: Val1)
     case VTCon1(cs: Val1 => List[List[Val1]])
     case VTConName1(x: IR.GName)
-    case VLabelLit1(v: String)
+    case VStringLit1(v: String)
   import Val1.*
 
   private enum Val0:
@@ -45,6 +45,7 @@ object Staging:
     case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
     case VIntLit0(n: Int)
+    case VStringLit0(str: String)
     case VCon0(ty: Val1, ix: Int, as: List[Val0])
     case VCase0(ty: Val1, rty: Val1, scrut: Val0, cs: List[Val0])
     case VForeign0(ty: Val1, cmd: String, as: List[Val0])
@@ -62,11 +63,11 @@ object Staging:
     case (VLam1(f), _) => f(a)
     case (VPrim1(x, as), _) =>
       (x, as ++ List(a)) match
-        case (PEqLabel, List(VLabelLit1(a), VLabelLit1(b))) =>
+        case (PEqLabel, List(VStringLit1(a), VStringLit1(b))) =>
           if a == b then VLam1(r => VLam1(a => VLam1(b => a)))
           else VLam1(r => VLam1(a => VLam1(b => b)))
-        case (PAppendLabel, List(VLabelLit1(a), VLabelLit1(b))) =>
-          VLabelLit1(a + b)
+        case (PAppendLabel, List(VStringLit1(a), VStringLit1(b))) =>
+          VStringLit1(a + b)
         case _ => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
@@ -94,9 +95,9 @@ object Staging:
     case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
     case TCon(_, cs) =>
       VTCon1(r => cs.map(as => as.map(a => eval1(a)(Def1(env, r)))))
-    case Quote(t)    => VQuote1(eval0(t))
-    case LabelLit(v) => VLabelLit1(v)
-    case Wk(t)       => eval1(t)(env.tail)
+    case Quote(t)     => VQuote1(eval0(t))
+    case StringLit(v) => VStringLit1(v)
+    case Wk(t)        => eval1(t)(env.tail)
 
     case U(_)           => VType1
     case Pi(_, _, _, _) => VType1
@@ -193,13 +194,14 @@ object Staging:
     case Splice(t)      => vsplice0(eval1(t))
     case Wk(t)          => eval0(t)(env.tail)
     case IntLit(n)      => VIntLit0(n)
+    case StringLit(s)   => VStringLit0(s)
     case Con(ty, i, as) => VCon0(eval1(ty), i, as.map(eval0))
     case Case(ty, rty, s, cs) =>
       VCase0(eval1(ty), eval1(rty), eval0(s), cs.map(eval0))
     case Foreign(rt, cmd, as) =>
       val l = eval1(cmd) match
-        case VLabelLit1(v) => v
-        case _             => impossible()
+        case VStringLit1(v) => v
+        case _              => impossible()
       VForeign0(eval1(rt), l, as.map(eval0))
     case _ => impossible()
 
@@ -219,6 +221,7 @@ object Staging:
 
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
+    case StringLit(value: String)
 
     case App(fn: R, arg: R)
     case PrimApp(name: PrimName, args: List[R])
@@ -242,8 +245,9 @@ object Staging:
       case Var(x, _)       => s"'$x"
       case Global(m, x, _) => s"$m:$x"
 
-      case IntLit(v)  => s"$v"
-      case BoolLit(b) => if b then "True" else "False"
+      case IntLit(v)    => s"$v"
+      case BoolLit(b)   => if b then "True" else "False"
+      case StringLit(s) => s"\"$s\""
 
       case App(f, a)          => s"($f $a)"
       case PrimApp(p, Nil)    => s"$p"
@@ -298,8 +302,9 @@ object Staging:
       case Var(x, t)       => List((x, t))
       case Global(_, _, _) => Nil
 
-      case IntLit(n)  => Nil
-      case BoolLit(n) => Nil
+      case IntLit(n)    => Nil
+      case BoolLit(n)   => Nil
+      case StringLit(_) => Nil
 
       case App(f, a)          => f.fvs ++ a.fvs
       case PrimApp(p, as)     => as.flatMap(_.fvs)
@@ -358,8 +363,9 @@ object Staging:
         case Var(x, _)       => sub.get(x).getOrElse(this)
         case Global(_, _, _) => this
 
-        case IntLit(n)  => this
-        case BoolLit(n) => this
+        case IntLit(n)    => this
+        case BoolLit(n)   => this
+        case StringLit(_) => this
 
         case App(f, a)      => App(f.subst(sub, scope), a.subst(sub, scope))
         case PrimApp(p, as) => PrimApp(p, as.map(_.subst(sub, scope)))
@@ -415,10 +421,10 @@ object Staging:
     case (VPrim1(x1, as1), VPrim1(x2, as2))
         if x1 == x2 && as1.size == as2.size =>
       as1.zip(as2).forall(tyMatch)
-    case (VTCon1(cs1), VTCon1(cs2))     => dataMatch(cs1, cs2)
-    case (VTConName1(x), VTConName1(y)) => x == y
-    case (VLabelLit1(x), VLabelLit1(y)) => x == y
-    case _                              => false
+    case (VTCon1(cs1), VTCon1(cs2))       => dataMatch(cs1, cs2)
+    case (VTConName1(x), VTConName1(y))   => x == y
+    case (VStringLit1(x), VStringLit1(y)) => x == y
+    case _                                => false
   private def dataMatch(
       a: Val1 => List[List[Val1]],
       b: Val1 => List[List[Val1]]
@@ -471,8 +477,8 @@ object Staging:
     case VTCon1(cs)             => IR.TCon(findOrAddData(cs)._2)
     case VPrim1(PTBox, List(_)) => IR.TBox
     case VPrim1(PIO, List(t))   => quoteVTy(t)
-    case VPrim1(PForeignType, List(VLabelLit1(s))) => IR.TForeign(s)
-    case _                                         => impossible()
+    case VPrim1(PForeignType, List(VStringLit1(s))) => IR.TForeign(s)
+    case _                                          => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
@@ -500,7 +506,8 @@ object Staging:
         R.Var(x, t)
       case VGlobal0(m, x, t) => R.Global(m, x.expose, quoteFTy(t))
 
-      case VIntLit0(v) => R.IntLit(v)
+      case VIntLit0(v)    => R.IntLit(v)
+      case VStringLit0(v) => R.StringLit(v)
 
       case VApp0(f, a) =>
         def flatten(v: Val0): (Val0, List[Val0]) = v match
@@ -611,6 +618,7 @@ object Staging:
       case R.Global(_, _, _) => true
       case R.IntLit(_)       => true
       case R.BoolLit(_)      => true
+      case R.StringLit(_)    => true
       case R.Con(_, _, Nil)  => true
       case _                 => false
     def go(tm: R): R =
@@ -771,6 +779,22 @@ object Staging:
             case ("branch:156", List(R.IntLit(a), R.IntLit(b))) =>
               R.BoolLit(a >= b)
 
+            case (
+                  "invokeVirtual:java.lang.String.concat",
+                  List(R.StringLit(""), b)
+                ) =>
+              b
+            case (
+                  "invokeVirtual:java.lang.String.concat",
+                  List(a, R.StringLit(""))
+                ) =>
+              a
+            case (
+                  "invokeVirtual:java.lang.String.concat",
+                  List(R.StringLit(a), R.StringLit(b))
+                ) =>
+              R.StringLit(a + b)
+
             case (l, as) => R.Foreign(rt, l, as)
 
         case tm => tm
@@ -812,6 +836,8 @@ object Staging:
 
       case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
       case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
+      case R.StringLit(v) =>
+        (IR.StringLit(v), IR.TForeign("Ljava/lang/String;"), Nil)
 
       case R.Con(ty, i, as) =>
         val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {

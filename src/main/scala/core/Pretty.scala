@@ -61,7 +61,7 @@ object Pretty:
       case U(_)                => pretty(tm)
       case IntLit(_)           => pretty(tm)
       case Irrelevant          => pretty(tm)
-      case LabelLit(_)         => pretty(tm)
+      case StringLit(_)        => pretty(tm)
       case Wk(tm)              => prettyParen(tm, app)(ns.tail)
       case _                   => s"(${pretty(tm)})"
 
@@ -103,8 +103,8 @@ object Pretty:
     case Proj(t, p, _, _) => s"${prettyParen(t)}$p"
     case TPair(a, b)      => s"TPair ${prettyParen(a)} ${prettyParen(b)}"
 
-    case IntLit(n)   => s"$n"
-    case LabelLit(v) => s"\"$v\""
+    case IntLit(n)    => s"$n"
+    case StringLit(v) => s"\"$v\""
 
     case TCon(x0, Nil) =>
       val x = x0.fresh

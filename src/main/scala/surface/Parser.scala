@@ -106,7 +106,7 @@ object Parser:
       ("^" *> projAtom).map(Lift.apply)
         <|> ("`" *> projAtom).map(Quote.apply)
         <|> ("$" *> projAtom).map(Splice.apply)
-        <|> string.map(LabelLit.apply)
+        <|> string.map(StringLit.apply)
         <|> attempt("(" *> userOp.map(Var.apply) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")

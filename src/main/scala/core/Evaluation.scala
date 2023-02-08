@@ -70,14 +70,14 @@ object Evaluation:
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
     (x, force(v), as) match
-      case (PEqLabel, VLabelLit(a), List((VLabelLit(b), _))) =>
+      case (PEqLabel, VStringLit(a), List((VStringLit(b), _))) =>
         if a == b then
           vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => t)))
         else vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => f)))
-      case (PAppendLabel, VLabelLit(""), List((b, _))) => b
-      case (PAppendLabel, _, List((VLabelLit(""), _))) => v
-      case (PAppendLabel, VLabelLit(a), List((VLabelLit(b), _))) =>
-        VLabelLit(a + b)
+      case (PAppendLabel, VStringLit(""), List((b, _))) => b
+      case (PAppendLabel, _, List((VStringLit(""), _))) => v
+      case (PAppendLabel, VStringLit(a), List((VStringLit(b), _))) =>
+        VStringLit(a + b)
 
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
@@ -150,8 +150,8 @@ object Evaluation:
     case Pair(a, b, ty)   => VPair(eval(a), eval(b), eval(ty))
     case Proj(t, p, _, _) => vproj(eval(t), p)
 
-    case IntLit(n)   => VIntLit(n)
-    case LabelLit(l) => VLabelLit(l)
+    case IntLit(n)    => VIntLit(n)
+    case StringLit(l) => VStringLit(l)
 
     case TCon(x, cs)    => VTCon(x, TConClos(env, cs))
     case Con(ty, i, as) => VCon(eval(ty), i, as.map(eval))
@@ -240,8 +240,8 @@ object Evaluation:
       case VSigma(x, t, b) =>
         Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
 
-      case VIntLit(n)   => IntLit(n)
-      case VLabelLit(v) => LabelLit(v)
+      case VIntLit(n)    => IntLit(n)
+      case VStringLit(v) => StringLit(v)
 
       case VTCon(x, cs) =>
         TCon(x, cs(VVar(l)).map(as => as.map(a => quote(a, unfold)(l + 1))))

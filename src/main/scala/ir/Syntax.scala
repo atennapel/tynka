@@ -77,6 +77,7 @@ object Syntax:
 
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
+    case StringLit(value: String)
 
     case Con(ty: GName, ix: Int, as: List[Value])
 
@@ -86,8 +87,9 @@ object Syntax:
       case Var(x)          => s"'$x"
       case Global(m, x, _) => s"$m:$x"
 
-      case IntLit(v)  => s"$v"
-      case BoolLit(v) => if v then "True" else "False"
+      case IntLit(v)    => s"$v"
+      case BoolLit(v)   => if v then "True" else "False"
+      case StringLit(v) => s"\"$v\""
 
       case Con(t, i, Nil) => s"(con $t #$i)"
       case Con(t, i, as)  => s"(con $t #$i ${as.mkString(" ")})"

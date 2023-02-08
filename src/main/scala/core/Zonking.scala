@@ -46,7 +46,7 @@ object Zonking:
     case Global(_, _) => t
     case Prim(x)      => t
     case IntLit(n)    => t
-    case LabelLit(_)  => t
+    case StringLit(_) => t
     case Irrelevant   => t
     case Let(x, t, s, bt, v, b) =>
       Let(x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))

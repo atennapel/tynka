@@ -446,6 +446,9 @@ object Elaboration:
     (tm, force(ty)) match
       case (S.Pos(pos, tm), _) => check(tm, ty, stage)(ctx.enter(pos))
 
+      case (S.StringLit(str), VLabel())  => StringLit(str)
+      case (S.StringLit(str), VString()) => StringLit(str)
+
       case (S.Lam(x, i, ot, b), VPi(y, i2, a, rt)) if icitMatch(i, y, i2) =>
         ot.foreach(t0 => {
           val ety = checkType(t0, SMeta)
@@ -605,6 +608,13 @@ object Elaboration:
     tm match
       case S.Pos(pos, tm) => infer(tm, s)(ctx.enter(pos))
 
+      case S.StringLit(str) =>
+        s match
+          case SMeta => (StringLit(str), VLabel())
+          case STy(vf) =>
+            unify(vf, VVal())
+            (StringLit(str), VString())
+
       case S.Lam(x, S.ArgIcit(i), ot, b) =>
         s match
           case SMeta =>
@@ -669,7 +679,7 @@ object Elaboration:
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
       case S.Hole(ox)     => error(s"cannot infer hole $tm")
       case S.IntLit(n)    => (IntLit(n), VInt(), SVTy())
-      case S.LabelLit(v)  => (LabelLit(v), VLabel(), SMeta)
+      case S.StringLit(v) => (StringLit(v), VString(), SVTy())
       case S.U(SMeta)     => (U(SMeta), VUMeta(), SMeta)
       case S.U(STy(vf)) =>
         val evf = check(vf, VVF(), SMeta)
