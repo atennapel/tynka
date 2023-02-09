@@ -68,9 +68,6 @@ object Syntax:
         val pss = ps.map((x, t, v) => s"let $x : $t = $v; ").mkString("")
         s"($pss$body)"
 
-    def fv: Set[LName] =
-      ps.foldRight(body.fv) { case ((x, _, v), fv) => (fv - x) ++ v.fv }
-
   enum Value:
     case Var(name: LName)
     case Global(module: GName, name: GName, ty: Ty)
@@ -95,15 +92,8 @@ object Syntax:
       case Con(t, i, as)  => s"(con $t #$i ${as.mkString(" ")})"
 
       case Box(_, v) => s"(box $v)"
-
-    def fv: Set[LName] = this match
-      case Var(x)        => Set(x)
-      case Con(_, _, as) => as.flatMap(_.fv).toSet
-      case Box(_, v)     => v.fv
-      case _             => Set.empty
   export Value.*
 
-  type CaseEntry = (List[(LName, Ty)], Let)
   enum Comp:
     case Val(value: Value)
 
@@ -116,7 +106,8 @@ object Syntax:
     )
     case PrimApp(name: PrimName, args: List[Value])
 
-    case Case(ty: GName, scrut: Value, cs: List[CaseEntry])
+    case Case(ty: GName, scrut: Value, x: LName, cs: List[Let])
+    case Field(ty: GName, rty: Ty, conix: Int, ix: Int, tm: Value)
 
     case Unbox(ty: Ty, v: Value)
 
@@ -126,24 +117,12 @@ object Syntax:
       case Val(v) => s"$v"
       case GlobalApp(m, x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$m:$x ${as.mkString(" ")})"
-      case PrimApp(f, as)   => s"($f ${as.mkString(" ")})"
-      case Case(ty, s, Nil) => s"(case $ty $s)"
-      case Case(ty, s, cs) =>
-        def csStr(c: CaseEntry) = c match
-          case (Nil, b) => b.toString
-          case (xs, b) =>
-            s"(${xs.map((x, t) => s"($x : $t)").mkString(" ")}. $b)"
-        s"(case $ty $s ${cs.map(csStr).mkString(" ")})"
+      case PrimApp(f, as)        => s"($f ${as.mkString(" ")})"
+      case Case(ty, s, x, Nil)   => s"(case $x : $ty = $s)"
+      case Case(ty, s, x, cs)    => s"(case $x : $ty = $s; ${cs.mkString(" ")})"
+      case Field(_, _, ci, i, v) => s"(field $ci#$i $v)"
       case Unbox(_, v)           => s"(unbox $v)"
       case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
       case Foreign(rt, cmd, as) =>
         s"(foreign $rt $cmd ${as.map((v, t) => s"$v").mkString(" ")})"
-
-    def fv: Set[LName] = this match
-      case Val(v)                    => v.fv
-      case GlobalApp(_, _, _, _, as) => as.flatMap(_.fv).toSet
-      case PrimApp(_, as)            => as.flatMap(_.fv).toSet
-      case Case(_, s, cs) => s.fv ++ cs.flatMap((xs, b) => b.fv -- xs.map(_._1))
-      case Unbox(_, v)    => v.fv
-      case Foreign(_, _, as) => as.flatMap(_._1.fv).toSet
   export Comp.*

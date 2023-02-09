@@ -449,7 +449,18 @@ object JvmGenerator:
 
     case PrimApp(_, _) => impossible()
 
-    case Case(ty, scrut, cs) =>
+    case Field(dty, ty, ci, i, v) =>
+      val (jty, kind) = tcons(dty)
+      kind match
+        case VoidLike        => impossible()
+        case UnitLike        => impossible()
+        case BoolLike        => impossible()
+        case FiniteLike(n)   => impossible()
+        case NewtypeLike(t)  => gen(v)
+        case ProductLike(ts) => gen(v); mg.getField(jty, s"a$i", gen(ty))
+        case ADT             => gen(v); mg.getField(jty, s"a$i", gen(ty))
+
+    case Case(ty, scrut, x, cs) =>
       val (jty, kind) = tcons(ty)
       kind match
         case VoidLike =>
@@ -483,82 +494,57 @@ object JvmGenerator:
             mg.visitJumpInsn(GOTO, lEnd)
           }
           mg.visitLabel(lEnd)
-        case NewtypeLike(_) =>
-          val (List((x, t)), b) = cs.head: @unchecked
-          var newlocals = locals
-          val fv = b.fv
-          if fv.contains(x) then
-            val dt = gen(t)
-            val local = mg.newLocal(dt)
-            gen(scrut)
-            mg.storeLocal(local)
-            newlocals = newlocals + (x -> local)
-          gen(b)(mg, ctx, args, newlocals, methodStart)
-        case ProductLike(_) =>
+        case NewtypeLike(t) =>
+          val local = mg.newLocal(gen(t))
           gen(scrut)
-          val (xs, b) = cs.head
-          var newlocals = locals
-          val fv = b.fv
-          xs.zipWithIndex.foreach { case ((x, t), i) =>
-            if fv.contains(x) then
-              val dt = gen(t)
-              val local = mg.newLocal(dt)
-              mg.dup()
-              mg.getField(jty, s"a$i", dt)
-              mg.storeLocal(local)
-              newlocals = newlocals + (x -> local)
-          }
-          mg.pop()
-          gen(b)(mg, ctx, args, newlocals, methodStart)
+          mg.storeLocal(local)
+          gen(cs(0))(mg, ctx, args, locals + (x -> local), methodStart)
+        case ProductLike(_) =>
+          val local = mg.newLocal(jty)
+          gen(scrut)
+          mg.storeLocal(local)
+          gen(cs(0))(mg, ctx, args, locals + (x -> local), methodStart)
         case _ =>
           gen(scrut)
           val lEnd = new Label
           var lNextCase = new Label
-          cs.zipWithIndex.init.foreach { case ((ts, b), i) =>
-            val contype = cons(ty)(i)._1
+          cs.zipWithIndex.init.foreach { case (b, i) =>
+            val condata = cons(ty)(i)
+            val contype = condata._1
+            val isNilary = condata._2.isEmpty
             mg.visitLabel(lNextCase)
             lNextCase = new Label
             mg.dup()
-            if ts.isEmpty then
+            if isNilary then
               mg.getStatic(jty, s"$$$i$$", contype)
               mg.visitJumpInsn(IF_ACMPNE, lNextCase)
             else
               mg.instanceOf(contype)
               mg.visitJumpInsn(IFEQ, lNextCase)
-            if ts.nonEmpty then mg.checkCast(contype)
-            var newlocals = locals
-            val fv = b.fv
-            ts.zipWithIndex.foreach { case ((x, t), i) =>
-              if fv.contains(x) then
-                val dt = gen(t)
-                val local = mg.newLocal(dt)
-                mg.dup()
-                mg.getField(contype, s"a$i", dt)
-                mg.storeLocal(local)
-                newlocals = newlocals + (x -> local)
-            }
-            mg.pop()
-            gen(b)(mg, ctx, args, newlocals, methodStart)
+            if isNilary then
+              mg.pop()
+              gen(b)
+            else
+              mg.checkCast(contype)
+              val local = mg.newLocal(contype)
+              mg.storeLocal(local)
+              gen(b)(mg, ctx, args, locals + (x -> local), methodStart)
             mg.visitJumpInsn(GOTO, lEnd)
           }
           mg.visitLabel(lNextCase)
           val i = cs.size - 1
-          val (ts, b) = cs.last
-          val contype = cons(ty)(i)._1
-          if ts.nonEmpty then mg.checkCast(contype)
-          var newlocals = locals
-          val fv = b.fv
-          ts.zipWithIndex.foreach { case ((x, t), i) =>
-            if fv.contains(x) then
-              val dt = gen(t)
-              val local = mg.newLocal(dt)
-              mg.dup()
-              mg.getField(contype, s"a$i", dt)
-              mg.storeLocal(local)
-              newlocals = newlocals + (x -> local)
-          }
-          mg.pop()
-          gen(b)(mg, ctx, args, newlocals, methodStart)
+          val b = cs.last
+          val condata = cons(ty)(i)
+          val contype = condata._1
+          val isNilary = condata._2.isEmpty
+          if isNilary then
+            mg.pop()
+            gen(b)
+          else
+            mg.checkCast(contype)
+            val local = mg.newLocal(contype)
+            mg.storeLocal(local)
+            gen(b)(mg, ctx, args, locals + (x -> local), methodStart)
           mg.visitLabel(lEnd)
 
     case Foreign(_, "cast", List((v, _)))       => gen(v)
