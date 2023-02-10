@@ -24,7 +24,7 @@ def JavaVoid = Foreign "V"
 def JavaArgs = Foreign "[Ljava/lang/String;"
 
 def javaMain (action : JavaArgs -> IO Unit) : ^(JavaArgs -> JavaVoid) =
-  \args. foreign JavaVoid "returnVoid" (action args)
+  \args. foreign JavaVoid "returnVoid" (unsafeRunIO (action args))
 
 def jvmEquals {A : VTy} (x y : Box A) : Bool =
   foreign Bool "invokeVirtual:java.lang.Object.equals" x y

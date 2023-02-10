@@ -16,14 +16,8 @@ def (++) {A : VTy} (a b : List A) : List A = foldr b (::) a
 def sum = foldl 0 (+)
 def product = foldl 1 (*)
 
-def sequenceIO {A : VTy} (l : List (IO A)) : IO (List A) =
-  foldr (returnIO Nil) (\hd tl. hd >>= \fhd. tl >>= \ftl. returnIO (fhd :: ftl)) l
-
 def traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
   foldr (returnIO Nil) (\hd tl. f hd >>= \fhd. tl >>= \ftl. returnIO (fhd :: ftl)) l
-
-def sequenceIO_ {A : VTy} (l : List (IO A)) : IO Unit =
-  foldr (returnIO U) (\hd tl. hd >>> tl) l
 
 def traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
   foldr (returnIO U) (\hd tl. f hd >>> tl) l 

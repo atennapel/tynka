@@ -21,4 +21,3 @@ def id {vf} {A : Ty vf} (x : A) : A = x
 def (>>=) {A B : VTy} (c : IO A) (k : A -> IO B) : IO B = bindIO c k
 def (>>>) {A B : VTy} (c : IO A) (k : IO B) : IO B = c >>= (\_. k)
 def mapIO {A B : VTy} (f : A -> B) (c : IO A) : IO B = c >>= (\x. returnIO (f x))
-def joinIO {A B : VTy} (c : IO (IO A)) : IO A = c >>= id

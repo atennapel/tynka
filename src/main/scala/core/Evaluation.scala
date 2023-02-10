@@ -294,12 +294,12 @@ object Evaluation:
     case PEqLabel     => (vfun(VLabel(), vfun(VLabel(), vcbool)), SMeta)
     case PAppendLabel => (vfun(VLabel(), vfun(VLabel(), VLabel())), SMeta)
 
-    // VTy -> VTy
-    case PIO => (vfun(VVTy(), VVTy()), SMeta)
+    // VTy -> FTy
+    case PIO => (vfun(VVTy(), VFTy()), SMeta)
     // {A : VTy} -> ^A -> ^(IO A)
     case PReturnIO =>
       (
-        vpiI("A", VVTy(), a => vfun(VLift(VVal(), a), VLift(VVal(), VIO(a)))),
+        vpiI("A", VVTy(), a => vfun(VLift(VVal(), a), VLift(VFun(), VIO(a)))),
         SMeta
       )
     // {A B : VTy} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
@@ -313,13 +313,19 @@ object Evaluation:
               "B",
               VVTy(),
               b =>
-                val iob = VLift(VVal(), VIO(b))
+                val iob = VLift(VFun(), VIO(b))
                 vfun(
-                  VLift(VVal(), VIO(a)),
+                  VLift(VFun(), VIO(a)),
                   vfun(vfun(VLift(VVal(), a), iob), iob)
                 )
             )
         ),
+        SMeta
+      )
+    // {A : VTy} -> ^(IO A) -> ^A
+    case PRunIO =>
+      (
+        vpiI("A", VVTy(), a => vfun(VLift(VFun(), VIO(a)), VLift(VVal(), a))),
         SMeta
       )
 

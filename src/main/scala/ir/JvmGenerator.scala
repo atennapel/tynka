@@ -413,15 +413,16 @@ object JvmGenerator:
       args: Args,
       locals: Locals,
       methodStart: Label
-  ): Unit = t match
-    case Let(ps, b) =>
-      val newlocals = ps.foldLeft(locals) { case (locals, (x, ty, v)) =>
-        val vr = mg.newLocal(gen(ty))
-        gen(v)(mg, ctx, args, locals, methodStart)
-        mg.storeLocal(vr)
-        locals + (x -> vr)
-      }
-      gen(b)(mg, ctx, args, newlocals, methodStart)
+  ): Unit =
+    t match
+      case Let(ps, b) =>
+        val newlocals = ps.foldLeft(locals) { case (locals, (x, ty, v)) =>
+          val vr = mg.newLocal(gen(ty))
+          gen(v)(mg, ctx, args, locals, methodStart)
+          mg.storeLocal(vr)
+          locals + (x -> vr)
+        }
+        gen(b)(mg, ctx, args, newlocals, methodStart)
 
   private def gen(
       comp: Comp
@@ -431,96 +432,113 @@ object JvmGenerator:
       args: Args,
       locals: Locals,
       methodStart: Label
-  ): Unit = comp match
-    case Val(v) => gen(v)
+  ): Unit =
+    comp match
+      case Val(v) => gen(v)
 
-    case GlobalApp(_, x, TDef(ps, rt), true, as) if x == mg.getName =>
-      as.foreach(gen)
-      Range.inclusive(args - 1, 0, -1).foreach(i => mg.storeArg(i))
-      mg.visitJumpInsn(GOTO, methodStart)
-    case GlobalApp(_, x, TDef(ps, rt), _, as) =>
-      as.foreach(gen)
-      mg.invokeStatic(
-        ctx.moduleType,
-        new Method(x, gen(rt), ps.map(gen).toArray)
-      )
+      case GlobalApp(_, x, TDef(ps, rt), true, as) if x == mg.getName =>
+        as.foreach(gen)
+        Range.inclusive(args - 1, 0, -1).foreach(i => mg.storeArg(i))
+        mg.visitJumpInsn(GOTO, methodStart)
+      case GlobalApp(_, x, TDef(ps, rt), _, as) =>
+        as.foreach(gen)
+        mg.invokeStatic(
+          ctx.moduleType,
+          new Method(x, gen(rt), ps.map(gen).toArray)
+        )
 
-    case Unbox(t, v) => gen(v); mg.unbox(gen(t))
+      case Unbox(t, v) => gen(v); mg.unbox(gen(t))
 
-    case PrimApp(_, _) => impossible()
+      case PrimApp(_, _) => impossible()
 
-    case Field(dty, ty, ci, i, v) =>
-      val (jty, kind) = tcons(dty)
-      kind match
-        case VoidLike        => impossible()
-        case UnitLike        => impossible()
-        case BoolLike        => impossible()
-        case FiniteLike(n)   => impossible()
-        case NewtypeLike(t)  => gen(v)
-        case ProductLike(ts) => gen(v); mg.getField(jty, s"a$i", gen(ty))
-        case ADT             => gen(v); mg.getField(jty, s"a$i", gen(ty))
+      case Field(dty, ty, ci, i, v) =>
+        val (jty, kind) = tcons(dty)
+        kind match
+          case VoidLike        => impossible()
+          case UnitLike        => impossible()
+          case BoolLike        => impossible()
+          case FiniteLike(n)   => impossible()
+          case NewtypeLike(t)  => gen(v)
+          case ProductLike(ts) => gen(v); mg.getField(jty, s"a$i", gen(ty))
+          case ADT             => gen(v); mg.getField(jty, s"a$i", gen(ty))
 
-    case Case(ty, scrut, x, cs) =>
-      val (jty, kind) = tcons(ty)
-      kind match
-        case VoidLike =>
-          val ty = Type.getType(classOf[Exception])
-          mg.newInstance(ty)
-          mg.dup()
-          gen(scrut)
-          mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
-          mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
-          mg.throwException()
-        case UnitLike => gen(scrut); mg.pop(); gen(cs(0)._2)
-        case BoolLike =>
-          val lFalse = new Label
-          val lEnd = new Label
-          gen(scrut)
-          mg.visitJumpInsn(IFEQ, lFalse)
-          gen(cs(1)._2)
-          mg.visitJumpInsn(GOTO, lEnd)
-          mg.visitLabel(lFalse)
-          gen(cs(0)._2)
-          mg.visitLabel(lEnd)
-        case FiniteLike(k) =>
-          if k <= 2 then impossible()
-          gen(scrut)
-          val labels = (0 until k).map(_ => mg.newLabel())
-          mg.visitTableSwitchInsn(0, k - 1, labels.last, labels.toArray*)
-          val lEnd = mg.newLabel()
-          labels.zipWithIndex.foreach { (l, i) =>
-            mg.visitLabel(l)
-            gen(cs(i)._2)
+      case Case(ty, scrut, x, cs) =>
+        val (jty, kind) = tcons(ty)
+        kind match
+          case VoidLike =>
+            val ty = Type.getType(classOf[Exception])
+            mg.newInstance(ty)
+            mg.dup()
+            gen(scrut)
+            mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
+            mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
+            mg.throwException()
+          case UnitLike => gen(scrut); mg.pop(); gen(cs(0))
+          case BoolLike =>
+            val lFalse = new Label
+            val lEnd = new Label
+            gen(scrut)
+            mg.visitJumpInsn(IFEQ, lFalse)
+            gen(cs(1))
             mg.visitJumpInsn(GOTO, lEnd)
-          }
-          mg.visitLabel(lEnd)
-        case NewtypeLike(t) =>
-          val local = mg.newLocal(gen(t))
-          gen(scrut)
-          mg.storeLocal(local)
-          gen(cs(0))(mg, ctx, args, locals + (x -> local), methodStart)
-        case ProductLike(_) =>
-          val local = mg.newLocal(jty)
-          gen(scrut)
-          mg.storeLocal(local)
-          gen(cs(0))(mg, ctx, args, locals + (x -> local), methodStart)
-        case _ =>
-          gen(scrut)
-          val lEnd = new Label
-          var lNextCase = new Label
-          cs.zipWithIndex.init.foreach { case (b, i) =>
+            mg.visitLabel(lFalse)
+            gen(cs(0))
+            mg.visitLabel(lEnd)
+          case FiniteLike(k) =>
+            if k <= 2 then impossible()
+            gen(scrut)
+            val labels = (0 until k).map(_ => mg.newLabel())
+            mg.visitTableSwitchInsn(0, k - 1, labels.last, labels.toArray*)
+            val lEnd = mg.newLabel()
+            labels.zipWithIndex.foreach { (l, i) =>
+              mg.visitLabel(l)
+              gen(cs(i))
+              mg.visitJumpInsn(GOTO, lEnd)
+            }
+            mg.visitLabel(lEnd)
+          case NewtypeLike(t) =>
+            val local = mg.newLocal(gen(t))
+            gen(scrut)
+            mg.storeLocal(local)
+            gen(cs(0))(mg, ctx, args, locals + (x -> local), methodStart)
+          case ProductLike(_) =>
+            val local = mg.newLocal(jty)
+            gen(scrut)
+            mg.storeLocal(local)
+            gen(cs(0))(mg, ctx, args, locals + (x -> local), methodStart)
+          case _ =>
+            gen(scrut)
+            val lEnd = new Label
+            var lNextCase = new Label
+            cs.zipWithIndex.init.foreach { case (b, i) =>
+              val condata = cons(ty)(i)
+              val contype = condata._1
+              val isNilary = condata._2.isEmpty
+              mg.visitLabel(lNextCase)
+              lNextCase = new Label
+              mg.dup()
+              if isNilary then
+                mg.getStatic(jty, s"$$$i$$", contype)
+                mg.visitJumpInsn(IF_ACMPNE, lNextCase)
+              else
+                mg.instanceOf(contype)
+                mg.visitJumpInsn(IFEQ, lNextCase)
+              if isNilary then
+                mg.pop()
+                gen(b)
+              else
+                mg.checkCast(contype)
+                val local = mg.newLocal(contype)
+                mg.storeLocal(local)
+                gen(b)(mg, ctx, args, locals + (x -> local), methodStart)
+              mg.visitJumpInsn(GOTO, lEnd)
+            }
+            mg.visitLabel(lNextCase)
+            val i = cs.size - 1
+            val b = cs.last
             val condata = cons(ty)(i)
             val contype = condata._1
             val isNilary = condata._2.isEmpty
-            mg.visitLabel(lNextCase)
-            lNextCase = new Label
-            mg.dup()
-            if isNilary then
-              mg.getStatic(jty, s"$$$i$$", contype)
-              mg.visitJumpInsn(IF_ACMPNE, lNextCase)
-            else
-              mg.instanceOf(contype)
-              mg.visitJumpInsn(IFEQ, lNextCase)
             if isNilary then
               mg.pop()
               gen(b)
@@ -529,86 +547,70 @@ object JvmGenerator:
               val local = mg.newLocal(contype)
               mg.storeLocal(local)
               gen(b)(mg, ctx, args, locals + (x -> local), methodStart)
-            mg.visitJumpInsn(GOTO, lEnd)
-          }
-          mg.visitLabel(lNextCase)
-          val i = cs.size - 1
-          val b = cs.last
-          val condata = cons(ty)(i)
-          val contype = condata._1
-          val isNilary = condata._2.isEmpty
-          if isNilary then
-            mg.pop()
-            gen(b)
-          else
-            mg.checkCast(contype)
-            val local = mg.newLocal(contype)
-            mg.storeLocal(local)
-            gen(b)(mg, ctx, args, locals + (x -> local), methodStart)
-          mg.visitLabel(lEnd)
+            mg.visitLabel(lEnd)
 
-    case Foreign(_, "cast", List((v, _)))       => gen(v)
-    case Foreign(_, "returnVoid", List((v, _))) =>
-    case Foreign(_, op, as) if op.startsWith("op:") =>
-      op.drop(3).toIntOption match
-        case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
-        case _       => impossible()
-    case Foreign(_, op, as) if op.startsWith("branch:") =>
-      op.drop(7).toIntOption match
-        case Some(n) =>
-          as.foreach((v, _) => gen(v))
-          val skip = mg.newLabel()
-          val end = mg.newLabel()
-          mg.ifICmp(n, skip)
-          mg.push(false)
-          mg.visitJumpInsn(GOTO, end)
-          mg.visitLabel(skip)
-          mg.push(true)
-          mg.visitLabel(end)
-        case _ => impossible()
-    case Foreign(rt @ TForeign(_), "instantiate", as) =>
-      val ty = gen(rt)
-      mg.newInstance(ty)
-      mg.dup()
-      as.foreach((v, _) => gen(v))
-      mg.invokeConstructor(
-        ty,
-        Method("<init>", Type.VOID_TYPE, as.map((_, t) => gen(t)).toArray)
-      )
-    case Foreign(rt, cmd0, as) =>
-      val s = cmd0.split("\\:")
-      val cmd = s.head
-      val arg = s.tail.mkString(":")
-      (cmd, arg, as) match
-        case ("getStatic", arg, Nil) =>
-          val ss = arg.split("\\.")
-          val owner = s"L${ss.init.mkString("/")};"
-          val member = ss.last
-          mg.getStatic(Type.getType(owner), member, gen(rt))
-        case ("invokeVirtual", arg, as) =>
-          val ss = arg.split("\\.")
-          val owner = s"L${ss.init.mkString("/")};"
-          val member = ss.last
-          as.foreach((v, _) => gen(v))
-          mg.invokeVirtual(
-            Type.getType(owner),
-            Method(member, gen(rt), as.tail.map((_, t) => gen(t)).toArray)
-          )
-        case ("invokeVirtualVoid", arg, as) =>
-          val ss = arg.split("\\.")
-          val owner = s"L${ss.init.mkString("/")};"
-          val member = ss.last
-          as.foreach((v, _) => gen(v))
-          mg.invokeVirtual(
-            Type.getType(owner),
-            Method(
-              member,
-              Type.VOID_TYPE,
-              as.tail.map((_, t) => gen(t)).toArray
+      case Foreign(_, "cast", List((v, _)))       => gen(v)
+      case Foreign(_, "returnVoid", List((v, _))) =>
+      case Foreign(_, op, as) if op.startsWith("op:") =>
+        op.drop(3).toIntOption match
+          case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
+          case _       => impossible()
+      case Foreign(_, op, as) if op.startsWith("branch:") =>
+        op.drop(7).toIntOption match
+          case Some(n) =>
+            as.foreach((v, _) => gen(v))
+            val skip = mg.newLabel()
+            val end = mg.newLabel()
+            mg.ifICmp(n, skip)
+            mg.push(false)
+            mg.visitJumpInsn(GOTO, end)
+            mg.visitLabel(skip)
+            mg.push(true)
+            mg.visitLabel(end)
+          case _ => impossible()
+      case Foreign(rt @ TForeign(_), "instantiate", as) =>
+        val ty = gen(rt)
+        mg.newInstance(ty)
+        mg.dup()
+        as.foreach((v, _) => gen(v))
+        mg.invokeConstructor(
+          ty,
+          Method("<init>", Type.VOID_TYPE, as.map((_, t) => gen(t)).toArray)
+        )
+      case Foreign(rt, cmd0, as) =>
+        val s = cmd0.split("\\:")
+        val cmd = s.head
+        val arg = s.tail.mkString(":")
+        (cmd, arg, as) match
+          case ("getStatic", arg, Nil) =>
+            val ss = arg.split("\\.")
+            val owner = s"L${ss.init.mkString("/")};"
+            val member = ss.last
+            mg.getStatic(Type.getType(owner), member, gen(rt))
+          case ("invokeVirtual", arg, as) =>
+            val ss = arg.split("\\.")
+            val owner = s"L${ss.init.mkString("/")};"
+            val member = ss.last
+            as.foreach((v, _) => gen(v))
+            mg.invokeVirtual(
+              Type.getType(owner),
+              Method(member, gen(rt), as.tail.map((_, t) => gen(t)).toArray)
             )
-          )
-          mg.push(false)
-        case _ => impossible()
+          case ("invokeVirtualVoid", arg, as) =>
+            val ss = arg.split("\\.")
+            val owner = s"L${ss.init.mkString("/")};"
+            val member = ss.last
+            as.foreach((v, _) => gen(v))
+            mg.invokeVirtual(
+              Type.getType(owner),
+              Method(
+                member,
+                Type.VOID_TYPE,
+                as.tail.map((_, t) => gen(t)).toArray
+              )
+            )
+            mg.push(false)
+          case _ => impossible()
 
   private def gen(
       t: Value
@@ -618,56 +620,57 @@ object JvmGenerator:
       args: Args,
       locals: Locals,
       methodStart: Label
-  ): Unit = t match
-    case Var(x) if x < args => mg.loadArg(x)
-    case Var(x)             => mg.loadLocal(locals(x))
+  ): Unit =
+    t match
+      case Var(x) if x < args => mg.loadArg(x)
+      case Var(x)             => mg.loadLocal(locals(x))
 
-    case Global(_, x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
+      case Global(_, x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
 
-    case Box(t, v) => gen(v); mg.box(gen(t))
+      case Box(t, v) => gen(v); mg.box(gen(t))
 
-    case IntLit(v)    => mg.push(v)
-    case BoolLit(v)   => mg.push(v)
-    case StringLit(v) => mg.push(v)
+      case IntLit(v)    => mg.push(v)
+      case BoolLit(v)   => mg.push(v)
+      case StringLit(v) => mg.push(v)
 
-    case Con(ty, i, as) =>
-      val (jty, kind) = tcons(ty)
-      (kind, as) match
-        case (VoidLike, _)       => impossible()
-        case (UnitLike, _)       => mg.push(false)
-        case (BoolLike, _)       => mg.push(i != 0)
-        case (FiniteLike(_), _)  => mg.push(i)
-        case (NewtypeLike(_), _) => gen(as.head)
-        case (ProductLike(ts), _) =>
-          val conType = Type.getType(s"L${ctx.moduleName}$$$ty;")
-          mg.newInstance(conType)
-          mg.dup()
-          as.foreach(gen)
-          mg.invokeConstructor(
-            conType,
-            new Method(
-              "<init>",
-              Type.VOID_TYPE,
-              ts.map(gen).toArray
+      case Con(ty, i, as) =>
+        val (jty, kind) = tcons(ty)
+        (kind, as) match
+          case (VoidLike, _)       => impossible()
+          case (UnitLike, _)       => mg.push(false)
+          case (BoolLike, _)       => mg.push(i != 0)
+          case (FiniteLike(_), _)  => mg.push(i)
+          case (NewtypeLike(_), _) => gen(as.head)
+          case (ProductLike(ts), _) =>
+            val conType = Type.getType(s"L${ctx.moduleName}$$$ty;")
+            mg.newInstance(conType)
+            mg.dup()
+            as.foreach(gen)
+            mg.invokeConstructor(
+              conType,
+              new Method(
+                "<init>",
+                Type.VOID_TYPE,
+                ts.map(gen).toArray
+              )
             )
-          )
-        case (_, Nil) =>
-          val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
-          mg.getStatic(
-            tcons(ty)._1,
-            s"$$$i$$",
-            conType
-          )
-        case _ =>
-          val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
-          mg.newInstance(conType)
-          mg.dup()
-          as.foreach(gen)
-          mg.invokeConstructor(
-            conType,
-            new Method(
-              "<init>",
-              Type.VOID_TYPE,
-              cons(ty)(i)._2.map(gen).toArray
+          case (_, Nil) =>
+            val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
+            mg.getStatic(
+              tcons(ty)._1,
+              s"$$$i$$",
+              conType
             )
-          )
+          case _ =>
+            val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$i;")
+            mg.newInstance(conType)
+            mg.dup()
+            as.foreach(gen)
+            mg.invokeConstructor(
+              conType,
+              new Method(
+                "<init>",
+                Type.VOID_TYPE,
+                cons(ty)(i)._2.map(gen).toArray
+              )
+            )

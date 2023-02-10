@@ -225,7 +225,14 @@ object Staging:
     case App(fn: R, arg: R)
     case PrimApp(name: PrimName, args: List[R])
     case Lam(name: IR.LName, t1: IR.Ty, t2: IR.TDef, body: R)
-    case Let(name: IR.LName, ty: IR.TDef, bty: IR.TDef, value: R, body: R)
+    case Let(
+        name: IR.LName,
+        noinline: Boolean,
+        ty: IR.TDef,
+        bty: IR.TDef,
+        value: R,
+        body: R
+    )
 
     case Con(ty: IR.GName, ix: Int, as: List[R])
     case Case(ty: IR.GName, rty: IR.TDef, scrut: R, x: IR.LName, cs: List[R])
@@ -235,9 +242,6 @@ object Staging:
 
     case Box(t: IR.Ty, v: R)
     case Unbox(t: IR.Ty, v: R)
-
-    case ReturnIO(t: IR.Ty, v: R)
-    case BindIO(a: IR.Ty, b: IR.Ty, c: R, x: IR.LName, k: R)
 
     case Foreign(rt: IR.Ty, cmd: String, as: List[R])
 
@@ -249,11 +253,11 @@ object Staging:
       case BoolLit(b)   => if b then "True" else "False"
       case StringLit(s) => s"\"$s\""
 
-      case App(f, a)          => s"($f $a)"
-      case PrimApp(p, Nil)    => s"$p"
-      case PrimApp(p, as)     => s"($p ${as.mkString(" ")})"
-      case Lam(x, t, _, b)    => s"(\\($x : $t). $b)"
-      case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
+      case App(f, a)             => s"($f $a)"
+      case PrimApp(p, Nil)       => s"$p"
+      case PrimApp(p, as)        => s"($p ${as.mkString(" ")})"
+      case Lam(x, t, _, b)       => s"(\\($x : $t). $b)"
+      case Let(x, t, _, _, v, b) => s"(let $x : $t = $v; $b)"
 
       case Con(ty, i, Nil)        => s"(con $ty #$i)"
       case Con(ty, i, as)         => s"(con $ty #$i ${as.mkString(" ")})"
@@ -266,9 +270,6 @@ object Staging:
 
       case Box(_, v)   => s"(box $v)"
       case Unbox(_, v) => s"(unbox $v)"
-
-      case ReturnIO(_, v)        => s"(returnIO $v)"
-      case BindIO(_, _, c, x, k) => s"(bindIO $c ($x. $k))"
 
       case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
       case Foreign(rt, l, as)  => s"(foreign $rt $l ${as.mkString(" ")})"
@@ -302,10 +303,10 @@ object Staging:
       case BoolLit(n)   => Nil
       case StringLit(_) => Nil
 
-      case App(f, a)          => f.fvs ++ a.fvs
-      case PrimApp(p, as)     => as.flatMap(_.fvs)
-      case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => y == x)
-      case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+      case App(f, a)             => f.fvs ++ a.fvs
+      case PrimApp(p, as)        => as.flatMap(_.fvs)
+      case Lam(x, _, _, b)       => b.fvs.filterNot((y, _) => y == x)
+      case Let(x, _, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
       case Con(_, _, as) => as.flatMap(_.fvs)
       case Case(_, _, s, x, cs) =>
@@ -317,9 +318,6 @@ object Staging:
 
       case Box(_, v)   => v.fvs
       case Unbox(_, v) => v.fvs
-
-      case ReturnIO(_, v)        => v.fvs
-      case BindIO(_, _, c, x, k) => c.fvs ++ k.fvs.filterNot((y, _) => x == y)
 
       case Foreign(_, _, as) => as.flatMap(_.fvs)
 
@@ -368,9 +366,9 @@ object Staging:
           val (List((x, _)), b) =
             underN(List((x0, IR.TDef(t1))), b0, sub, scope)
           Lam(x, t1, t2, b)
-        case Let(x0, t, bt, v, b0) =>
+        case Let(x0, ni, t, bt, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
-          Let(x, t, bt, v.subst(sub, scope), b)
+          Let(x, ni, t, bt, v.subst(sub, scope), b)
 
         case Con(ty, i, as) => Con(ty, i, as.map(_.subst(sub, scope)))
         case Case(ty, rty, s, x, cs) if scope.contains(x) =>
@@ -397,11 +395,6 @@ object Staging:
         case Box(t, v)   => Box(t, v.subst(sub, scope))
         case Unbox(t, v) => Unbox(t, v.subst(sub, scope))
 
-        case ReturnIO(t, v) => ReturnIO(t, v.subst(sub, scope))
-        case BindIO(a, b, c, x0, k0) =>
-          val (List((x, _)), k) = underN(List((x0, IR.TDef(a))), k0, sub, scope)
-          BindIO(a, b, c.subst(sub, scope), x, k)
-
         case Foreign(rt, l, as) => Foreign(rt, l, as.map(_.subst(sub, scope)))
 
   // quotation
@@ -410,9 +403,6 @@ object Staging:
 
   private def tyMatch(a: Val1, b: Val1)(implicit l: Int): Boolean = (a, b) match
     case (VPrim1(PTBox, List(_)), VPrim1(PTBox, List(_))) => true
-    case (VPrim1(PIO, List(a)), VPrim1(PIO, List(b)))     => tyMatch(a, b)
-    case (VPrim1(PIO, List(a)), b)                        => tyMatch(a, b)
-    case (a, VPrim1(PIO, List(b)))                        => tyMatch(a, b)
     case (VPrim1(x1, as1), VPrim1(x2, as2))
         if x1 == x2 && as1.size == as2.size =>
       as1.zip(as2).forall(tyMatch)
@@ -471,12 +461,12 @@ object Staging:
     case VTConName1(x)          => IR.TCon(x)
     case VTCon1(cs)             => IR.TCon(findOrAddData(cs)._2)
     case VPrim1(PTBox, List(_)) => IR.TBox
-    case VPrim1(PIO, List(t))   => quoteVTy(t)
     case VPrim1(PForeignType, List(VStringLit1(s))) => IR.TForeign(s)
     case _                                          => impossible()
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
+    case VPrim1(PIO, List(t))         => IR.TDef(IR.TBool, quoteVTy(t))
     case _                            => IR.TDef(quoteVTy(v))
 
   private type NS = List[(IR.LName, IR.TDef)]
@@ -530,6 +520,7 @@ object Staging:
         val qt = quoteFTy(ty)
         R.Let(
           x,
+          false,
           qt,
           quoteFTy(bt),
           quoteRep(v),
@@ -560,7 +551,7 @@ object Staging:
               R.App(f, R.Var(x, t))
             }
             ps.foldRight(body) { case ((x, t, v), b) =>
-              R.Let(x, t, qrty, v, b)
+              R.Let(x, false, t, qrty, v, b)
             }
           }
         R.Case(dty, qrty, qscrut, x, ecs)
@@ -585,10 +576,22 @@ object Staging:
         R.Unbox(quoteVTy(t), quoteRep(vsplice0(v)))
 
       case VSplicePrim0(PReturnIO, List(t, v)) =>
-        R.ReturnIO(quoteVTy(t), quoteRep(vsplice0(v)))
+        val x = fresh()
+        R.Lam(
+          x,
+          IR.TBool,
+          IR.TDef(quoteVTy(t)),
+          quoteRep(vsplice0(v))(l + 1, (x, IR.TDef(IR.TBool)) :: ns, fresh, dm)
+        )
+      case VSplicePrim0(PRunIO, List(t, v)) =>
+        val ta = quoteVTy(t)
+        val qv = quoteRep(vsplice0(v))
+        R.App(qv, R.BoolLit(false))
       case VSplicePrim0(PBindIO, List(a, b, c, k)) =>
         val ta = quoteVTy(a)
+        val tb = quoteVTy(b)
         val x = fresh()
+        val y = fresh()
         val qc = quoteRep(vsplice0(c))
         val qk = quoteRep(vsplice0(vapp1(k, VQuote1(VVar0(l)))))(
           l + 1,
@@ -596,12 +599,18 @@ object Staging:
           fresh,
           dm
         )
-        R.BindIO(
-          ta,
-          quoteVTy(b),
-          qc,
+        R.Lam(
           x,
-          qk
+          IR.TBool,
+          IR.TDef(tb),
+          R.Let(
+            y,
+            true,
+            IR.TDef(ta),
+            IR.TDef(tb),
+            R.App(qc, R.BoolLit(false)),
+            R.App(qk, R.BoolLit(false))
+          )
         )
 
       case VForeign0(ty, cmd, as) =>
@@ -633,11 +642,12 @@ object Staging:
         case R.App(f, a) =>
           go(f) match
             // (let x : t = v; b) a ~> let x : t = v; b a
-            case R.Let(x, t, bt, v, b) =>
-              go(R.Let(x, t, bt.tail, v, R.App(b, a)))
+            case R.Let(x, ni, t, bt, v, b) =>
+              go(R.Let(x, ni, t, bt.tail, v, R.App(b, a)))
             // (\(x : t). b) a ~> let x : t = a; b
-            case R.Lam(x, t1, t2, b) => go(R.Let(x, IR.TDef(t1), t2, a, b))
-            case f                   => R.App(f, go(a))
+            case R.Lam(x, t1, t2, b) =>
+              go(R.Let(x, false, IR.TDef(t1), t2, a, b))
+            case f => R.App(f, go(a))
 
         case R.PrimApp(p, as) =>
           (p, as.map(go)) match
@@ -646,18 +656,19 @@ object Staging:
         case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
 
         // let y : t2 = (let x : t1 = v; b1); b2 ~> let x : t1 = v; let y : t2 = b1; b2
-        case R.Let(y, t2, bt2, R.Let(x, t1, bt1, v, b1), b2) =>
-          go(R.Let(x, t1, bt2, v, R.Let(y, t2, bt2, b1, b2)))
-        case R.Let(x, t, bt, v0, b0) =>
+        case R.Let(y, ni1, t2, bt2, R.Let(x, ni2, t1, bt1, v, b1), b2) =>
+          go(R.Let(x, ni2, t1, bt2, v, R.Let(y, ni1, t2, bt2, b1, b2)))
+        case R.Let(x, ni, t, bt, v0, b0) =>
           val v = go(v0)
           val b = go(b0)
           val c = b.fvs.count((y, _) => x == y)
-          if c == 0 then go(b)
-          else if c == 1 || isSmall(v) then go(b.subst(Map(x -> v)))
+          if !ni && c == 0 then go(b)
+          else if !ni && c == 1 || isSmall(v) then go(b.subst(Map(x -> v)))
           else if t.ps.isEmpty then
             val (vs2, spine2) = eta(bt.ps)
             R.Let(
               x,
+              ni,
               t,
               bt,
               go(v),
@@ -693,7 +704,7 @@ object Staging:
             case R.BoolLit(false) => go(cs(0))
             case R.BoolLit(true)  => go(cs(1))
             case con @ R.Con(_, i, as) =>
-              go(R.Let(x, IR.TDef(IR.TCon(ty)), rty, con, cs(i)))
+              go(R.Let(x, false, IR.TDef(IR.TCon(ty)), rty, con, cs(i)))
             case gscrut =>
               val (vs, spine) = eta(rty.ps)
               R
@@ -738,12 +749,6 @@ object Staging:
           go(v) match
             case R.Box(t, v) => v
             case v           => R.Unbox(t, v)
-
-        case R.ReturnIO(t, v) => R.ReturnIO(t, go(v))
-        case R.BindIO(a, b, c, x, k) =>
-          go(c) match
-            case R.ReturnIO(_, v) => go(R.Let(x, IR.TDef(a), IR.TDef(b), v, k))
-            case gc               => R.BindIO(a, b, gc, x, go(k))
 
         case R.Foreign(rt, l, as) =>
           (l, as.map(go)) match
@@ -861,8 +866,6 @@ object Staging:
         val (qv, tv, ds) = toIRValue(v)
         (IR.Box(ty, qv), IR.TBox, ds)
 
-      case R.ReturnIO(_, v) => toIRValue(v)
-
       case _ => c2v(tm)
 
   private def v2c(
@@ -889,7 +892,6 @@ object Staging:
     case R.BoolLit(_)      => v2c(tm)
     case R.Con(_, _, _)    => v2c(tm)
     case R.Box(_, _)       => v2c(tm)
-    case R.ReturnIO(_, _)  => v2c(tm)
 
     case R.App(_, _) =>
       val (f, as) = tm.flattenApps
@@ -903,7 +905,7 @@ object Staging:
           (IR.GlobalApp(m, x, t, tail && x == defname, qas), t.rt, ds)
         case _ => impossible()
 
-    case R.Let(x, t, bt, v, b) =>
+    case R.Let(x, _, t, bt, v, b) =>
       val (qv, tv, ds1) = toIRComp(v, false)
       val y = fresh()
       val (qb, tb, ds2) = toIRComp(b, tail)(ns + (x -> y), defname, fresh)
@@ -922,13 +924,6 @@ object Staging:
     case R.Unbox(ty, v) =>
       val (qv, tv, ds) = toIRValue(v)
       (IR.Unbox(ty, qv), ty, ds)
-
-    case R.BindIO(a, b, c, x, k) =>
-      // bindIO {A} {B} c (x. b) ~> let x : A = c; b
-      val y = fresh()
-      val (qc, tc, ds1) = toIRComp(c, false)
-      val (qk, tk, ds2) = toIRComp(k, tail)(ns + (x -> y), defname, fresh)
-      (qk, tk, ds1 ++ List((y, tc, qc)) ++ ds2)
 
     case R.Foreign(rt, l, as0) =>
       val (as, ds) = as0.foldLeft[(List[(IR.Value, IR.Ty)], Lets)]((Nil, Nil)) {

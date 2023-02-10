@@ -132,6 +132,7 @@ object Common:
     case PIO
     case PReturnIO
     case PBindIO
+    case PRunIO
 
     case PForeignType
 
@@ -155,6 +156,7 @@ object Common:
       case PIO       => "IO"
       case PReturnIO => "returnIO"
       case PBindIO   => "bindIO"
+      case PRunIO    => "unsafeRunIO"
 
       case PForeignType => "Foreign"
   export PrimName.*
@@ -176,9 +178,10 @@ object Common:
       case "eqLabel"     => Some(PEqLabel)
       case "appendLabel" => Some(PAppendLabel)
 
-      case "IO"       => Some(PIO)
-      case "returnIO" => Some(PReturnIO)
-      case "bindIO"   => Some(PBindIO)
+      case "IO"          => Some(PIO)
+      case "returnIO"    => Some(PReturnIO)
+      case "bindIO"      => Some(PBindIO)
+      case "unsafeRunIO" => Some(PRunIO)
 
       case "Foreign" => Some(PForeignType)
 
