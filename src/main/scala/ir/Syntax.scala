@@ -7,6 +7,7 @@ object Syntax:
   type GName = String
 
   enum Ty:
+    case TUnit
     case TBool
     case TInt
     case TCon(name: GName)
@@ -14,6 +15,7 @@ object Syntax:
     case TForeign(cls: String)
 
     override def toString: String = this match
+      case TUnit         => "Unit"
       case TBool         => "Bool"
       case TInt          => "Int"
       case TCon(x)       => s"$x"
@@ -72,6 +74,7 @@ object Syntax:
     case Var(name: LName)
     case Global(module: GName, name: GName, ty: Ty)
 
+    case UnitLit
     case IntLit(value: Int)
     case BoolLit(value: Boolean)
     case StringLit(value: String)
@@ -84,6 +87,7 @@ object Syntax:
       case Var(x)          => s"'$x"
       case Global(m, x, _) => s"$m:$x"
 
+      case UnitLit      => "()"
       case IntLit(v)    => s"$v"
       case BoolLit(v)   => if v then "True" else "False"
       case StringLit(v) => s"\"$v\""

@@ -218,8 +218,9 @@ object Staging:
     case Var(name: IR.LName, ty: IR.TDef)
     case Global(m: IR.GName, name: IR.GName, ty: IR.TDef)
 
-    case IntLit(value: Int)
+    case UnitLit
     case BoolLit(value: Boolean)
+    case IntLit(value: Int)
     case StringLit(value: String)
 
     case App(fn: R, arg: R)
@@ -249,6 +250,7 @@ object Staging:
       case Var(x, _)       => s"'$x"
       case Global(m, x, _) => s"$m:$x"
 
+      case UnitLit      => "()"
       case IntLit(v)    => s"$v"
       case BoolLit(b)   => if b then "True" else "False"
       case StringLit(s) => s"\"$s\""
@@ -299,6 +301,7 @@ object Staging:
       case Var(x, t)       => List((x, t))
       case Global(_, _, _) => Nil
 
+      case UnitLit      => Nil
       case IntLit(n)    => Nil
       case BoolLit(n)   => Nil
       case StringLit(_) => Nil
@@ -356,6 +359,7 @@ object Staging:
         case Var(x, _)       => sub.get(x).getOrElse(this)
         case Global(_, _, _) => this
 
+        case UnitLit      => this
         case IntLit(n)    => this
         case BoolLit(n)   => this
         case StringLit(_) => this
@@ -466,7 +470,7 @@ object Staging:
 
   private def quoteFTy(v: Val1)(implicit dm: DataMap): IR.TDef = v match
     case VPrim1(PTFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteFTy(b))
-    case VPrim1(PIO, List(t))         => IR.TDef(IR.TBool, quoteVTy(t))
+    case VPrim1(PIO, List(t))         => IR.TDef(IR.TUnit, quoteVTy(t))
     case _                            => IR.TDef(quoteVTy(v))
 
   private type NS = List[(IR.LName, IR.TDef)]
@@ -579,14 +583,14 @@ object Staging:
         val x = fresh()
         R.Lam(
           x,
-          IR.TBool,
+          IR.TUnit,
           IR.TDef(quoteVTy(t)),
-          quoteRep(vsplice0(v))(l + 1, (x, IR.TDef(IR.TBool)) :: ns, fresh, dm)
+          quoteRep(vsplice0(v))(l + 1, (x, IR.TDef(IR.TUnit)) :: ns, fresh, dm)
         )
       case VSplicePrim0(PRunIO, List(t, v)) =>
         val ta = quoteVTy(t)
         val qv = quoteRep(vsplice0(v))
-        R.App(qv, R.BoolLit(false))
+        R.App(qv, R.UnitLit)
       case VSplicePrim0(PBindIO, List(a, b, c, k)) =>
         val ta = quoteVTy(a)
         val tb = quoteVTy(b)
@@ -601,15 +605,15 @@ object Staging:
         )
         R.Lam(
           x,
-          IR.TBool,
+          IR.TUnit,
           IR.TDef(tb),
           R.Let(
             y,
             true,
             IR.TDef(ta),
             IR.TDef(tb),
-            R.App(qc, R.BoolLit(false)),
-            R.App(qk, R.BoolLit(false))
+            R.App(qc, R.UnitLit),
+            R.App(qk, R.UnitLit)
           )
         )
 
@@ -634,6 +638,7 @@ object Staging:
       case R.Global(_, _, _) => true
       case R.IntLit(_)       => true
       case R.BoolLit(_)      => true
+      case R.UnitLit         => true
       case R.StringLit(_)    => true
       case R.Con(_, _, Nil)  => true
       case _                 => false
@@ -701,6 +706,7 @@ object Staging:
         case R.Con(ty, i, as) => R.Con(ty, i, as.map(go))
         case R.Case(ty, rty, scrut, x, cs) =>
           go(scrut) match
+            case R.UnitLit        => go(cs(0))
             case R.BoolLit(false) => go(cs(0))
             case R.BoolLit(true)  => go(cs(1))
             case con @ R.Con(_, i, as) =>
@@ -849,6 +855,7 @@ object Staging:
         val ty = t.ty
         (IR.Global(m, x, ty), ty, Nil)
 
+      case R.UnitLit    => (IR.UnitLit, IR.TUnit, Nil)
       case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
       case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
       case R.StringLit(v) =>
@@ -890,6 +897,8 @@ object Staging:
     case R.Global(_, _, _) => v2c(tm)
     case R.IntLit(_)       => v2c(tm)
     case R.BoolLit(_)      => v2c(tm)
+    case R.UnitLit         => v2c(tm)
+    case R.StringLit(_)    => v2c(tm)
     case R.Con(_, _, _)    => v2c(tm)
     case R.Box(_, _)       => v2c(tm)
 

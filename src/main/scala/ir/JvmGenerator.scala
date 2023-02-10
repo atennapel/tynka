@@ -95,6 +95,7 @@ object JvmGenerator:
   private val OBJECT_TYPE: Type = Type.getType("Ljava/lang/Object;")
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
+    case TUnit => Type.BOOLEAN_TYPE
     case TBool => Type.BOOLEAN_TYPE
     case TInt  => Type.INT_TYPE
     case TCon(x) =>
@@ -629,6 +630,7 @@ object JvmGenerator:
 
       case Box(t, v) => gen(v); mg.box(gen(t))
 
+      case UnitLit      => mg.push(false)
       case IntLit(v)    => mg.push(v)
       case BoolLit(v)   => mg.push(v)
       case StringLit(v) => mg.push(v)
