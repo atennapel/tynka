@@ -47,6 +47,11 @@ def getLn : IO Str =
   let input = foreign Str "invokeVirtual:java.util.Scanner.nextLine" scanner;
   returnIO input
 
-def parseInt (s : Str) : IO Int =
-  let n = foreign Int "invokeStatic:java.lang.Integer.parseInt" s;
-  returnIO n
+def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =
+  foreign A (appendLabel "catch:" exc) try default
+
+def parseInt (s : Str) : Option Int :=
+  catch "java/lang/NumberFormatException" (
+    let n = foreign Int "invokeStatic:java.lang.Integer.parseInt" s;
+    Some n
+  ) None

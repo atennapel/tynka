@@ -2,5 +2,5 @@ import "lib/Prelude" (...)
 
 def main := javaMain \_.
   getLn >>= \s.
-  parseInt s >>= \n.
+  let n = parseInt s;
   putLn n

@@ -28,16 +28,18 @@ TODO:
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
 - [x] Value level strings
+- [ ] Generate module name in front of globals
+- [ ] Do not generate multiple of the same definition
+- [ ] Cannot access operators in modules
+- [ ] Public/private definitions
+- [ ] Do not export imported definitions
+- [ ] Remove unused defs (starting from main)
+- [ ] Rename symbol names in JVM generator
 - [ ] JVM slot reuse
 - [ ] Inline tail recursive functions
 - [ ] IO should generate 0-arity method
 - [ ] Optimize unit parameters
-- [ ] Cannot access operators in modules
-- [ ] Public/private definitions
-- [ ] Do not export imported definitions
 - [ ] Relative file including
-- [ ] Remove unused defs (starting from main)
-- [ ] Rename symbol names in JVM generator
 - [ ] Improve inference for if condition
 - [ ] Value level syntax for unit
 - [ ] Arrays
@@ -48,4 +50,3 @@ TODO:
 - [ ] Closures, thunks, JVM generics
 - [ ] Irregular/nested datatype recursion
 - [ ] Optimize case + prim-branch
-- [ ] Mark methods as final

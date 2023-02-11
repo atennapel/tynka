@@ -60,7 +60,14 @@ object JvmGenerator:
         debug(s"getCommonSuperClass $type1 $type2 $prefix $ret")
         ret
     }
-    cw.visit(V1_8, ACC_PUBLIC, moduleGName, null, "java/lang/Object", null)
+    cw.visit(
+      V1_8,
+      ACC_PUBLIC + ACC_FINAL,
+      moduleGName,
+      null,
+      "java/lang/Object",
+      null
+    )
 
     implicit val ctx: Ctx = Ctx(moduleGName, Type.getType(s"L$moduleGName;"))
 
@@ -164,7 +171,8 @@ object JvmGenerator:
       )
       implicit val mg: GeneratorAdapter =
         new GeneratorAdapter(
-          (if g then ACC_PRIVATE + ACC_SYNTHETIC else ACC_PUBLIC) + ACC_STATIC,
+          ACC_FINAL + ACC_STATIC + (if g then ACC_PRIVATE + ACC_SYNTHETIC
+                                    else ACC_PUBLIC),
           m,
           null,
           null,
@@ -544,20 +552,24 @@ object JvmGenerator:
 
       case Foreign(_, "cast", List((v, _)))       => gen(v)
       case Foreign(_, "returnVoid", List((v, _))) => gen(v); mg.pop()
-      case Foreign(_, "catch", List((p, _), (c, _))) =>
+      case Foreign(_, op, List((p, _), (c, _))) if op.startsWith("catch") =>
+        val exc = op match
+          case "catch"                     => null
+          case s if s.startsWith("catch:") => s.drop(6)
+          case _                           => impossible()
         val lStart = mg.newLabel()
-        val lEnd = mg.newLabel()
-        val lEnd2 = mg.newLabel()
+        val lStop = mg.newLabel()
         val lHandler = mg.newLabel()
+        val lEnd = mg.newLabel()
+        mg.visitTryCatchBlock(lStart, lStop, lHandler, exc)
         mg.visitLabel(lStart)
         gen(p)
-        mg.visitJumpInsn(GOTO, lEnd2)
-        mg.visitLabel(lEnd)
+        mg.visitLabel(lStop)
+        mg.visitJumpInsn(GOTO, lEnd)
         mg.visitLabel(lHandler)
         mg.pop()
         gen(c)
-        mg.visitLabel(lEnd2)
-        mg.visitTryCatchBlock(lStart, lEnd, lHandler, null)
+        mg.visitLabel(lEnd)
       case Foreign(_, op, as) if op.startsWith("op:") =>
         op.drop(3).toIntOption match
           case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
