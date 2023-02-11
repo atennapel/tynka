@@ -83,7 +83,8 @@ object Zonking:
     case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
 
-    case Foreign(rt, cmd, as) => Foreign(zonk(rt), zonk(cmd), as.map(zonk))
+    case Foreign(rt, cmd, as) =>
+      Foreign(zonk(rt), zonk(cmd), as.map((a, t) => (zonk(a), zonk(t))))
 
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))
 

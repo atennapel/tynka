@@ -28,6 +28,10 @@ TODO:
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
 - [x] Value level strings
+- [ ] Optimize `let _ = invokeVirtualVoid`
+- [ ] JVM slot reuse
+- [ ] IO should generate 0-arity method
+- [ ] Optimize unit parameters
 - [ ] Cannot access operators in modules
 - [ ] Public/private definitions
 - [ ] Do not export imported definitions
@@ -37,10 +41,9 @@ TODO:
 - [ ] Improve inference for if condition
 - [ ] Value level syntax for unit
 - [ ] Arrays
+- [ ] Dependency ordering of surface definitions
 - [ ] Keep generics signature in JVM bytecode output
 - [ ] Records
-- [ ] Irregular/nested datatype recursion
-- [ ] Closures, thunks, JVM generics
 - [ ] Coercion over constructors
-- [ ] Dependency ordering of surface definitions
-- [ ] Optimize unit parameters
+- [ ] Closures, thunks, JVM generics
+- [ ] Irregular/nested datatype recursion

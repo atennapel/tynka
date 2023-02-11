@@ -48,7 +48,7 @@ object Staging:
     case VStringLit0(str: String)
     case VCon0(ty: Val1, ix: Int, as: List[Val0])
     case VCase0(ty: Val1, rty: Val1, scrut: Val0, cs: List[Val0])
-    case VForeign0(ty: Val1, cmd: String, as: List[Val0])
+    case VForeign0(ty: Val1, cmd: String, as: List[(Val0, Val1)])
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -202,7 +202,7 @@ object Staging:
       val l = eval1(cmd) match
         case VStringLit1(v) => v
         case _              => impossible()
-      VForeign0(eval1(rt), l, as.map(eval0))
+      VForeign0(eval1(rt), l, as.map((a, t) => (eval0(a), eval1(t))))
     case _ => impossible()
 
   // intermediate rep
@@ -244,7 +244,7 @@ object Staging:
     case Box(t: IR.Ty, v: R)
     case Unbox(t: IR.Ty, v: R)
 
-    case Foreign(rt: IR.Ty, cmd: String, as: List[R])
+    case Foreign(rt: IR.Ty, cmd: String, as: List[(R, IR.Ty)])
 
     override def toString: String = this match
       case Var(x, _)       => s"'$x"
@@ -274,11 +274,12 @@ object Staging:
       case Unbox(_, v) => s"(unbox $v)"
 
       case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
-      case Foreign(rt, l, as)  => s"(foreign $rt $l ${as.mkString(" ")})"
+      case Foreign(rt, l, as) =>
+        s"(foreign $rt $l ${as.map(_._1).mkString(" ")})"
 
     def lams(ps: List[(IR.LName, IR.Ty)], rt: IR.TDef): R =
       ps.foldRight[(R, IR.TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
-        (R.Lam(x, t, rt, b), IR.TDef(t :: rt.ps, rt.rt))
+        (R.Lam(x, t, rt, b), IR.TDef(t, rt))
       }._1
 
     def flattenLams: (List[(IR.LName, IR.Ty)], Option[IR.Ty], R) =
@@ -322,7 +323,7 @@ object Staging:
       case Box(_, v)   => v.fvs
       case Unbox(_, v) => v.fvs
 
-      case Foreign(_, _, as) => as.flatMap(_.fvs)
+      case Foreign(_, _, as) => as.flatMap(_._1.fvs)
 
     def subst(sub: Map[IR.LName, R]): R =
       subst(
@@ -399,7 +400,8 @@ object Staging:
         case Box(t, v)   => Box(t, v.subst(sub, scope))
         case Unbox(t, v) => Unbox(t, v.subst(sub, scope))
 
-        case Foreign(rt, l, as) => Foreign(rt, l, as.map(_.subst(sub, scope)))
+        case Foreign(rt, l, as) =>
+          Foreign(rt, l, as.map((a, t) => (a.subst(sub, scope), t)))
 
   // quotation
   private type DataMap =
@@ -618,7 +620,11 @@ object Staging:
         )
 
       case VForeign0(ty, cmd, as) =>
-        R.Foreign(quoteVTy(ty), cmd, as.map(quoteRep))
+        R.Foreign(
+          quoteVTy(ty),
+          cmd,
+          as.map((a, t) => (quoteRep(a), quoteVTy(t)))
+        )
 
       case _ => impossible()
 
@@ -660,48 +666,48 @@ object Staging:
 
         case R.Lam(x, t1, t2, b) => R.Lam(x, t1, t2, go(b))
 
-        // let y : t2 = (let x : t1 = v; b1); b2 ~> let x : t1 = v; let y : t2 = b1; b2
-        case R.Let(y, ni1, t2, bt2, R.Let(x, ni2, t1, bt1, v, b1), b2) =>
-          go(R.Let(x, ni2, t1, bt2, v, R.Let(y, ni1, t2, bt2, b1, b2)))
         case R.Let(x, ni, t, bt, v0, b0) =>
-          val v = go(v0)
-          val b = go(b0)
-          val c = b.fvs.count((y, _) => x == y)
-          if !ni && c == 0 then go(b)
-          else if !ni && c == 1 || isSmall(v) then go(b.subst(Map(x -> v)))
-          else if t.ps.isEmpty then
-            val (vs2, spine2) = eta(bt.ps)
-            R.Let(
-              x,
-              ni,
-              t,
-              bt,
-              go(v),
-              go(b.apps(spine2))
-            ).lams(vs2, IR.TDef(bt.rt))
-          else
-            val (vs, spine) = eta(t.ps)
-            val fv = v.fvs
-              .map((x, t) => (x, t.ty))
-              .distinctBy((y, _) => y)
-            val nps = fv ++ vs
-            val args = nps.zipWithIndex.map { case ((x, _), ix) =>
-              x -> ix
-            }.toMap
-            val (m, gx, addDef) = emit()
-            addDef(
-              RD.Def(
-                gx,
-                true,
-                IR.TDef(fv.map(_._2), t),
-                go(v.apps(spine).lams(nps, IR.TDef(t.rt)))
-              )
-            )
-            val gl = R
-              .Global(m, gx, IR.TDef(nps.map(_._2), t.rt))
-              .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
-            val (vs2, spine2) = eta(bt.ps)
-            go(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, IR.TDef(bt.rt)))
+          go(v0) match
+            case R.Let(y, ni2, t2, bt2, v2, b2) =>
+              go(R.Let(y, ni2, t2, bt, v2, R.Let(x, ni, t, bt, b2, b0)))
+            case v =>
+              val b = go(b0)
+              val c = b.fvs.count((y, _) => x == y)
+              if !ni && c == 0 then go(b)
+              else if !ni && c == 1 || isSmall(v) then go(b.subst(Map(x -> v)))
+              else if t.ps.isEmpty then
+                val (vs2, spine2) = eta(bt.params)
+                R.Let(
+                  x,
+                  ni,
+                  t,
+                  bt,
+                  go(v),
+                  go(b.apps(spine2))
+                ).lams(vs2, IR.TDef(bt.rt))
+              else
+                val (vs, spine) = eta(t.params)
+                val fv = v.fvs
+                  .map((x, t) => (x, t.ty))
+                  .distinctBy((y, _) => y)
+                val nps = fv ++ vs
+                val args = nps.zipWithIndex.map { case ((x, _), ix) =>
+                  x -> ix
+                }.toMap
+                val (m, gx, addDef) = emit()
+                addDef(
+                  RD.Def(
+                    gx,
+                    true,
+                    IR.TDef(fv.map(_._2), t),
+                    go(v.apps(spine).lams(nps, IR.TDef(t.rt)))
+                  )
+                )
+                val gl = R
+                  .Global(m, gx, IR.TDef(nps.map(_._2), t.rt))
+                  .apps(fv.map((x, t) => R.Var(x, IR.TDef(t))))
+                val (vs2, spine2) = eta(bt.params)
+                go(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, IR.TDef(bt.rt)))
 
         case R.Con(ty, i, as) => R.Con(ty, i, as.map(go))
         case R.Case(ty, rty, scrut, x, cs) =>
@@ -712,7 +718,7 @@ object Staging:
             case con @ R.Con(_, i, as) =>
               go(R.Let(x, false, IR.TDef(IR.TCon(ty)), rty, con, cs(i)))
             case gscrut =>
-              val (vs, spine) = eta(rty.ps)
+              val (vs, spine) = eta(rty.params)
               R
                 .Case(
                   ty,
@@ -728,7 +734,7 @@ object Staging:
             case tm              => R.Field(dty, ty, ci, i, tm)
 
         case R.Fix(t1, t2, g, x, b0, arg) =>
-          val (vs, spine) = eta(t2.ps)
+          val (vs, spine) = eta(t2.params)
           val fv = b0.fvs
             .filterNot((y, _) => y == g || y == x)
             .map((x, t) => (x, t.ty))
@@ -757,7 +763,7 @@ object Staging:
             case v           => R.Unbox(t, v)
 
         case R.Foreign(rt, l, as) =>
-          (l, as.map(go)) match
+          (l, as.map((a, _) => go(a))) match
             // +
             case ("op:96", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a + b)
             case ("op:96", List(a, R.IntLit(0)))           => a
@@ -765,7 +771,7 @@ object Staging:
             // -
             case ("op:100", List(R.IntLit(a), R.IntLit(b))) => R.IntLit(a - b)
             case ("op:100", List(R.IntLit(0), b)) =>
-              go(R.Foreign(rt, "op:116", List(b)))
+              go(R.Foreign(rt, "op:116", List((b, as(1)._2))))
             case ("op:100", List(a, R.IntLit(0))) => go(a)
             // *
             case ("op:104", List(_, R.IntLit(0)))           => R.IntLit(0)
@@ -816,148 +822,76 @@ object Staging:
                 ) =>
               R.StringLit(a + b)
 
-            case (l, as) => R.Foreign(rt, l, as)
+            case (l, gas) => R.Foreign(rt, l, gas.zip(as.map(_._2)))
 
         case tm => tm
     go(tm)
 
   // to IR
   private type IRNS = Map[IR.LName, IR.LName]
-  private type Lets = List[(IR.LName, IR.Ty, IR.Comp)]
-
-  private def c2v(
-      tm: R
-  )(implicit
+  private def toIR(tm: R, tail: Boolean)(implicit
       ns: IRNS,
       defname: IR.GName,
       fresh: Fresh
-  ): (IR.Value, IR.Ty, Lets) =
-    val (c, t, ds) = toIRComp(tm, false)
-    c match
-      case IR.Val(qv) => (qv, t, ds)
-      case _ =>
-        val x = fresh()
-        (IR.Var(x), t, ds ++ List((x, t, c)))
+  ): IR.Expr = tm match
+    case R.Var(x, t)       => IR.Var(ns(x))
+    case R.Global(m, x, t) => IR.Global(m, x, t.ty)
 
-  private def toIRValue(
-      tm: R
-  )(implicit
-      ns: IRNS,
-      defname: IR.GName,
-      fresh: Fresh
-  ): (IR.Value, IR.Ty, Lets) =
-    tm match
-      case R.Var(x, t) =>
-        val ty = t.ty
-        val y = ns(x)
-        (IR.Var(y), ty, Nil)
-      case R.Global(m, x, t) =>
-        val ty = t.ty
-        (IR.Global(m, x, ty), ty, Nil)
+    case R.UnitLit      => IR.UnitLit
+    case R.IntLit(n)    => IR.IntLit(n)
+    case R.BoolLit(b)   => IR.BoolLit(b)
+    case R.StringLit(s) => IR.StringLit(s)
 
-      case R.UnitLit    => (IR.UnitLit, IR.TUnit, Nil)
-      case R.IntLit(v)  => (IR.IntLit(v), IR.TInt, Nil)
-      case R.BoolLit(v) => (IR.BoolLit(v), IR.TBool, Nil)
-      case R.StringLit(v) =>
-        (IR.StringLit(v), IR.TForeign("Ljava/lang/String;"), Nil)
-
-      case R.Con(ty, i, as) =>
-        val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
-          case ((as, ds), a) =>
-            val (qa, ta, nds) = toIRValue(a)
-            (as ++ List(qa), ds ++ nds)
-        }
-        (IR.Con(ty, i, qas), IR.TCon(ty), ds)
-
-      case R.Box(ty, v) =>
-        val (qv, tv, ds) = toIRValue(v)
-        (IR.Box(ty, qv), IR.TBox, ds)
-
-      case _ => c2v(tm)
-
-  private def v2c(
-      tm: R
-  )(implicit
-      ns: IRNS,
-      defname: IR.GName,
-      fresh: Fresh
-  ): (IR.Comp, IR.Ty, Lets) =
-    val (v, t, ds) = toIRValue(tm)
-    (IR.Val(v), t, ds)
-
-  private def toIRComp(
-      tm: R,
-      tail: Boolean
-  )(implicit
-      ns: IRNS,
-      defname: IR.GName,
-      fresh: Fresh
-  ): (IR.Comp, IR.Ty, Lets) = tm match
-    case R.Var(_, _)       => v2c(tm)
-    case R.Global(_, _, _) => v2c(tm)
-    case R.IntLit(_)       => v2c(tm)
-    case R.BoolLit(_)      => v2c(tm)
-    case R.UnitLit         => v2c(tm)
-    case R.StringLit(_)    => v2c(tm)
-    case R.Con(_, _, _)    => v2c(tm)
-    case R.Box(_, _)       => v2c(tm)
-
-    case R.App(_, _) =>
+    case R.App(f, a) =>
       val (f, as) = tm.flattenApps
       f match
         case R.Global(m, x, t) =>
-          val (qas, ds) = as.foldLeft[(List[IR.Value], Lets)]((Nil, Nil)) {
-            case ((as, ds), a) =>
-              val (qa, ta, nds) = toIRValue(a)
-              (as ++ List(qa), ds ++ nds)
-          }
-          (IR.GlobalApp(m, x, t, tail && x == defname, qas), t.rt, ds)
+          IR.GlobalApp(
+            m,
+            x,
+            t,
+            tail && x == defname,
+            as.map(a => toIR(a, false))
+          )
         case _ => impossible()
-
-    case R.Let(x, _, t, bt, v, b) =>
-      val (qv, tv, ds1) = toIRComp(v, false)
+    case R.PrimApp(p, as)  => IR.PrimApp(p, as.map(a => toIR(a, false)))
+    case R.Lam(x, _, _, b) => impossible()
+    case R.Let(x, _, t, _, v, b) =>
       val y = fresh()
-      val (qb, tb, ds2) = toIRComp(b, tail)(ns + (x -> y), defname, fresh)
-      (qb, tb, ds1 ++ List((y, tv, qv)) ++ ds2)
+      IR.Let(
+        y,
+        b.fvs.exists((z, _) => x == z),
+        t.ty,
+        toIR(v, false),
+        toIR(b, tail)(ns + (x -> y), defname, fresh)
+      )
 
+    case R.Con(ty, i, as) => IR.Con(ty, i, as.map(a => toIR(a, false)))
     case R.Case(ty, rty, s, x, cs) =>
-      val (qs, ts, ds) = toIRValue(s)
       val y = fresh()
       val newns = ns + (x -> y)
-      val qcs = cs.map(b => toIRLet(b, tail)(newns, defname, fresh))
-      (IR.Case(ty, qs, y, qcs), rty.ty, ds)
-    case R.Field(dt, t, ci, i, v) =>
-      val (qv, tv, ds) = toIRValue(v)
-      (IR.Field(dt, t, ci, i, qv), t, ds)
+      IR.Case(
+        ty,
+        toIR(s, false),
+        y,
+        cs.map(c => toIR(c, tail)(newns, defname, fresh))
+      )
+    case R.Field(dt, t, ci, i, v) => IR.Field(dt, t, ci, i, toIR(v, false))
 
-    case R.Unbox(ty, v) =>
-      val (qv, tv, ds) = toIRValue(v)
-      (IR.Unbox(ty, qv), ty, ds)
+    case R.Fix(_, _, go, x, b, arg) => ???
 
-    case R.Foreign(rt, l, as0) =>
-      val (as, ds) = as0.foldLeft[(List[(IR.Value, IR.Ty)], Lets)]((Nil, Nil)) {
-        case ((as, ds), v) =>
-          val (qv, tv, ds1) = toIRValue(v)
-          (as ++ List((qv, tv)), ds ++ ds1)
-      }
-      (IR.Foreign(rt, l, as), rt, ds)
+    case R.Box(t, v)   => IR.Box(t, toIR(v, false))
+    case R.Unbox(t, v) => IR.Unbox(t, toIR(v, false))
 
-    case _ => impossible()
-
-  private def toIRLet(tm: R, tail: Boolean)(implicit
-      ns: IRNS,
-      defname: IR.GName,
-      fresh: Fresh
-  ): IR.Let =
-    val (b, _, ds) = toIRComp(tm, tail)
-    IR.Let(ds, b)
+    case R.Foreign(rt, l, as) =>
+      IR.Foreign(rt, l, as.map((a, t) => (toIR(a, false), t)))
 
   private def toIRDef(d: RD)(implicit fresh: Fresh): IR.Def = d match
     case RD.Def(x, gen, t, v0) =>
       val (ps, _, v) = v0.flattenLams
       implicit val irns: IRNS = ps.map((x, _) => (x, fresh())).toMap
       implicit val defname: IR.GName = x
-      IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIRLet(v, true))
+      IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIR(v, true))
 
   // staging
   private def stageFTy(t: Ty)(implicit dm: DataMap): IR.TDef =
@@ -968,7 +902,7 @@ object Staging:
       emit: Emit,
       dm: DataMap
   ): R =
-    val (ps, spine) = eta(ty.ps)
+    val (ps, spine) = eta(ty.params)
     val quoted = quoteRep(eval0(tm)(Empty))(lvl0, Nil, fresh, dm)
       .apps(spine)
       .lams(ps, IR.TDef(ty.rt))

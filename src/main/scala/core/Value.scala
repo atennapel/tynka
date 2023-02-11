@@ -71,7 +71,7 @@ object Value:
     case VLift(vf: VTy, tm: VTy)
     case VQuote(tm: Val)
 
-    case VForeign(rt: VTy, l: Val, args: List[Val])
+    case VForeign(rt: VTy, l: Val, args: List[(Val, VTy)])
 
     case VIrrelevant
   export Val.*

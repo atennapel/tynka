@@ -162,7 +162,8 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
-    case Foreign(rt, cmd, as) => VForeign(eval(rt), eval(cmd), as.map(eval))
+    case Foreign(rt, cmd, as) =>
+      VForeign(eval(rt), eval(cmd), as.map((a, t) => (eval(a), eval(t))))
 
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
@@ -255,7 +256,7 @@ object Evaluation:
         Foreign(
           quote(rt, unfold),
           quote(cmd, unfold),
-          as.map(a => quote(a, unfold))
+          as.map((a, t) => (quote(a, unfold), quote(t, unfold)))
         )
 
       case VIrrelevant => Irrelevant

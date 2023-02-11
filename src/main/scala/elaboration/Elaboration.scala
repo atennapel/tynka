@@ -926,7 +926,7 @@ object Elaboration:
       case S.Foreign(rt, l, as) =>
         val ert = checkVTy(rt)
         val el = check(l, VLabel(), SMeta)
-        val eas = as.map(a => infer(a, SVTy())._1)
+        val eas = as.map(a => infer(a, SVTy())).map((a, t) => (a, ctx.quote(t)))
         (Foreign(ert, el, eas), ctx.eval(ert), SVTy())
 
   // elaboration

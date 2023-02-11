@@ -59,7 +59,7 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
-    case Foreign(rt: Ty, cmd: Tm, args: List[Tm])
+    case Foreign(rt: Ty, cmd: Tm, args: List[(Tm, Ty)])
 
     case Wk(tm: Tm)
 
@@ -122,7 +122,8 @@ object Syntax:
       case Splice(t)  => s"$$$t"
 
       case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
-      case Foreign(rt, cmd, as)  => s"(foreign $rt $cmd ${as.mkString(" ")})"
+      case Foreign(rt, cmd, as) =>
+        s"(foreign $rt $cmd ${as.map(_._1).mkString(" ")})"
 
       case Wk(t)      => s"(Wk $t)"
       case Irrelevant => "Ir"

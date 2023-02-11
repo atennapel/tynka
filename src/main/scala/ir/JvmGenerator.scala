@@ -110,10 +110,9 @@ object JvmGenerator:
     case TBox           => OBJECT_TYPE
     case TForeign(desc) => Type.getType(desc)
 
-  private def constantValue(e: Let): Option[Any] = e match
-    case Let(Nil, Val(v)) => constantValue(v)
-    case _                => None
-  private def constantValue(e: Value): Option[Any] = e match
+  private def constantValue(e: Expr): Option[Any] = e match
+    case UnitLit            => Some(false)
+    case StringLit(s)       => Some(s)
     case BoolLit(b)         => Some(b)
     case IntLit(n)          => Some(n)
     case Con(_, _, List(v)) => constantValue(v)
@@ -126,7 +125,7 @@ object JvmGenerator:
       ds0: Defs
   )(implicit ctx: Ctx, cw: ClassWriter): Unit =
     val ds = ds0.toList.filter {
-      case DDef(x, _, rt, Nil, b) if constantValue(b).isEmpty =>
+      case DDef(x, _, TDef(None, _), _, b) if constantValue(b).isEmpty =>
         true
       case _ => false
     }
@@ -137,31 +136,31 @@ object JvmGenerator:
       implicit val locals: Locals = IntMap.empty
       ds.foreach(d => {
         d match
-          case DDef(x, g, rt, Nil, b) =>
+          case DDef(x, g, TDef(None, rt), _, b) =>
             implicit val methodStart = mg.newLabel()
             implicit val args: Args = 0
             gen(b)
-            mg.putStatic(ctx.moduleType, x, gen(rt.rt))
+            mg.putStatic(ctx.moduleType, x, gen(rt))
           case _ =>
       })
       mg.visitInsn(RETURN)
       mg.endMethod()
 
   private def gen(d: Def)(implicit cw: ClassWriter, ctx: Ctx): Unit = d match
-    case DDef(x, g, rt, Nil, v) =>
+    case DDef(x, g, TDef(None, ty), _, v) =>
       cw.visitField(
         (if g then ACC_PRIVATE + ACC_SYNTHETIC
          else ACC_PUBLIC) + ACC_FINAL + ACC_STATIC,
         x,
-        gen(rt.rt).getDescriptor,
+        gen(ty).getDescriptor,
         null,
         constantValue(v).orNull
       )
-    case DDef(x, g, rt, ps, v) =>
+    case DDef(x, g, TDef(Some(ts), rt), ps, v) =>
       val m = new Method(
         x.toString,
-        gen(rt.rt),
-        rt.ps.map(gen).toList.toArray
+        gen(rt),
+        ts.map(gen).toList.toArray
       )
       implicit val mg: GeneratorAdapter =
         new GeneratorAdapter(
@@ -407,7 +406,7 @@ object JvmGenerator:
     bos.close()
 
   private def gen(
-      t: Let
+      t: Expr
   )(implicit
       mg: GeneratorAdapter,
       ctx: Ctx,
@@ -416,37 +415,24 @@ object JvmGenerator:
       methodStart: Label
   ): Unit =
     t match
-      case Let(ps, b) =>
-        val newlocals = ps.foldLeft(locals) { case (locals, (x, ty, v)) =>
-          val vr = mg.newLocal(gen(ty))
-          gen(v)(mg, ctx, args, locals, methodStart)
-          mg.storeLocal(vr)
-          locals + (x -> vr)
-        }
-        gen(b)(mg, ctx, args, newlocals, methodStart)
+      case Let(x, false, t, v, b) => gen(v); mg.pop(); gen(b)
+      case Let(x, _, t, v, b) =>
+        val vr = mg.newLocal(gen(t))
+        gen(v)
+        mg.storeLocal(vr)
+        gen(b)(mg, ctx, args, locals + (x -> vr), methodStart)
 
-  private def gen(
-      comp: Comp
-  )(implicit
-      mg: GeneratorAdapter,
-      ctx: Ctx,
-      args: Args,
-      locals: Locals,
-      methodStart: Label
-  ): Unit =
-    comp match
-      case Val(v) => gen(v)
-
-      case GlobalApp(_, x, TDef(ps, rt), true, as) if x == mg.getName =>
+      case GlobalApp(_, x, TDef(Some(ps), rt), true, as) if x == mg.getName =>
         as.foreach(gen)
         Range.inclusive(args - 1, 0, -1).foreach(i => mg.storeArg(i))
         mg.visitJumpInsn(GOTO, methodStart)
-      case GlobalApp(_, x, TDef(ps, rt), _, as) =>
+      case GlobalApp(_, x, TDef(Some(ps), rt), _, as) =>
         as.foreach(gen)
         mg.invokeStatic(
           ctx.moduleType,
           new Method(x, gen(rt), ps.map(gen).toArray)
         )
+      case GlobalApp(_, _, _, _, _) => impossible()
 
       case Unbox(t, v) => gen(v); mg.unbox(gen(t))
 
@@ -551,7 +537,7 @@ object JvmGenerator:
             mg.visitLabel(lEnd)
 
       case Foreign(_, "cast", List((v, _)))       => gen(v)
-      case Foreign(_, "returnVoid", List((v, _))) =>
+      case Foreign(_, "returnVoid", List((v, _))) => gen(v)
       case Foreign(_, op, as) if op.startsWith("op:") =>
         op.drop(3).toIntOption match
           case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
@@ -613,16 +599,6 @@ object JvmGenerator:
             mg.push(false)
           case _ => impossible()
 
-  private def gen(
-      t: Value
-  )(implicit
-      mg: GeneratorAdapter,
-      ctx: Ctx,
-      args: Args,
-      locals: Locals,
-      methodStart: Label
-  ): Unit =
-    t match
       case Var(x) if x < args => mg.loadArg(x)
       case Var(x)             => mg.loadLocal(locals(x))
 
