@@ -415,6 +415,8 @@ object JvmGenerator:
       methodStart: Label
   ): Unit =
     t match
+      case Let(x, false, t, InvokeVirtualVoid(arg, as), b) =>
+        invokeVirtualVoid(arg, as); gen(b)
       case Let(x, false, t, v, b) => gen(v); mg.pop(); gen(b)
       case Let(x, _, t, v, b) =>
         val vr = mg.newLocal(gen(t))
@@ -460,7 +462,11 @@ object JvmGenerator:
             mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
             mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
             mg.throwException()
-          case UnitLike => gen(scrut); mg.pop(); gen(cs(0))
+          case UnitLike =>
+            scrut match
+              case InvokeVirtualVoid(arg, as) =>
+                invokeVirtualVoid(arg, as); gen(cs(0))
+              case _ => gen(scrut); mg.pop(); gen(cs(0))
           case BoolLike =>
             val lFalse = new Label
             val lEnd = new Label
@@ -537,7 +543,7 @@ object JvmGenerator:
             mg.visitLabel(lEnd)
 
       case Foreign(_, "cast", List((v, _)))       => gen(v)
-      case Foreign(_, "returnVoid", List((v, _))) => gen(v)
+      case Foreign(_, "returnVoid", List((v, _))) => gen(v); mg.pop()
       case Foreign(_, op, as) if op.startsWith("op:") =>
         op.drop(3).toIntOption match
           case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
@@ -565,9 +571,7 @@ object JvmGenerator:
           Method("<init>", Type.VOID_TYPE, as.map((_, t) => gen(t)).toArray)
         )
       case Foreign(rt, cmd0, as) =>
-        val s = cmd0.split("\\:")
-        val cmd = s.head
-        val arg = s.tail.mkString(":")
+        val (cmd, arg) = splitForeign(cmd0)
         (cmd, arg, as) match
           case ("getStatic", arg, Nil) =>
             val ss = arg.split("\\.")
@@ -584,19 +588,7 @@ object JvmGenerator:
               Method(member, gen(rt), as.tail.map((_, t) => gen(t)).toArray)
             )
           case ("invokeVirtualVoid", arg, as) =>
-            val ss = arg.split("\\.")
-            val owner = s"L${ss.init.mkString("/")};"
-            val member = ss.last
-            as.foreach((v, _) => gen(v))
-            mg.invokeVirtual(
-              Type.getType(owner),
-              Method(
-                member,
-                Type.VOID_TYPE,
-                as.tail.map((_, t) => gen(t)).toArray
-              )
-            )
-            mg.push(false)
+            invokeVirtualVoid(arg, as); mg.push(false)
           case _ => impossible()
 
       case Var(x) if x < args => mg.loadArg(x)
@@ -652,3 +644,36 @@ object JvmGenerator:
                 cons(ty)(i)._2.map(gen).toArray
               )
             )
+
+  private def splitForeign(cmd0: String): (String, String) =
+    val s = cmd0.split("\\:")
+    val cmd = s.head
+    val arg = s.tail.mkString(":")
+    (cmd, arg)
+  private def invokeVirtualVoid(arg: String, as: List[(Expr, Ty)])(implicit
+      mg: GeneratorAdapter,
+      ctx: Ctx,
+      args: Args,
+      locals: Locals,
+      methodStart: Label
+  ): Unit =
+    val ss = arg.split("\\.")
+    val owner = s"L${ss.init.mkString("/")};"
+    val member = ss.last
+    as.foreach((v, _) => gen(v))
+    mg.invokeVirtual(
+      Type.getType(owner),
+      Method(
+        member,
+        Type.VOID_TYPE,
+        as.tail.map((_, t) => gen(t)).toArray
+      )
+    )
+
+  private object InvokeVirtualVoid:
+    def unapply(t: Expr): Option[(String, List[(Expr, Ty)])] = t match
+      case Foreign(_, cmd0, as) =>
+        val (cmd, arg) = splitForeign(cmd0)
+        if cmd == "invokeVirtualVoid" then Some((arg, as))
+        else None
+      case _ => None

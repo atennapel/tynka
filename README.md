@@ -28,8 +28,8 @@ TODO:
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
 - [x] Value level strings
-- [ ] Optimize `let _ = invokeVirtualVoid`
 - [ ] JVM slot reuse
+- [ ] Inline tail recursive functions
 - [ ] IO should generate 0-arity method
 - [ ] Optimize unit parameters
 - [ ] Cannot access operators in modules
