@@ -41,8 +41,12 @@ def putLn {A : VTy} (x : A) : IO Unit =
   let u = foreign Unit "invokeVirtualVoid:java.io.PrintStream.println" out x;
   returnIO u
 
-def getLn (_ : Unit) : IO Str =
+def getLn : IO Str =
   let in = foreign (Foreign "Ljava/io/InputStream;") "getStatic:java.lang.System.in";
   let scanner = foreign (Foreign "Ljava/util/Scanner;") "instantiate" in;
   let input = foreign Str "invokeVirtual:java.util.Scanner.nextLine" scanner;
   returnIO input
+
+def parseInt (s : Str) : IO Int =
+  let n = foreign Int "invokeStatic:java.lang.Integer.parseInt" s;
+  returnIO n

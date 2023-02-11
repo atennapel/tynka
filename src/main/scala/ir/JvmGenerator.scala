@@ -544,6 +544,20 @@ object JvmGenerator:
 
       case Foreign(_, "cast", List((v, _)))       => gen(v)
       case Foreign(_, "returnVoid", List((v, _))) => gen(v); mg.pop()
+      case Foreign(_, "catch", List((p, _), (c, _))) =>
+        val lStart = mg.newLabel()
+        val lEnd = mg.newLabel()
+        val lEnd2 = mg.newLabel()
+        val lHandler = mg.newLabel()
+        mg.visitLabel(lStart)
+        gen(p)
+        mg.visitJumpInsn(GOTO, lEnd2)
+        mg.visitLabel(lEnd)
+        mg.visitLabel(lHandler)
+        mg.pop()
+        gen(c)
+        mg.visitLabel(lEnd2)
+        mg.visitTryCatchBlock(lStart, lEnd, lHandler, null)
       case Foreign(_, op, as) if op.startsWith("op:") =>
         op.drop(3).toIntOption match
           case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
@@ -589,6 +603,15 @@ object JvmGenerator:
             )
           case ("invokeVirtualVoid", arg, as) =>
             invokeVirtualVoid(arg, as); mg.push(false)
+          case ("invokeStatic", arg, as) =>
+            val ss = arg.split("\\.")
+            val owner = s"L${ss.init.mkString("/")};"
+            val member = ss.last
+            as.foreach((v, _) => gen(v))
+            mg.invokeStatic(
+              Type.getType(owner),
+              Method(member, gen(rt), as.map((_, t) => gen(t)).toArray)
+            )
           case _ => impossible()
 
       case Var(x) if x < args => mg.loadArg(x)

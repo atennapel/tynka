@@ -259,7 +259,7 @@ object Staging:
       case PrimApp(p, Nil)       => s"$p"
       case PrimApp(p, as)        => s"($p ${as.mkString(" ")})"
       case Lam(x, t, _, b)       => s"(\\($x : $t). $b)"
-      case Let(x, t, _, _, v, b) => s"(let $x : $t = $v; $b)"
+      case Let(x, _, t, _, v, b) => s"(let $x : $t = $v; $b)"
 
       case Con(ty, i, Nil)        => s"(con $ty #$i)"
       case Con(ty, i, as)         => s"(con $ty #$i ${as.mkString(" ")})"
@@ -601,7 +601,7 @@ object Staging:
         val qc = quoteRep(vsplice0(c))
         val qk = quoteRep(vsplice0(vapp1(k, VQuote1(VVar0(l)))))(
           l + 1,
-          (x, IR.TDef(ta)) :: ns,
+          (y, IR.TDef(ta)) :: ns,
           fresh,
           dm
         )

@@ -47,3 +47,5 @@ TODO:
 - [ ] Coercion over constructors
 - [ ] Closures, thunks, JVM generics
 - [ ] Irregular/nested datatype recursion
+- [ ] Optimize case + prim-branch
+- [ ] Mark methods as final
