@@ -209,10 +209,16 @@ object Staging:
   private type RDs = List[RD]
 
   private enum RD:
-    case Def(name: IR.GName, gen: Boolean, ty: IR.TDef, value: R)
+    case Def(
+        module: IR.GName,
+        name: IR.GName,
+        gen: Boolean,
+        ty: IR.TDef,
+        value: R
+    )
 
     override def toString: String = this match
-      case Def(x, _, t, v) => s"def $x : $t = $v"
+      case Def(m, x, _, t, v) => s"def $m:$x : $t = $v"
 
   private enum R:
     case Var(name: IR.LName, ty: IR.TDef)
@@ -582,12 +588,11 @@ object Staging:
         R.Unbox(quoteVTy(t), quoteRep(vsplice0(v)))
 
       case VSplicePrim0(PReturnIO, List(t, v)) =>
-        val x = fresh()
         R.Lam(
-          x,
+          fresh(),
           IR.TUnit,
           IR.TDef(quoteVTy(t)),
-          quoteRep(vsplice0(v))(l + 1, (x, IR.TDef(IR.TUnit)) :: ns, fresh, dm)
+          quoteRep(vsplice0(v))
         )
       case VSplicePrim0(PRunIO, List(t, v)) =>
         val ta = quoteVTy(t)
@@ -697,6 +702,7 @@ object Staging:
                 val (m, gx, addDef) = emit()
                 addDef(
                   RD.Def(
+                    m,
                     gx,
                     true,
                     IR.TDef(fv.map(_._2), t),
@@ -750,7 +756,7 @@ object Staging:
           val b = go(
             b0.apps(spine).lams(nps, IR.TDef(t2.rt)).subst(Map(g -> gl))
           )
-          addDef(RD.Def(gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
+          addDef(RD.Def(m, gx, true, IR.TDef(fv.map(_._2) ++ List(t1), t2), b))
           R.App(gl, go(arg))
 
         case R.Box(t, v) =>
@@ -887,11 +893,11 @@ object Staging:
       IR.Foreign(rt, l, as.map((a, t) => (toIR(a, false), t)))
 
   private def toIRDef(d: RD)(implicit fresh: Fresh): IR.Def = d match
-    case RD.Def(x, gen, t, v0) =>
+    case RD.Def(m, x, gen, t, v0) =>
       val (ps, _, v) = v0.flattenLams
       implicit val irns: IRNS = ps.map((x, _) => (x, fresh())).toMap
       implicit val defname: IR.GName = x
-      IR.DDef(x, gen, t, ps.map((x, t) => (irns(x), t)), toIR(v, true))
+      IR.DDef(m, x, gen, t, ps.map((x, t) => (irns(x), t)), toIR(v, true))
 
   // staging
   private def stageFTy(t: Ty)(implicit dm: DataMap): IR.TDef =
@@ -920,7 +926,7 @@ object Staging:
   private def stageDef(module: String, d: Def)(implicit
       dm: DataMap
   ): List[IR.Def] = d match
-    case DDef(x, t, st @ STy(_), v) =>
+    case DDef(m, x, t, st @ STy(_), v) =>
       implicit val fresh: Fresh = newFresh()
       var n2 = 0
       val nds = ArrayBuffer.empty[RD]
@@ -931,7 +937,7 @@ object Staging:
       }
       val ty = stageFTy(t)
       val value = stageRep(ty, v)
-      val rd = RD.Def(x.expose, false, ty, value)
+      val rd = RD.Def(m, x.expose, false, ty, value)
       (nds.toList ++ List(rd)).map(d => toIRDef(d)(newFresh()))
     case _ => Nil
 

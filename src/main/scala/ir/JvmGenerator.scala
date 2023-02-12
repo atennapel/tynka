@@ -47,6 +47,10 @@ object JvmGenerator:
   private val cons: mutable.Map[GName, mutable.Map[Int, (Type, List[Ty])]] =
     mutable.Map.empty
 
+  private def name(m: GName, x: GName)(implicit ctx: Ctx): GName =
+    if ctx.moduleName == m then s"${escape(x)}"
+    else s"${escape(m)}$$${escape(x)}"
+
   def generate(moduleGName: String, ds: Defs): Unit =
     implicit val cw: ClassWriter = new ClassWriter(
       ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES
@@ -132,7 +136,7 @@ object JvmGenerator:
       ds0: Defs
   )(implicit ctx: Ctx, cw: ClassWriter): Unit =
     val ds = ds0.toList.filter {
-      case DDef(x, _, TDef(None, _), _, b) if constantValue(b).isEmpty =>
+      case DDef(m, x, _, TDef(None, _), _, b) if constantValue(b).isEmpty =>
         true
       case _ => false
     }
@@ -143,29 +147,29 @@ object JvmGenerator:
       implicit val locals: Locals = IntMap.empty
       ds.foreach(d => {
         d match
-          case DDef(x, g, TDef(None, rt), _, b) =>
+          case DDef(m, x, g, TDef(None, rt), _, b) =>
             implicit val methodStart = mg.newLabel()
             implicit val args: Args = 0
             gen(b)
-            mg.putStatic(ctx.moduleType, x, gen(rt))
+            mg.putStatic(ctx.moduleType, name(m, x), gen(rt))
           case _ =>
       })
       mg.visitInsn(RETURN)
       mg.endMethod()
 
   private def gen(d: Def)(implicit cw: ClassWriter, ctx: Ctx): Unit = d match
-    case DDef(x, g, TDef(None, ty), _, v) =>
+    case DDef(m, x, g, TDef(None, ty), _, v) =>
       cw.visitField(
         (if g then ACC_PRIVATE + ACC_SYNTHETIC
          else ACC_PUBLIC) + ACC_FINAL + ACC_STATIC,
-        x,
+        name(m, x),
         gen(ty).getDescriptor,
         null,
         constantValue(v).orNull
       )
-    case DDef(x, g, TDef(Some(ts), rt), ps, v) =>
+    case DDef(mx, x, g, TDef(Some(ts), rt), ps, v) =>
       val m = new Method(
-        x.toString,
+        name(mx, x),
         gen(rt),
         ts.map(gen).toList.toArray
       )
@@ -432,15 +436,18 @@ object JvmGenerator:
         mg.storeLocal(vr)
         gen(b)(mg, ctx, args, locals + (x -> vr), methodStart)
 
-      case GlobalApp(_, x, TDef(Some(ps), rt), true, as) if x == mg.getName =>
+      case Global(m, x, t) =>
+        mg.getStatic(ctx.moduleType, name(m, x), gen(t))
+      case GlobalApp(m, x, TDef(Some(ps), rt), true, as)
+          if name(m, x) == mg.getName =>
         as.foreach(gen)
         Range.inclusive(args - 1, 0, -1).foreach(i => mg.storeArg(i))
         mg.visitJumpInsn(GOTO, methodStart)
-      case GlobalApp(_, x, TDef(Some(ps), rt), _, as) =>
+      case GlobalApp(m, x, TDef(Some(ps), rt), _, as) =>
         as.foreach(gen)
         mg.invokeStatic(
           ctx.moduleType,
-          new Method(x, gen(rt), ps.map(gen).toArray)
+          new Method(name(m, x), gen(rt), ps.map(gen).toArray)
         )
       case GlobalApp(_, _, _, _, _) => impossible()
 
@@ -451,13 +458,17 @@ object JvmGenerator:
       case Field(dty, ty, ci, i, v) =>
         val (jty, kind) = tcons(dty)
         kind match
-          case VoidLike        => impossible()
-          case UnitLike        => impossible()
-          case BoolLike        => impossible()
-          case FiniteLike(n)   => impossible()
-          case NewtypeLike(t)  => gen(v)
-          case ProductLike(ts) => gen(v); mg.getField(jty, s"a$i", gen(ty))
-          case ADT             => gen(v); mg.getField(jty, s"a$i", gen(ty))
+          case VoidLike       => impossible()
+          case UnitLike       => impossible()
+          case BoolLike       => impossible()
+          case FiniteLike(n)  => impossible()
+          case NewtypeLike(t) => gen(v)
+          case ProductLike(ts) =>
+            val cty = cons(dty)(ci)._1
+            gen(v); mg.getField(cty, s"a$i", gen(ty))
+          case ADT =>
+            val cty = cons(dty)(ci)._1
+            gen(v); mg.getField(cty, s"a$i", gen(ty))
 
       case Case(ty, scrut, x, cs) =>
         val (jty, kind) = tcons(ty)
@@ -629,8 +640,6 @@ object JvmGenerator:
       case Var(x) if x < args => mg.loadArg(x)
       case Var(x)             => mg.loadLocal(locals(x))
 
-      case Global(_, x, t) => mg.getStatic(ctx.moduleType, x, gen(t))
-
       case Box(t, v) => gen(v); mg.box(gen(t))
 
       case UnitLit      => mg.push(false)
@@ -712,3 +721,42 @@ object JvmGenerator:
         if cmd == "invokeVirtualVoid" then Some((arg, as))
         else None
       case _ => None
+
+  // naming
+  private val nameCache: mutable.Map[GName, GName] = mutable.Map.empty
+  private val chars: Map[String, String] = Map(
+    "`" -> "GRAVE",
+    "~" -> "TILDE",
+    "!" -> "EXCL",
+    "@" -> "AT",
+    "#" -> "HASH",
+    "$" -> "DOLLAR",
+    "%" -> "PERCENT",
+    "^" -> "HAT",
+    "&" -> "AMPER",
+    "*" -> "STAR",
+    "-" -> "DASH",
+    "+" -> "PLUS",
+    "=" -> "EQUALS",
+    "|" -> "PIPE",
+    "\\" -> "BACK",
+    ":" -> "COLON",
+    ";" -> "SEMI",
+    "," -> "COMMA",
+    "<" -> "LT",
+    "." -> "PERIOD",
+    ">" -> "GT",
+    "?" -> "QUESTION",
+    "/" -> "SLASH"
+  )
+
+  private def escape(x: GName): GName =
+    nameCache.get(x) match
+      case Some(y) => y
+      case None =>
+        val y = x
+          .split("")
+          .map(x => chars.get(x).fold(x)(y => s"_$$$y$$_"))
+          .mkString("")
+        nameCache += (x -> y)
+        y

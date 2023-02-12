@@ -28,13 +28,12 @@ TODO:
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
 - [x] Value level strings
-- [ ] Generate module name in front of globals
-- [ ] Do not generate multiple of the same definition
 - [ ] Cannot access operators in modules
+- [ ] Syntax to re-export definitions
+- [ ] Import with renaming
 - [ ] Public/private definitions
 - [ ] Do not export imported definitions
 - [ ] Remove unused defs (starting from main)
-- [ ] Rename symbol names in JVM generator
 - [ ] JVM slot reuse
 - [ ] Inline tail recursive functions
 - [ ] IO should generate 0-arity method

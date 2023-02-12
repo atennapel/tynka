@@ -11,11 +11,11 @@ object Syntax:
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: Name, ty: Ty, stage: CStage, value: Tm)
+    case DDef(module: String, name: Name, ty: Ty, stage: CStage, value: Tm)
 
     override def toString: String = this match
-      case DDef(x, t, SMeta, v)  => s"def $x : $t = $v"
-      case DDef(x, t, STy(_), v) => s"def $x : $t := $v"
+      case DDef(m, x, t, SMeta, v)  => s"def $m:$x : $t = $v"
+      case DDef(m, x, t, STy(_), v) => s"def $m:$x : $t := $v"
   export Def.*
 
   enum ProjType:

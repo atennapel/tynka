@@ -135,9 +135,9 @@ object Pretty:
     case AppPruning(f, _) => s"?*${prettyParen(f)}"
 
   def pretty(d: Def): String = d match
-    case DDef(x, t, SMeta, v) =>
-      s"def $x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
-    case DDef(x, t, STy(_), v) =>
-      s"def $x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
+    case DDef(m, x, t, SMeta, v) =>
+      s"def $m:$x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
+    case DDef(m, x, t, STy(_), v) =>
+      s"def $m:$x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
 
   def pretty(ds: Defs): String = ds.toList.map(pretty).mkString("\n")

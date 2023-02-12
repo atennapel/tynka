@@ -55,6 +55,10 @@ object Elaboration:
     if holes.find((y, _) => x == y).isDefined then error(s"duplicate hole _$x")
     holes += x -> h
 
+  // import names
+  private type Imported = mutable.Map[Name, (String, Name)]
+  private val imported: Imported = mutable.Map.empty
+
   // metas
   private def newMeta(ty: VTy, s: VStage)(implicit ctx: Ctx): Tm =
     force(ty) match
@@ -703,7 +707,13 @@ object Elaboration:
                 case None =>
                   getGlobal(ctx.module, x) match
                     case Some(e) => (Global(ctx.module, x), e.vty, e.vstage)
-                    case None    => error(s"undefined variable $x")
+                    case None =>
+                      imported.get(x) match
+                        case Some((m, y)) =>
+                          getGlobal(m, y) match
+                            case Some(e) => (Global(m, y), e.vty, e.vstage)
+                            case None    => error(s"undefined variable $x")
+                        case None => error(s"undefined variable $x")
 
       case S.Let(x, m, t, v, b) =>
         val stage1 = if m then SMeta else STy(newVF())
@@ -977,14 +987,15 @@ object Elaboration:
       case S.DImport(pos, m, all, xs0) =>
         implicit val ctx: Ctx = Ctx.empty(module, pos)
         val xs = if all then allNamesFromModule(m) else xs0
-        xs.map { x =>
-          // if getGlobal(module, x).isDefined then error(s"cannot redefine $x")
+        xs.foreach { x =>
           getGlobal(m, x) match
             case None => error(s"module $m does not contain $x")
             case Some(e) =>
-              setGlobal(e.copy(module = module))
-              DDef(x, e.ty, e.stage, e.tm)
+              imported.get(x) match
+                case Some(_) => error(s"$x is already imported")
+                case None    => imported += (x -> (m, x))
         }
+        Nil
       case S.DDef(pos, x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty(module, pos)
         if getGlobal(module, x).isDefined then error(s"duplicate global $x")
@@ -1001,7 +1012,7 @@ object Elaboration:
             ctx.eval(estage)
           )
         )
-        val ed = DDef(x, ety, estage, etm)
+        val ed = DDef(module, x, ety, estage, etm)
         debug(s"elaborated $ed")
         List(ed)
       case S.DData(pos, x, ps, cs) =>
@@ -1036,5 +1047,6 @@ object Elaboration:
         ed ++ ecs
 
   def elaborate(module: String, uri: String, ds: S.Defs): Defs =
+    imported.clear()
     try Defs(ds.toList.flatMap(d => elaborate(module, d)))
     catch case e: ElaborateError => throw ElaborateError(e.pos, uri, e.msg)

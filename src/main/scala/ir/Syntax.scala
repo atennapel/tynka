@@ -56,6 +56,7 @@ object Syntax:
 
   enum Def:
     case DDef(
+        module: GName,
         name: GName,
         gen: Boolean,
         ty: TDef,
@@ -65,10 +66,10 @@ object Syntax:
     case DData(name: GName, cons: List[List[Ty]])
 
     override def toString: String = this match
-      case DDef(x, _, TDef(None, t), _, v) => s"def $x : $t = $v"
-      case DDef(x, _, t, Nil, v)           => s"def $x () : $t = $v"
-      case DDef(x, _, t, ps, v) =>
-        s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
+      case DDef(m, x, _, TDef(None, t), _, v) => s"def $m:$x : $t = $v"
+      case DDef(m, x, _, t, Nil, v)           => s"def $m:$x () : $t = $v"
+      case DDef(m, x, _, t, ps, v) =>
+        s"def $m:$x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
       case DData(x, Nil) => s"data $x"
       case DData(x, cs) =>
         s"data $x = ${cs.map(as => s"(${as.mkString(" ")})").mkString(" | ")}"
