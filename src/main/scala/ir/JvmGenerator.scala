@@ -730,7 +730,7 @@ object JvmGenerator:
     "!" -> "EXCL",
     "@" -> "AT",
     "#" -> "HASH",
-    "$" -> "DOLLAR",
+    // "$" -> "DOLLAR",
     "%" -> "PERCENT",
     "^" -> "HAT",
     "&" -> "AMPER",

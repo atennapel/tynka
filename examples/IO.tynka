@@ -1,7 +1,8 @@
 import "lib/Primitives" (...)
 import "lib/JVM" (...)
+import "lib/Push" (...)
 
 def main := javaMain \_.
-  getLn >>= \s.
-  let n = parseInt s;
-  putLn n
+  getLn >>= \nStr.
+  case (parseInt nStr) (returnIO U) \n.
+  foldIO_ putLn (range 0 n)

@@ -1,4 +1,6 @@
-import "lib/Prelude" (...)
+import "lib/Primitives" (...)
+import "lib/JVM" (...)
+import "lib/Int" (...)
 import "lib/List" (List, Nil, (::))
 
 def Push A = (vf : VF) (B : Ty vf) -> (A -> B -> B) -> B -> B

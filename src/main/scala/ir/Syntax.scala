@@ -28,7 +28,7 @@ object Syntax:
   final case class TDef(ps: Option[List[Ty]], rt: Ty):
     override def toString: String = ps match
       case None => rt.toString
-      case _    => s"(${ps.mkString(", ")}) -> $rt"
+      case _    => s"(${ps.get.mkString(", ")}) -> $rt"
     def head: Ty = ps.get.head
     def tail: TDef = TDef(ps.get.tail, rt)
     def ty: Ty =

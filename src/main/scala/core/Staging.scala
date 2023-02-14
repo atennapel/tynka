@@ -686,7 +686,7 @@ object Staging:
                   x,
                   ni,
                   t,
-                  bt,
+                  IR.TDef(bt.rt),
                   go(v),
                   go(b.apps(spine2))
                 ).lams(vs2, IR.TDef(bt.rt))
