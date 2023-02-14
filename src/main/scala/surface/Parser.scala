@@ -34,6 +34,7 @@ object Parser:
         "fix",
         "data",
         "import",
+        "export",
         "foreign"
       ),
       operators = Set(
@@ -362,13 +363,14 @@ object Parser:
         }
 
     private lazy val includeP: Parsley[Def] =
-      (pos <~> "import" *> string <~> option(
+      (pos <~> ("import" #> false <|> "export" #> true) <~> string <~> option(
         "(" *> ("..." #> Left(()) <|> sepEndBy(identOrOp, ",")
           .map(Right.apply)) <* ")"
       )).map {
-        case ((pos, m), None)            => DImport(pos, m, false, Nil)
-        case ((pos, m), Some(Left(_)))   => DImport(pos, m, true, Nil)
-        case ((pos, m), Some(Right(xs))) => DImport(pos, m, false, xs)
+        case (((pos, exp), m), None) => DImport(pos, exp, m, false, Nil)
+        case (((pos, exp), m), Some(Left(_))) => DImport(pos, exp, m, true, Nil)
+        case (((pos, exp), m), Some(Right(xs))) =>
+          DImport(pos, exp, m, false, xs)
       }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)

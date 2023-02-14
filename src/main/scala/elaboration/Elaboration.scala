@@ -983,8 +983,8 @@ object Elaboration:
   private def elaborate(module: String, d: S.Def): List[Def] =
     debug(s"elaborate $module $d")
     d match
-      case S.DImport(_, _, false, Nil) => Nil
-      case S.DImport(pos, m, all, xs0) =>
+      case S.DImport(_, _, _, false, Nil) => Nil
+      case S.DImport(pos, false, m, all, xs0) =>
         implicit val ctx: Ctx = Ctx.empty(module, pos)
         val xs = if all then allNamesFromModule(m) else xs0
         xs.foreach { x =>
@@ -996,6 +996,16 @@ object Elaboration:
                 case None    => imported += (x -> (m, x))
         }
         Nil
+      case S.DImport(pos, true, m, all, xs0) =>
+        implicit val ctx: Ctx = Ctx.empty(module, pos)
+        val xs = if all then allNamesFromModule(m) else xs0
+        xs.map { x =>
+          getGlobal(m, x) match
+            case None => error(s"module $m does not contain $x")
+            case Some(e) =>
+              setGlobal(e.copy(module = module))
+              DDef(module, x, e.ty, e.stage, e.tm)
+        }
       case S.DDef(pos, x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty(module, pos)
         if getGlobal(module, x).isDefined then error(s"duplicate global $x")

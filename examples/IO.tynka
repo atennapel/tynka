@@ -1,5 +1,4 @@
-import "lib/Primitives" (...)
-import "lib/JVM" (...)
+import "lib/Prelude" (...)
 import "lib/Push" (...)
 
 def main := javaMain \_.

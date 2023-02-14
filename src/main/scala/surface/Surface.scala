@@ -11,12 +11,18 @@ object Syntax:
     def imports: List[String] =
       (
         defs.flatMap {
-          case DImport(_, uri, _, _) => Some(uri); case _ => None
+          case DImport(_, _, uri, _, _) => Some(uri); case _ => None
         }
       )
 
   enum Def:
-    case DImport(pos: PosInfo, uri: String, all: Boolean, names: List[Name])
+    case DImport(
+        pos: PosInfo,
+        exp: Boolean,
+        uri: String,
+        all: Boolean,
+        names: List[Name]
+    )
     case DDef(
         pos: PosInfo,
         name: Name,
@@ -32,9 +38,12 @@ object Syntax:
     )
 
     override def toString: String = this match
-      case DImport(_, uri, true, _) => s"import \"$uri\" (...)"
-      case DImport(_, uri, _, Nil)  => s"import \"$uri\""
-      case DImport(_, uri, _, xs)   => s"import \"$uri\" (${xs.mkString(", ")})"
+      case DImport(_, exp, uri, true, _) =>
+        s"${if exp then "export" else "import"} \"$uri\" (...)"
+      case DImport(_, exp, uri, _, Nil) =>
+        s"${if exp then "export" else "import"} \"$uri\""
+      case DImport(_, exp, uri, _, xs) =>
+        s"${if exp then "export" else "import"} \"$uri\" (${xs.mkString(", ")})"
       case DDef(_, x, m, Some(t), v) =>
         s"def $x : $t ${if m then "" else ":"}= $v"
       case DDef(_, x, m, None, v) => s"def $x ${if m then "" else ":"}= $v"

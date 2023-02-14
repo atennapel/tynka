@@ -1,3 +1,3 @@
-import "lib/Primitives" (...)
-import "lib/JVM" (...)
-import "lib/Int" (...)
+export "lib/Primitives" (...)
+export "lib/JVM" (...)
+export "lib/Int" (...)

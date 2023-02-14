@@ -28,8 +28,9 @@ TODO:
 - [x] Basic file importing
 - [x] Modules, or a way to handle name clashes
 - [x] Value level strings
+- [x] Syntax to re-export definitions
+- [ ] Fix re-export duplication
 - [ ] Cannot access operators in modules
-- [ ] Syntax to re-export definitions
 - [ ] Import with renaming
 - [ ] Public/private definitions
 - [ ] Do not export imported definitions

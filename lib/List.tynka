@@ -1,6 +1,4 @@
-import "lib/Primitives" (...)
-import "lib/JVM" (...)
-import "lib/Int" (...)
+import "lib/Prelude" (...)
 
 data List A = Nil | (::) A List
 
