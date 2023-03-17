@@ -70,6 +70,8 @@ object Zonking:
     case TInt      => t
     case IntLit(_) => t
 
+    case TCon(x, cs) => TCon(x, cs.map((x, as) => (x, as.map(zonk))))
+
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))
 
     case Meta(id)         => quoteVT(meta(id))

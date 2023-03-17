@@ -62,6 +62,8 @@ object Value:
     case VTInt
     case VIntLit(n: Int)
 
+    case VTCon(x: Bind, cons: VTy => List[(Name, List[VTy])])
+
     case VIrrelevant
   export Val.*
 

@@ -42,6 +42,8 @@ object Syntax:
     case TInt
     case IntLit(n: Int)
 
+    case TCon(name: Bind, cons: List[(Name, List[Ty])])
+
     case Wk(tm: Tm)
 
     case Meta(id: MetaId)
@@ -88,6 +90,9 @@ object Syntax:
 
       case TInt      => "Int"
       case IntLit(n) => s"$n"
+
+      case TCon(x, cs) =>
+        s"tcon $x. ${cs.map((x, as) => s"$x${if as.isEmpty then "" else " "}${as.mkString(" ")}").mkString(" | ")}"
 
       case Wk(t)      => s"(Wk $t)"
       case Irrelevant => "Ir"

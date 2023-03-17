@@ -92,6 +92,9 @@ object Evaluation:
     case TInt      => VTInt
     case IntLit(n) => VIntLit(n)
 
+    case TCon(x, cs) =>
+      VTCon(x, v => cs.map((x, as) => (x, as.map(a => eval(a)(v :: env)))))
+
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
 
@@ -158,6 +161,12 @@ object Evaluation:
 
       case VTInt      => TInt
       case VIntLit(n) => IntLit(n)
+
+      case VTCon(x, cs) =>
+        TCon(
+          x,
+          cs(VVar(l)).map((x, as) => (x, as.map(a => quote(a, unfold)(l + 1))))
+        )
 
       case VIrrelevant => Irrelevant
 

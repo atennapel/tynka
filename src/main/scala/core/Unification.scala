@@ -194,6 +194,12 @@ object Unification:
       case VTInt      => TInt
       case VIntLit(n) => IntLit(n)
 
+      case VTCon(x, cs) =>
+        TCon(
+          x,
+          cs(VVar(psub.cod)).map((x, as) => (x, as.map(a => go(a)(psub.lift))))
+        )
+
       case VIrrelevant => Irrelevant
     go(v)
 
@@ -327,6 +333,10 @@ object Unification:
         unify(arg1, arg2)
       case (VIrrelevant, _) => ()
       case (_, VIrrelevant) => ()
+
+      case (VTCon(_, cs1), VTCon(_, cs2)) =>
+        val v = VVar(l)
+        cs1.
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)

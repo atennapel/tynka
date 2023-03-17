@@ -95,6 +95,9 @@ object Pretty:
     case TInt      => "Int"
     case IntLit(n) => s"$n"
 
+    case TCon(x, cs) =>
+      s"tcon $x. ${cs.map((x, as) => s"$x${if as.isEmpty then "" else " "}${as.map(a => prettyParen(a)).mkString(" ")}").mkString(" | ")}"
+
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"
 
