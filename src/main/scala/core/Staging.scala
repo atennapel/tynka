@@ -27,6 +27,7 @@ object Staging:
     case VLam1(fn: Val1 => Val1)
     case VQuote1(v: Val0)
     case VTFun1(pty: Val1, rty: Val1)
+    case VTInt1
     case VType1
   import Val1.*
 
@@ -37,6 +38,7 @@ object Staging:
     case VLam0(fnty: Val1, body: Val0 => Val0)
     case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
+    case VIntLit0(n: Int)
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -64,6 +66,7 @@ object Staging:
     case Quote(t)              => VQuote1(eval0(t))
     case Wk(t)                 => eval1(t)(env.tail)
     case TFun(a, _, b)         => VTFun1(eval1(a), eval1(b))
+    case TInt                  => VTInt1
     case U(_)                  => VType1
     case Pi(_, _, _, _)        => VType1
     case Lift(_, _)            => VType1
@@ -101,6 +104,7 @@ object Staging:
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
     case Splice(t) => vsplice0(eval1(t))
     case Wk(t)     => eval0(t)(env.tail)
+    case IntLit(n) => VIntLit0(n)
     case _         => impossible()
 
   // quotation
@@ -108,7 +112,8 @@ object Staging:
   private type Fresh = () => HO.LName
 
   private def quoteVTy(v: Val1): HO.Ty = v match
-    case _ => impossible()
+    case VTInt1 => HO.TInt
+    case _      => impossible()
 
   private def quoteFTy(v: Val1): HO.TDef = v match
     case VTFun1(a, b) => HO.TDef(quoteVTy(a), quoteFTy(b))
@@ -120,6 +125,8 @@ object Staging:
         val (x, t) = ns(lvl.toIx.expose)
         HO.Var(x, t)
       case VGlobal0(m, x, t) => HO.Global(m, x.expose, quoteFTy(t))
+
+      case VIntLit0(n) => HO.IntLit(n)
 
       case VApp0(f, a) => HO.App(quote(f), quote(a))
       case VLam0(ft, b) =>

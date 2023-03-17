@@ -59,6 +59,9 @@ object Value:
     case VLift(vf: VTy, tm: VTy)
     case VQuote(tm: Val)
 
+    case VTInt
+    case VIntLit(n: Int)
+
     case VIrrelevant
   export Val.*
 

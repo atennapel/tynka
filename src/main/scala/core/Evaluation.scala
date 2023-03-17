@@ -89,6 +89,9 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
+    case TInt      => VTInt
+    case IntLit(n) => VIntLit(n)
+
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
 
@@ -152,6 +155,9 @@ object Evaluation:
 
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
+
+      case VTInt      => TInt
+      case VIntLit(n) => IntLit(n)
 
       case VIrrelevant => Irrelevant
 

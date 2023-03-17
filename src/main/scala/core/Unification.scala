@@ -191,6 +191,9 @@ object Unification:
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => go(t).quote
 
+      case VTInt      => TInt
+      case VIntLit(n) => IntLit(n)
+
       case VIrrelevant => Irrelevant
     go(v)
 
@@ -301,10 +304,12 @@ object Unification:
   def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
-      case (VVF, VVF)       => ()
-      case (VVal, VVal)     => ()
-      case (VFun, VFun)     => ()
-      case (VU(s1), VU(s2)) => unify(s1, s2)
+      case (VVF, VVF)                         => ()
+      case (VVal, VVal)                       => ()
+      case (VFun, VFun)                       => ()
+      case (VTInt, VTInt)                     => ()
+      case (VIntLit(a), VIntLit(b)) if a == b => ()
+      case (VU(s1), VU(s2))                   => unify(s1, s2)
       case (VTFun(a1, v1, b1), VTFun(a2, v2, b2)) =>
         unify(a1, a2); unify(v1, v2); unify(b1, b2)
       case (VPi(_, i1, a1, b1), VPi(_, i2, a2, b2)) if i1 == i2 =>

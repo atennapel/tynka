@@ -7,10 +7,10 @@ object Syntax:
   type GName = String
 
   enum Ty:
-    case TUnit
+    case TInt
 
     override def toString: String = this match
-      case TUnit => "Unit"
+      case TInt => "Int"
 
     def tdef: TDef = TDef(this)
   export Ty.*
@@ -61,6 +61,8 @@ object Syntax:
     case Var(name: LName, ty: TDef)
     case Global(m: GName, name: GName, ty: TDef)
 
+    case IntLit(n: Int)
+
     case App(fn: Tm, arg: Tm)
     case Lam(name: LName, t1: Ty, t2: TDef, body: Tm)
     case Let(
@@ -77,6 +79,8 @@ object Syntax:
     override def toString: String = this match
       case Var(x, _)       => s"'$x"
       case Global(m, x, _) => s"$m:$x"
+
+      case IntLit(n) => s"$n"
 
       case App(f, a)             => s"($f $a)"
       case Lam(x, t, _, b)       => s"(\\($x : $t). $b)"
@@ -109,6 +113,7 @@ object Syntax:
     def fvs: List[(LName, TDef)] = this match
       case Var(x, t)       => List((x, t))
       case Global(_, _, _) => Nil
+      case IntLit(_)       => Nil
 
       case App(f, a)             => f.fvs ++ a.fvs
       case Lam(x, _, _, b)       => b.fvs.filterNot((y, _) => y == x)
@@ -151,6 +156,7 @@ object Syntax:
       this match
         case Var(x, _)       => sub.get(x).getOrElse(this)
         case Global(_, _, _) => this
+        case IntLit(_)       => this
 
         case App(f, a) => App(f.subst(sub, scope), a.subst(sub, scope))
         case Lam(x0, t1, t2, b0) =>

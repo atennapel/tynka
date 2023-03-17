@@ -39,6 +39,9 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case TInt
+    case IntLit(n: Int)
+
     case Wk(tm: Tm)
 
     case Meta(id: MetaId)
@@ -82,6 +85,9 @@ object Syntax:
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"
       case Splice(t)  => s"$$$t"
+
+      case TInt      => "Int"
+      case IntLit(n) => s"$n"
 
       case Wk(t)      => s"(Wk $t)"
       case Irrelevant => "Ir"

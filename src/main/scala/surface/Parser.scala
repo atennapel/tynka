@@ -38,7 +38,8 @@ object Parser:
         "foreign",
         "VF",
         "Val",
-        "Fun"
+        "Fun",
+        "Int"
       ),
       operators = Set(
         "=",
@@ -70,6 +71,7 @@ object Parser:
     val ident: Parsley[String] = lexer.identifier
     val userOp: Parsley[String] = lexer.userOp
     val natural: Parsley[Int] = lexer.natural
+    val integer: Parsley[Int] = lexer.integer
     val string: Parsley[String] = lexer.stringLiteral
 
     object Implicits:
@@ -117,6 +119,8 @@ object Parser:
         <|> ("VF" #> VF)
         <|> ("Val" #> VFVal)
         <|> ("Fun" #> VFFun)
+        <|> ("Int" #> TInt)
+        <|> natural.map(n => IntLit(n))
         <|> ident.map(Var.apply)
     )
 

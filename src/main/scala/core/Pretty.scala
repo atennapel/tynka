@@ -54,6 +54,8 @@ object Pretty:
       case VF                  => pretty(tm)
       case VFVal               => pretty(tm)
       case VFFun               => pretty(tm)
+      case TInt                => pretty(tm)
+      case IntLit(_)           => pretty(tm)
       case _                   => s"(${pretty(tm)})"
 
   private def prettyLift(x: Name, tm: Tm)(implicit ns: List[Name]): String =
@@ -89,6 +91,9 @@ object Pretty:
     case Lift(_, t) => s"^${prettyParen(t)}"
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"
+
+    case TInt      => "Int"
+    case IntLit(n) => s"$n"
 
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"

@@ -79,6 +79,9 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case TInt
+    case IntLit(n: Int)
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -113,6 +116,9 @@ object Syntax:
       case Lift(t)   => s"^$t"
       case Quote(t)  => s"`$t"
       case Splice(t) => s"$$$t"
+
+      case TInt      => "Int"
+      case IntLit(n) => s"$n"
 
       case Hole(None)    => "_"
       case Hole(Some(x)) => s"_$x"

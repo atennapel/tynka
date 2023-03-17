@@ -67,6 +67,9 @@ object Zonking:
     case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
 
+    case TInt      => t
+    case IntLit(_) => t
+
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))
 
     case Meta(id)         => quoteVT(meta(id))

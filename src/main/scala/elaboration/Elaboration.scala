@@ -449,6 +449,8 @@ object Elaboration:
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
       case S.Hole(ox)     => error(s"cannot infer hole $tm")
+      case S.TInt         => (TInt, VVTy(), SMeta)
+      case S.IntLit(n)    => (IntLit(n), VTInt, STy(VVal))
       case S.VF           => (VF, VUMeta(), SMeta)
       case S.VFVal        => (VFVal, VVF, SMeta)
       case S.VFFun        => (VFFun, VVF, SMeta)
