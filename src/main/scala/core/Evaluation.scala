@@ -39,22 +39,6 @@ object Evaluation:
   def vappE(f: Val, a: Val): Val = vapp(f, a, Expl)
   def vappI(f: Val, a: Val): Val = vapp(f, a, Impl)
 
-  def vproj(v: Val, p: ProjType): Val = v match
-    case VPair(fst, snd, _) =>
-      p match
-        case Fst         => fst
-        case Snd         => snd
-        case Named(_, 0) => fst
-        case Named(x, i) => vproj(snd, Named(x, i - 1))
-    case VRigid(hd, sp) => VRigid(hd, SProj(sp, p))
-    case VFlex(hd, sp)  => VFlex(hd, SProj(sp, p))
-    case VGlobal(m, x, sp, v) =>
-      VGlobal(m, x, SProj(sp, p), () => vproj(v(), p))
-    case _ => impossible()
-
-  def vfst(v: Val): Val = vproj(v, Fst)
-  def vsnd(v: Val): Val = vproj(v, Snd)
-
   def vquote(v: Val): Val = v match
     case VRigid(hd, SSplice(sp))        => VRigid(hd, sp)
     case VFlex(hd, SSplice(sp))         => VFlex(hd, sp)
@@ -68,37 +52,10 @@ object Evaluation:
     case VGlobal(m, x, sp, v) => VGlobal(m, x, SSplice(sp), () => vsplice(v()))
     case _                    => impossible()
 
-  private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
-    (x, force(v), as) match
-      case (PEqLabel, VStringLit(a), List((VStringLit(b), _))) =>
-        if a == b then
-          vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => t)))
-        else vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => f)))
-      case (PAppendLabel, VStringLit(""), List((b, _))) => b
-      case (PAppendLabel, _, List((VStringLit(""), _))) => v
-      case (PAppendLabel, VStringLit(a), List((VStringLit(b), _))) =>
-        VStringLit(a + b)
-
-      case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
-      case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
-      case (_, VGlobal(m, y, sp, v), _) =>
-        VGlobal(m, y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
-      case _ => impossible()
-
-  private def vcase(ty: VTy, rty: VTy, v: Val, cs: List[Val]): Val = v match
-    case VRigid(hd, sp) => VRigid(hd, SCase(sp, ty, rty, cs))
-    case VFlex(hd, sp)  => VFlex(hd, SCase(sp, ty, rty, cs))
-    case VGlobal(m, x, sp, v) =>
-      VGlobal(m, x, SCase(sp, ty, rty, cs), () => vcase(v(), ty, rty, cs))
-    case _ => impossible()
-
   def vspine(v: Val, sp: Spine): Val = sp match
-    case SId                    => v
-    case SApp(sp, a, i)         => vapp(vspine(v, sp), a, i)
-    case SSplice(sp)            => vsplice(vspine(v, sp))
-    case SProj(sp, proj)        => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as)       => vprimelim(x, as, vspine(v, sp))
-    case SCase(sp, ty, rty, cs) => vcase(ty, rty, vspine(v, sp), cs)
+    case SId            => v
+    case SApp(sp, a, i) => vapp(vspine(v, sp), a, i)
+    case SSplice(sp)    => vsplice(vspine(v, sp))
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _, _) => v
@@ -111,59 +68,26 @@ object Evaluation:
       case (_ :: env, None :: p)    => vappPruning(v, p)(env)
       case _                        => impossible()
 
-  private def vprim(x: PrimName): Val = x match
-    case PEqLabel =>
-      vlam(
-        "a",
-        VIrrelevant,
-        a =>
-          vlam("b", VIrrelevant, b => vprimelim(PEqLabel, List((b, Expl)), a))
-      )
-    case PAppendLabel =>
-      vlam(
-        "a",
-        VIrrelevant,
-        a =>
-          vlam(
-            "b",
-            VIrrelevant,
-            b => vprimelim(PAppendLabel, List((b, Expl)), a)
-          )
-      )
-    case _ => VPrim(x)
-
   def eval(tm: Tm)(implicit env: Env): Val = tm match
     case Var(ix)               => env(ix.expose)
     case Global(m, x)          => vglobal(m, x)
-    case Prim(x)               => vprim(x)
     case Let(_, _, _, _, v, b) => eval(b)(eval(v) :: env)
     case U(s)                  => VU(s.map(eval))
 
+    case TFun(a, vf, b)   => VTFun(eval(a), eval(vf), eval(b))
     case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
     case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
     case App(f, a, i)     => vapp(eval(f), eval(a), i)
     case Fix(ty, rty, g, x, b, arg) =>
       VFix(eval(ty), eval(rty), g, x, CClos2(env, b), eval(arg))
 
-    case Sigma(x, t, b)   => VSigma(x, eval(t), Clos(b))
-    case TPair(a, b)      => VTPair(eval(a), eval(b))
-    case Pair(a, b, ty)   => VPair(eval(a), eval(b), eval(ty))
-    case Proj(t, p, _, _) => vproj(eval(t), p)
-
-    case IntLit(n)    => VIntLit(n)
-    case StringLit(l) => VStringLit(l)
-
-    case TCon(x, cs)    => VTCon(x, TConClos(env, cs))
-    case Con(ty, i, as) => VCon(eval(ty), i, as.map(eval))
-    case Case(ty, rty, scrut, cs) =>
-      vcase(eval(ty), eval(rty), eval(scrut), cs.map(eval))
+    case VF    => VVF
+    case VFVal => VVal
+    case VFFun => VFun
 
     case Lift(vf, t) => VLift(eval(vf), eval(t))
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
-
-    case Foreign(rt, cmd, as) =>
-      VForeign(eval(rt), eval(cmd), as.map((a, t) => (eval(a), eval(t))))
 
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
@@ -191,25 +115,10 @@ object Evaluation:
     sp match
       case SId              => hd
       case SApp(fn, arg, i) => App(quote(hd, fn, unfold), quote(arg, unfold), i)
-      case SProj(tm, proj) =>
-        Proj(quote(hd, tm, unfold), proj, Irrelevant, Irrelevant)
-      case SSplice(tm) => quote(hd, tm, unfold).splice
-      case SPrim(sp, x, args) =>
-        val as = args.foldLeft(Prim(x)) { case (f, (a, i)) =>
-          App(f, quote(a, unfold), i)
-        }
-        App(as, quote(hd, sp, unfold), Expl)
-      case SCase(sp, ty, rty, cs) =>
-        Case(
-          quote(ty, unfold),
-          quote(rty, unfold),
-          quote(hd, sp, unfold),
-          cs.map(quote(_, unfold))
-        )
+      case SSplice(tm)      => quote(hd, tm, unfold).splice
 
   private def quote(hd: Head)(implicit l: Lvl): Tm = hd match
     case HVar(ix) => Var(ix.toIx)
-    case HPrim(x) => Prim(x)
 
   def quoteS(s: VStage, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): CStage =
     s.map(v => quote(v, unfold))
@@ -221,6 +130,12 @@ object Evaluation:
       case VGlobal(m, x, sp, _) => quote(Global(m, x), sp, unfold)
       case VU(s)                => U(quoteS(s))
 
+      case VVF  => VF
+      case VVal => VFVal
+      case VFun => VFFun
+
+      case VTFun(a, vf, b) =>
+        TFun(quote(a, unfold), quote(vf, unfold), quote(b, unfold))
       case VLam(x, i, ty, b) =>
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
@@ -235,103 +150,10 @@ object Evaluation:
           quote(arg, unfold)
         )
 
-      case VTPair(a, b) => TPair(quote(a, unfold), quote(b, unfold))
-      case VPair(fst, snd, t) =>
-        Pair(quote(fst, unfold), quote(snd, unfold), quote(t, unfold))
-      case VSigma(x, t, b) =>
-        Sigma(x, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
-
-      case VIntLit(n)    => IntLit(n)
-      case VStringLit(v) => StringLit(v)
-
-      case VTCon(x, cs) =>
-        TCon(x, cs(VVar(l)).map(as => as.map(a => quote(a, unfold)(l + 1))))
-      case VCon(ty, i, as) =>
-        Con(quote(ty, unfold), i, as.map(quote(_, unfold)))
-
       case VLift(vf, t) => Lift(quote(vf, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
-
-      case VForeign(rt, cmd, as) =>
-        Foreign(
-          quote(rt, unfold),
-          quote(cmd, unfold),
-          as.map((a, t) => (quote(a, unfold), quote(t, unfold)))
-        )
 
       case VIrrelevant => Irrelevant
 
   def nf(tm: Tm)(implicit l: Lvl = lvl0, env: Env = Nil): Tm =
     quote(eval(tm), UnfoldAll)
-
-  def primType(x: PrimName): (VTy, VStage) = x match
-    case PVF  => (VUMeta(), SMeta)
-    case PVal => (VVF(), SMeta)
-    case PFun => (VVF(), SMeta)
-
-    // Ty Val -> {vf : VF} -> Ty vf -> Ty Fun
-    case PTFun =>
-      (vfun(VVTy(), vpiI("vf", VVF(), vf => vfun(VUTy(vf), VFTy()))), SMeta)
-
-    // Ty Val -> Ty Val
-    case PTBox => (vfun(VVTy(), VVTy()), SMeta)
-    // {A : Ty Val} -> ^A -> ^(Box A)
-    case PBox =>
-      (
-        vpiI("A", VVTy(), a => vfun(VLift(VVal(), a), VLift(VVal(), VTBox(a)))),
-        SMeta
-      )
-    // {A : Ty Val} -> ^(Box A) -> ^A
-    case PUnbox =>
-      (
-        vpiI("A", VVTy(), a => vfun(VLift(VVal(), VTBox(a)), VLift(VVal(), a))),
-        SMeta
-      )
-
-    case PUnitType => (VUMeta(), SMeta)
-    case PUnit     => (VUnitType(), SMeta)
-
-    case PLabel       => (VUMeta(), SMeta)
-    case PEqLabel     => (vfun(VLabel(), vfun(VLabel(), vcbool)), SMeta)
-    case PAppendLabel => (vfun(VLabel(), vfun(VLabel(), VLabel())), SMeta)
-
-    // VTy -> FTy
-    case PIO => (vfun(VVTy(), VFTy()), SMeta)
-    // {A : VTy} -> ^A -> ^(IO A)
-    case PReturnIO =>
-      (
-        vpiI("A", VVTy(), a => vfun(VLift(VVal(), a), VLift(VFun(), VIO(a)))),
-        SMeta
-      )
-    // {A B : VTy} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
-    case PBindIO =>
-      (
-        vpiI(
-          "A",
-          VVTy(),
-          a =>
-            vpiI(
-              "B",
-              VVTy(),
-              b =>
-                val iob = VLift(VFun(), VIO(b))
-                vfun(
-                  VLift(VFun(), VIO(a)),
-                  vfun(vfun(VLift(VVal(), a), iob), iob)
-                )
-            )
-        ),
-        SMeta
-      )
-    // {A : VTy} -> ^(IO A) -> ^A
-    case PRunIO =>
-      (
-        vpiI("A", VVTy(), a => vfun(VLift(VFun(), VIO(a)), VLift(VVal(), a))),
-        SMeta
-      )
-
-    // Label -> VTy
-    case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
-
-  // (R : Meta) -> R -> R -> R
-  val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))

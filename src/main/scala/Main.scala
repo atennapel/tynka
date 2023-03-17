@@ -4,7 +4,6 @@ import core.Pretty.pretty
 import core.Staging.stage
 import elaboration.Elaboration.ElaborateError
 import elaboration.ModuleLoading.load
-import ir.JvmGenerator.generate
 
 import java.io.File
 import scala.io.Source
@@ -25,9 +24,6 @@ object Main:
       println("\nstaging:")
       val irds = stage(filename, eds)
       println(irds)
-
-      println("\ngenerate JVM bytecode")
-      generate(filename, irds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

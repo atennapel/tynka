@@ -11,15 +11,8 @@ object Pretty:
     case App(f, a, Impl) => s"${prettyApp(f)} {${pretty(a)}}"
     case f               => prettyParen(f)
 
-  private def prettySigma(tm: Tm)(implicit ns: List[Name]): String = tm match
-    case Sigma(DontBind, t, b) =>
-      s"${prettyParen(t, true)} ** ${prettySigma(b)(DontBind.toName :: ns)}"
-    case Sigma(DoBind(x0), t, b) =>
-      val x = x0.fresh
-      s"($x : ${pretty(t)}) ** ${prettySigma(b)(x :: ns)}"
-    case rest => pretty(rest)
-
   private def prettyPi(tm: Tm)(implicit ns: List[Name]): String = tm match
+    case TFun(a, _, b) => s"${prettyParen(a, true)} -> ${prettyPi(b)}"
     case Pi(DontBind, Expl, t, b) =>
       s"${prettyParen(t, true)} -> ${prettyPi(b)(DontBind.toName :: ns)}"
     case Pi(DoBind(x0), Expl, t, b) =>
@@ -49,9 +42,6 @@ object Pretty:
     tm match
       case Var(_)              => pretty(tm)
       case Global(_, _)        => pretty(tm)
-      case Prim(_)             => pretty(tm)
-      case Pair(_, _, _)       => pretty(tm)
-      case Proj(_, _, _, _)    => pretty(tm)
       case Meta(_)             => pretty(tm)
       case Lift(_, _)          => pretty(tm)
       case Quote(_)            => pretty(tm)
@@ -59,15 +49,12 @@ object Pretty:
       case AppPruning(_, _)    => pretty(tm)
       case App(_, _, _) if app => pretty(tm)
       case U(_)                => pretty(tm)
-      case IntLit(_)           => pretty(tm)
       case Irrelevant          => pretty(tm)
-      case StringLit(_)        => pretty(tm)
       case Wk(tm)              => prettyParen(tm, app)(ns.tail)
+      case VF                  => pretty(tm)
+      case VFVal               => pretty(tm)
+      case VFFun               => pretty(tm)
       case _                   => s"(${pretty(tm)})"
-
-  private def flattenPair(tm: Tm): List[Tm] = tm match
-    case Pair(fst, snd, _) => fst :: flattenPair(snd)
-    case tm                => List(tm)
 
   private def prettyLift(x: Name, tm: Tm)(implicit ns: List[Name]): String =
     pretty(tm)(x :: ns)
@@ -77,7 +64,6 @@ object Pretty:
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Var(ix)      => s"${ns(ix.expose)}"
     case Global(m, x) => s"$m:$x"
-    case Prim(x)      => s"$x"
     case Let(x0, t, s, _, v, b) =>
       val x = x0.fresh
       val ss = s match
@@ -86,7 +72,12 @@ object Pretty:
       s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
     case U(s) => pretty(s)
 
+    case VF    => "VF"
+    case VFVal => "Val"
+    case VFFun => "Fun"
+
     case Pi(_, _, _, _)  => prettyPi(tm)
+    case TFun(_, _, _)   => prettyPi(tm)
     case Lam(_, _, _, _) => prettyLam(tm)
     case App(_, _, _)    => prettyApp(tm)
 
@@ -95,38 +86,9 @@ object Pretty:
       val x = x0.fresh
       s"fix ($g $x. ${prettyParen(b)(x.toName :: g.toName :: ns)}) ${prettyParen(arg)}"
 
-    case Sigma(_, _, _) => prettySigma(tm)
-    case Pair(_, _, _) =>
-      val es = flattenPair(tm)
-      if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
-      else s"(${es.map(pretty).mkString(", ")})"
-    case Proj(t, p, _, _) => s"${prettyParen(t)}$p"
-    case TPair(a, b)      => s"TPair ${prettyParen(a)} ${prettyParen(b)}"
-
-    case IntLit(n)    => s"$n"
-    case StringLit(v) => s"\"$v\""
-
-    case TCon(x0, Nil) =>
-      val x = x0.fresh
-      s"tcon $x."
-    case TCon(x0, cs) =>
-      val x = x0.fresh
-      s"tcon $x. ${cs.map(as => s"(${as.map(a => prettyParen(a)(x.toName :: ns)).mkString(" ")})").mkString(" ")}"
-    case Con(ty, i, Nil) => s"con ${prettyParen(ty)} #$i"
-    case Con(ty, i, as) =>
-      s"con ${prettyParen(ty)} #$i ${as.map(a => prettyParen(a)).mkString(" ")}"
-    case Case(ty, _, s, Nil) => s"case ${prettyParen(ty)} ${prettyParen(s)}"
-    case Case(ty, _, s, cs) =>
-      s"case ${prettyParen(ty)} ${prettyParen(s)} ${cs.map(a => prettyParen(a)).mkString(" ")}"
-
     case Lift(_, t) => s"^${prettyParen(t)}"
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"
-
-    case Foreign(rt, cmd, Nil) =>
-      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)}"
-    case Foreign(rt, cmd, as) =>
-      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)} ${as.map((a, _) => prettyParen(a)).mkString(" ")}"
 
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"

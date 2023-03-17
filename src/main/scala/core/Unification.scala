@@ -103,7 +103,6 @@ object Unification:
     case SId            => false
     case SApp(sp, _, _) => hasSplice(sp)
     case SSplice(_)     => true
-    case _              => impossible()
 
   private def expandVFlex(m: MetaId, sp: Spine): (MetaId, Spine) =
     if !hasSplice(sp) then (m, sp)
@@ -147,12 +146,6 @@ object Unification:
       case SId           => None
       case SApp(f, a, i) => go(f).map((l, r) => (l, SApp(r, a, i)))
       case SSplice(t)    => go(t).map((l, r) => (l, SSplice(r)))
-      case SProj(sp, p) =>
-        or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
-      case SPrim(sp, x, args) =>
-        or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
-      case SCase(sp, ty, rty, cs) =>
-        or(go(sp), Some((sp, SId))).map((l, r) => (l, SCase(r, ty, rty, cs)))
     go(sp).fold((sp, SId))(x => x)
 
   private def psubst(v: Val)(implicit psub: PSub): Tm =
@@ -160,19 +153,16 @@ object Unification:
       case SId              => t
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SSplice(sp)      => goSp(t, sp).splice
-      case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant, Irrelevant)
-      case SPrim(sp, x, args) =>
-        val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
-        App(as, goSp(t, sp), Expl)
-      case SCase(sp, ty, rty, cs) =>
-        Case(go(ty), go(rty), goSp(t, sp), cs.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
           case None    => throw UnifyError(s"escaping variable '$x")
           case Some(w) => goSp(quote(w)(psub.dom), sp)
-      case VRigid(HPrim(x), sp) => goSp(Prim(x), sp)
-      case VU(s)                => U(s.map(go))
+      case VU(s) => U(s.map(go))
+
+      case VVF  => VF
+      case VVal => VFVal
+      case VFun => VFFun
 
       case VFlex(m, _) if psub.occ.contains(m) =>
         throw UnifyError(s"occurs check failed ?$m")
@@ -184,6 +174,7 @@ object Unification:
 
       case VGlobal(m, x, sp, _) => goSp(Global(m, x), sp)
 
+      case VTFun(a, vf, b) => TFun(go(a), go(vf), go(b))
       case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
@@ -197,22 +188,8 @@ object Unification:
           go(arg)
         )
 
-      case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
-      case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
-      case VTPair(a, b)       => TPair(go(a), go(b))
-
-      case VIntLit(n)    => IntLit(n)
-      case VStringLit(v) => StringLit(v)
-
-      case VTCon(x, cs) =>
-        TCon(x, cs(VVar(psub.cod)).map(as => as.map(a => go(a)(psub.lift))))
-      case VCon(ty, i, as) => Con(go(ty), i, as.map(go))
-
       case VLift(vf, t) => Lift(go(vf), go(t))
       case VQuote(t)    => go(t).quote
-
-      case VForeign(rt, cmd, as) =>
-        Foreign(go(rt), go(cmd), as.map((a, t) => (go(a), go(t))))
 
       case VIrrelevant => Irrelevant
     go(v)
@@ -241,23 +218,10 @@ object Unification:
     else
       force(topRhs) match
         case VRigid(x, rhsSp) =>
-          @tailrec
-          def goProj(a: Spine, b: Spine, n: Int)(implicit l: Lvl): Unit =
-            (a, n) match
-              case (a, 0)             => go(a, b)
-              case (SProj(a, Snd), n) => goProj(a, b, n - 1)
-              case _ =>
-                throw UnifyError(s"solve ?$m2, spine projection mismatch")
           def go(a: Spine, b: Spine): Unit = (a, b) match
             case (SId, b) => solveWithPSub(m2, psub, VRigid(x, b))
             case (SApp(s1, a, _), SApp(s2, b, _)) => go(s1, s2); unify(a, b)
             case (SSplice(s1), SSplice(s2))       => go(s1, s2)
-            case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => go(s1, s2)
-            case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => goProj(s1, s2, n)
-            case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => goProj(s1, s2, n)
-            case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
-              go(a, b)
-              as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
             case _ => throw UnifyError(s"solve ?$m2, spine mismatch")
           go(outer, rhsSp)
         case _ => throw UnifyError(s"solve ?$m2, invalid spine")
@@ -318,27 +282,11 @@ object Unification:
         case _                           => ()
     else unify(sp, sp2)
 
-  @tailrec
-  private def unifyProj(a: Spine, b: Spine, n: Int)(implicit l: Lvl): Unit =
-    (a, n) match
-      case (a, 0)             => unify(a, b)
-      case (SProj(a, Snd), n) => unifyProj(a, b, n - 1)
-      case _                  => throw UnifyError(s"spine projection mismatch")
-
   private def unify(a: Spine, b: Spine)(implicit l: Lvl): Unit = (a, b) match
     case (SId, SId)                       => ()
     case (SApp(s1, a, _), SApp(s2, b, _)) => unify(s1, s2); unify(a, b)
     case (SSplice(s1), SSplice(s2))       => unify(s1, s2)
-    case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
-    case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
-    case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
-    case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
-      unify(a, b)
-      as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
-    case (SCase(s1, t1, _, cs1), SCase(s2, t2, _, cs2)) =>
-      unify(s1, s2); unify(t1, t2)
-      cs1.zip(cs2).foreach((a, b) => unify(a, b))
-    case _ => throw UnifyError(s"spine mismatch")
+    case _                                => throw UnifyError(s"spine mismatch")
 
   private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =
     val v = VVar(l)
@@ -353,22 +301,19 @@ object Unification:
   def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
+      case (VVF, VVF)       => ()
+      case (VVal, VVal)     => ()
+      case (VFun, VFun)     => ()
       case (VU(s1), VU(s2)) => unify(s1, s2)
+      case (VTFun(a1, v1, b1), VTFun(a2, v2, b2)) =>
+        unify(a1, a2); unify(v1, v2); unify(b1, b2)
       case (VPi(_, i1, a1, b1), VPi(_, i2, a2, b2)) if i1 == i2 =>
         unify(a1, a2); unify(b1, b2)
-      case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
-        unify(a1, a2); unify(b1, b2)
-      case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
-      case (VTPair(a1, b1), VTPair(a2, b2))     => unify(a1, a2); unify(b1, b2)
-      case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
+      case (VLam(_, _, _, b1), VLam(_, _, _, b2))       => unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
         unify(vf1, vf2); unify(ty1, ty2)
-      case (VQuote(a), VQuote(b))                   => unify(a, b)
-      case (VIntLit(a), VIntLit(b)) if a == b       => ()
-      case (VStringLit(a), VStringLit(b)) if a == b => ()
-      case (VCon(_, i, as1), VCon(_, j, as2)) if i == j =>
-        as1.zip(as2).foreach((a, b) => unify(a, b))
+      case (VQuote(a), VQuote(b)) => unify(a, b)
       case (VFix(a1, b1, _, _, f1, arg1), VFix(a2, b2, _, _, f2, arg2)) =>
         unify(a1, a2); unify(b1, b2)
         val v = VVar(l)
@@ -377,24 +322,6 @@ object Unification:
         unify(arg1, arg2)
       case (VIrrelevant, _) => ()
       case (_, VIrrelevant) => ()
-      case (VForeign(rt1, cmd1, as1), VForeign(rt2, cmd2, as2))
-          if as1.size == as2.size =>
-        unify(rt1, rt2)
-        unify(cmd1, cmd2)
-        as1.zip(as2).foreach { case ((a, t1), (b, t2)) =>
-          unify(t1, t2); unify(a, b)
-        }
-
-      case (VTCon(_, c1), VTCon(_, c2)) =>
-        val cs1 = c1(VVar(l))
-        val cs2 = c2(VVar(l))
-        if cs1.size != cs2.size then
-          throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")
-        cs1.zip(cs2).foreach { (as1, as2) =>
-          if as1.size != as2.size then
-            throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")
-          as1.zip(as2).foreach((a, b) => unify(a, b)(l + 1))
-        }
 
       case (VFlex(m, sp), VFlex(m2, sp2)) =>
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)
@@ -403,14 +330,9 @@ object Unification:
         val v = VVar(l); unify(b(v), vapp(w, v, i))(l + 1)
       case (w, VLam(_, i, _, b)) =>
         val v = VVar(l); unify(vapp(w, v, i), b(v))(l + 1)
-      case (VPair(a, b, _), w) => unify(a, vfst(w)); unify(b, vsnd(w))
-      case (w, VPair(a, b, _)) => unify(vfst(w), a); unify(vsnd(w), b)
 
       case (VFlex(m, sp), v) => solve(m, sp, v)
       case (v, VFlex(m, sp)) => solve(m, sp, v)
-
-      case (VUnit(), _) => ()
-      case (_, VUnit()) => ()
 
       case (VGlobal(m1, x1, sp1, v1), VGlobal(m2, x2, sp2, v2))
           if m1 == m2 && x1 == x2 =>

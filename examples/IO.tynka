@@ -1,7 +1,0 @@
-import "lib/Prelude" (...)
-import "lib/Push" (...)
-
-def main := javaMain \_.
-  getLn >>= \nStr.
-  case (parseInt nStr) (returnIO U) \n.
-  foldIO_ putLn (range 0 n)
