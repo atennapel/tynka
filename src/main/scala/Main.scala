@@ -2,6 +2,7 @@ import surface.Parser.defsParser
 import common.Debug.*
 import core.Pretty.pretty
 import core.Staging.stage
+import ho.Simplification.simplify
 import elaboration.Elaboration.ElaborateError
 import elaboration.ModuleLoading.load
 
@@ -22,7 +23,7 @@ object Main:
       println(pretty(eds))
 
       println("\nstaging:")
-      val irds = stage(filename, eds)
+      val irds = simplify(stage(filename, eds))
       println(irds)
     catch
       case err: ElaborateError =>
