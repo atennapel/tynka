@@ -6,6 +6,7 @@ import core.Globals.getGlobal
 import core.Evaluation.nf
 import elaboration.Elaboration.elaborate
 import elaboration.Elaboration.ElaborateError
+import core.Staging.stage
 
 import java.io.File
 import scala.io.Source
@@ -27,7 +28,14 @@ object Main:
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
       println(pretty(eds))
-      getGlobal(Name("main")).foreach { g => println(pretty(nf(g.tm))(Nil)) }
+      getGlobal(Name("main")).foreach { g =>
+        println("\nmain normal form:")
+        println(pretty(nf(g.tm))(Nil))
+      }
+
+      println("\nstaging:")
+      val irds = stage(eds)
+      println(irds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)
