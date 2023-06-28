@@ -61,7 +61,7 @@ object Zonking:
         case Proj(t, p, ty, pty) => Proj(t, p, zonk(ty), zonk(pty))
         case t                   => t
 
-    case Lift(vf, t) => Lift(zonk(vf), zonk(t))
+    case Lift(cv, t) => Lift(zonk(cv), zonk(t))
     case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
 

@@ -85,10 +85,10 @@ object Unification:
               s,
               lvl + 1,
               Some(Expl) :: p,
-              Bound(locals, x, quote(a)(lvl), s.map(vf => quote(vf)(lvl)))
+              Bound(locals, x, quote(a)(lvl), s.map(cv => quote(cv)(lvl)))
             )
           )
-        case VLift(vf, a) => go(a, STy(vf), lvl, p, locals).quote
+        case VLift(cv, a) => go(a, STy(cv), lvl, p, locals).quote
         case a =>
           val closed = eval(locals.closeTy(quote(a)(lvl)))(Nil)
           val m = freshMeta(closed, s)
@@ -187,7 +187,7 @@ object Unification:
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
 
-      case VLift(vf, t) => Lift(go(vf), go(t))
+      case VLift(cv, t) => Lift(go(cv), go(t))
       case VQuote(t)    => go(t).quote
 
       case VIrrelevant => Irrelevant
@@ -334,8 +334,8 @@ object Unification:
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
       case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
-      case (VLift(vf1, ty1), VLift(vf2, ty2)) =>
-        unify(vf1, vf2); unify(ty1, ty2)
+      case (VLift(cv1, ty1), VLift(cv2, ty2)) =>
+        unify(cv1, cv2); unify(ty1, ty2)
       case (VQuote(a), VQuote(b)) => unify(a, b)
       case (VIrrelevant, _)       => ()
       case (_, VIrrelevant)       => ()

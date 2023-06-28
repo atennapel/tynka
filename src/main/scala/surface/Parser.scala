@@ -100,6 +100,7 @@ object Parser:
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
           .map(mkUnitPair)
         <|> attempt(holeP)
+        <|> nat
         <|> ("Meta" #> U(SMeta))
         <|> ("Ty" *> projAtom).map(cv => U(STy(cv)))
         <|> ident.map(Var.apply)
@@ -110,6 +111,12 @@ object Parser:
     private val hole = Hole(None)
     private val nZ = Var(Name("Z"))
     private val nS = Var(Name("S"))
+
+    private lazy val nat: Parsley[Tm] = natural.map { i =>
+      var c = nZ
+      for (_ <- 0 to i) c = App(nS, c, ArgIcit(Expl))
+      c
+    }
 
     private def mkPair(ts: List[Tm]): Tm = ts match
       case Nil => unittype
