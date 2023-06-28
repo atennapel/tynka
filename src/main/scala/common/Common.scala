@@ -78,19 +78,50 @@ object Common:
     inline def expose: Int = id
 
   // stages
-  enum Stage[+VF]:
+  enum Stage[+CV]:
     case SMeta extends Stage[Nothing]
-    case STy(vf: VF)
+    case STy(cv: CV)
 
     override def toString: String = this match
       case SMeta   => "Meta"
-      case STy(vf) => s"Ty $vf"
+      case STy(cv) => s"Ty $cv"
 
-    def map[VF2](f: VF => VF2): Stage[VF2] = this match
+    def map[CV2](f: CV => CV2): Stage[CV2] = this match
       case SMeta   => SMeta
-      case STy(vf) => STy(f(vf))
+      case STy(cv) => STy(f(cv))
 
     def isMeta: Boolean = this match
       case SMeta => true
       case _     => false
   export Stage.*
+
+  // primitives
+  enum PrimName:
+    case PCV
+    case PVal
+    case PComp
+    case PFun
+
+    case PUnitType
+    case PUnit
+
+    override def toString: String = this match
+      case PCV   => "CV"
+      case PVal  => "Val"
+      case PComp => "Comp"
+      case PFun  => "Fun"
+
+      case PUnitType => "()"
+      case PUnit     => "[]"
+  export PrimName.*
+  object PrimName:
+    def apply(x: Name): Option[PrimName] = x.expose match
+      case "CV"   => Some(PCV)
+      case "Val"  => Some(PVal)
+      case "Comp" => Some(PComp)
+      case "Fun"  => Some(PFun)
+
+      case "()" => Some(PUnitType)
+      case "[]" => Some(PUnit)
+
+      case _ => None

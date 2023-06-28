@@ -101,7 +101,7 @@ object Parser:
           .map(mkUnitPair)
         <|> attempt(holeP)
         <|> ("Meta" #> U(SMeta))
-        <|> ("Ty" *> projAtom).map(vf => U(STy(vf)))
+        <|> ("Ty" *> projAtom).map(cv => U(STy(cv)))
         <|> ident.map(Var.apply)
     )
 
