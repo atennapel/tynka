@@ -118,7 +118,8 @@ object Staging:
   private type Fresh = () => IR.LName
 
   private def quoteVTy(v: Val1): IR.Ty = v match
-    case _ => impossible()
+    case VPrim1(PInt, Nil) => IR.TInt
+    case _                 => impossible()
 
   private def quoteCTy(v: Val1): IR.TDef = v match
     case VPrim1(PFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteCTy(b))
@@ -174,7 +175,7 @@ object Staging:
       implicit val fresh: Fresh = newFresh()
       val ty = stageFTy(t)
       val value = stageTm(v)
-      Some(IR.DDef(x.expose, ty, value))
+      Some(IR.DDef(x.expose, false, ty, value))
     case _ => None
 
   def stage(ds: Defs): IR.Defs =

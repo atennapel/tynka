@@ -7,6 +7,7 @@ import core.Evaluation.nf
 import elaboration.Elaboration.elaborate
 import elaboration.Elaboration.ElaborateError
 import core.Staging.stage
+import ir.Compilation.compile
 
 import java.io.File
 import scala.io.Source
@@ -36,6 +37,10 @@ object Main:
       println("\nstaging:")
       val irds = stage(eds)
       println(irds)
+
+      println("\ncompilation:")
+      val jvmirds = compile(irds)
+      println(jvmirds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

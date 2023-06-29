@@ -86,6 +86,7 @@ object Pretty:
     case U(s) => pretty(s)
 
     case Pi(_, _, _, _)  => prettyPi(tm)
+    case Fun(_, _, _)    => prettyPi(tm)
     case Lam(_, _, _, _) => prettyLam(tm)
     case App(_, _, _)    => prettyApp(tm)
 

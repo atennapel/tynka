@@ -15,39 +15,32 @@ object Syntax:
     def tdef: TDef = TDef(this)
   export Ty.*
 
-  final case class TDef(ps: Option[List[Ty]], rt: Ty):
+  final case class TDef(ps: List[Ty], rt: Ty):
     override def toString: String = ps match
-      case None => rt.toString
-      case _    => s"(${ps.get.mkString(", ")}) -> $rt"
-    def head: Ty = ps.get.head
-    def tail: TDef = TDef(ps.get.tail, rt)
+      case Nil => rt.toString
+      case _   => s"(${ps.mkString(", ")}) -> $rt"
+    def head: Ty = ps.head
+    def tail: TDef = TDef(ps.tail, rt)
     def ty: Ty =
       if ps.nonEmpty then impossible()
       else rt
-    def drop(n: Int): TDef = TDef(ps.get.drop(n), rt)
-    def params: List[Ty] = ps.getOrElse(Nil)
+    def drop(n: Int): TDef = TDef(ps.drop(n), rt)
+    def params: List[Ty] = ps
   object TDef:
-    def apply(rt: Ty): TDef = TDef(None, rt)
+    def apply(rt: Ty): TDef = TDef(Nil, rt)
     def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
-    def apply(t1: Ty, t2: TDef): TDef =
-      t2.ps match
-        case None     => TDef(List(t1), t2.rt)
-        case Some(ps) => TDef(t1 :: ps, t2.rt)
-    def apply(ps: List[Ty], t2: Ty): TDef = TDef(Some(ps), t2)
-    def apply(ps: List[Ty], t2: TDef): TDef =
-      t2.ps match
-        case None      => TDef(ps, t2.rt)
-        case Some(ps2) => TDef(ps ++ ps2, t2.rt)
+    def apply(t1: Ty, t2: TDef): TDef = TDef(t1 :: t2.ps, t2.rt)
+    def apply(ps: List[Ty], t2: TDef): TDef = TDef(ps ++ t2.ps, t2.rt)
 
   final case class Defs(defs: List[Def]):
     override def toString: String = defs.mkString("\n")
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: GName, ty: TDef, value: Tm)
+    case DDef(name: GName, gen: Boolean, ty: TDef, value: Tm)
 
     override def toString: String = this match
-      case DDef(x, t, v) => s"def $x : $t = $v"
+      case DDef(x, _, t, v) => s"def $x : $t = $v"
   export Def.*
 
   enum Tm:
@@ -109,6 +102,15 @@ object Syntax:
       case App(f, a)          => f.fvs ++ a.fvs
       case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => y == x)
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+
+    def usedNames: Set[LName] = this match
+      case Var(x, t)    => Set(x)
+      case Global(_, _) => Set.empty
+      case IntLit(_)    => Set.empty
+
+      case App(f, a)          => f.usedNames ++ a.usedNames
+      case Lam(x, _, _, b)    => b.usedNames
+      case Let(x, _, _, v, b) => v.usedNames ++ b.usedNames
 
     def subst(sub: Map[LName, Tm]): Tm =
       subst(
