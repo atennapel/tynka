@@ -37,6 +37,7 @@ object Staging:
     case VSplicePrim0(x: PrimName, as: List[Val1])
     case VApp0(f: Val0, a: Val0)
     case VLam0(fnty: Val1, body: Val0 => Val0)
+    case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
   import Val0.*
 
@@ -106,7 +107,14 @@ object Staging:
     case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
     case Prim(x)            => VPrim0(x)
     case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
-    case App(f, a, _)       => VApp0(eval0(f), eval0(a))
+    case Fix(ty, rty, g, x, b, arg) =>
+      VFix0(
+        eval1(ty),
+        eval1(rty),
+        (v, w) => eval0(b)(Def0(Def0(env, v), w)),
+        eval0(arg)
+      )
+    case App(f, a, _) => VApp0(eval0(f), eval0(a))
     case Let(x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
     case Splice(t) => vsplice0(eval1(t))
@@ -142,6 +150,19 @@ object Staging:
           qt.tail,
           quote(b(VVar0(l)))(l + 1, (x, IR.TDef(qt.head)) :: ns, fresh)
         )
+      case VFix0(ty, rty, b, arg) =>
+        val ta = quoteVTy(ty)
+        val tb = quoteCTy(rty)
+        val g = fresh()
+        val x = fresh()
+        val qf = quote(b(VVar0(l), VVar0(l + 1)))(
+          l + 2,
+          (x, IR.TDef(ta)) :: (g, IR.TDef(ta, tb)) :: ns,
+          fresh
+        )
+        val qarg = quote(arg)
+        IR.Fix(ta, tb, g, x, qf, qarg)
+
       case VLet0(ty, bty, v, b) =>
         val x = fresh()
         val qt = quoteCTy(ty)

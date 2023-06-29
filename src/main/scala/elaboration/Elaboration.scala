@@ -391,6 +391,15 @@ object Elaboration:
         val eb = checkType(b, SMeta)(ctx.bind(x, va, SMeta))
         Sigma(x, ea, eb)
 
+      case (S.Fix(g, x, b, arg), _) if !stage.isMeta =>
+        val STy(cv) = stage: @unchecked
+        val (earg, pty) = infer(arg, SVTy())
+        val eb =
+          check(b, ty, STy(cv))(
+            ctx.bind(g, VFun(pty, cv, ty), SCTy()).bind(x, pty, SVTy())
+          )
+        Fix(ctx.quote(pty), ctx.quote(ty), g, x, eb, earg)
+
       case (S.Quote(t), VLift(cv, a)) => check(t, a, STy(cv)).quote
       case (t, VLift(cv, a))          => check(t, a, STy(cv)).quote
 
@@ -495,6 +504,16 @@ object Elaboration:
         val t = newMeta(ty, s)
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, ty, s))
         (t, ty)
+
+      case S.Fix(g, x, b, arg) if !s.isMeta =>
+        val STy(cv) = s: @unchecked
+        val (earg, vty) = infer(arg, SVTy())
+        val rty = newMeta(VUTy(cv), SMeta)
+        val vrty = ctx.eval(rty)
+        val ft = VFun(vty, cv, vrty)
+        val eb =
+          check(b, vrty, STy(cv))(ctx.bind(g, ft, SCTy()).bind(x, vty, SVTy()))
+        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty)
 
       case _ =>
         val (t, a, si) = insert(infer(tm))
@@ -677,6 +696,16 @@ object Elaboration:
                     (Proj(et2, Snd, Irrelevant, Irrelevant), ty, SMeta)
                   case _ => error(s"named projection with ambigious type: $tm")
               case STy(_) => error(s"projection in Ty: $tm")
+
+      case S.Fix(g, x, b, arg) =>
+        val (earg, vty) = infer(arg, SVTy())
+        val cv = ctx.eval(newCV())
+        val rty = newMeta(VUTy(cv), SMeta)
+        val vrty = ctx.eval(rty)
+        val ft = VFun(vty, cv, vrty)
+        val eb =
+          check(b, vrty, STy(cv))(ctx.bind(g, ft, SCTy()).bind(x, vty, SVTy()))
+        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, STy(cv))
 
       case S.Lift(a) =>
         val cv = newCV()

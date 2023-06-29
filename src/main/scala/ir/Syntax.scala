@@ -51,6 +51,7 @@ object Syntax:
 
     case App(fn: Tm, arg: Tm)
     case Lam(name: LName, t1: Ty, t2: TDef, body: Tm)
+    case Fix(ty: Ty, rty: TDef, g: LName, x: LName, b: Tm, arg: Tm)
     case Let(
         name: LName,
         ty: TDef,
@@ -65,9 +66,10 @@ object Syntax:
 
       case IntLit(n) => s"$n"
 
-      case App(f, a)          => s"($f $a)"
-      case Lam(x, t, _, b)    => s"(\\($x : $t). $b)"
-      case Let(x, t, _, v, b) => s"(let $x : $t = $v; $b)"
+      case App(f, a)               => s"($f $a)"
+      case Lam(x, t, _, b)         => s"(\\($x : $t). $b)"
+      case Fix(_, _, g, x, b, arg) => s"(fix ($g $x. $b) $arg)"
+      case Let(x, t, _, v, b)      => s"(let $x : $t = $v; $b)"
 
     def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
       ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -99,18 +101,21 @@ object Syntax:
       case Global(_, _) => Nil
       case IntLit(_)    => Nil
 
-      case App(f, a)          => f.fvs ++ a.fvs
-      case Lam(x, _, _, b)    => b.fvs.filterNot((y, _) => y == x)
+      case App(f, a)       => f.fvs ++ a.fvs
+      case Lam(x, _, _, b) => b.fvs.filterNot((y, _) => y == x)
+      case Fix(_, _, go, x, b, arg) =>
+        b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
     def usedNames: Set[LName] = this match
-      case Var(x, t)    => Set(x)
+      case Var(x, _)    => Set(x)
       case Global(_, _) => Set.empty
       case IntLit(_)    => Set.empty
 
-      case App(f, a)          => f.usedNames ++ a.usedNames
-      case Lam(x, _, _, b)    => b.usedNames
-      case Let(x, _, _, v, b) => v.usedNames ++ b.usedNames
+      case App(f, a)               => f.usedNames ++ a.usedNames
+      case Lam(_, _, _, b)         => b.usedNames
+      case Let(_, _, _, v, b)      => v.usedNames ++ b.usedNames
+      case Fix(_, _, _, _, b, arg) => b.usedNames ++ arg.usedNames
 
     def subst(sub: Map[LName, Tm]): Tm =
       subst(
@@ -153,6 +158,14 @@ object Syntax:
           val (List((x, _)), b) =
             underN(List((x0, TDef(t1))), b0, sub, scope)
           Lam(x, t1, t2, b)
+        case Fix(t1, t2, g0, x0, b0, arg) =>
+          val (List((g, _), (x, _)), b) = underN(
+            List((g0, TDef(t1, t2)), (x0, TDef(t1))),
+            b0,
+            sub,
+            scope
+          )
+          Fix(t1, t2, g, x, b, arg.subst(sub, scope))
         case Let(x0, t, bt, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)

@@ -48,18 +48,17 @@ object Syntax:
         name: GName,
         gen: Boolean,
         ty: TDef,
-        ps: List[(LName, Ty)],
         value: Tm
     )
 
     override def toString: String = this match
-      case DDef(x, _, TDef(None, t), _, v) => s"def $x : $t = $v"
-      case DDef(x, _, t, Nil, v)           => s"def $x () : $t = $v"
-      case DDef(x, _, t, ps, v) =>
-        s"def $x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
+      case DDef(x, _, TDef(None, t), v) => s"def $x : $t = $v"
+      case DDef(x, _, t, v) =>
+        s"def $x (${t.params.mkString(", ")}) : ${t.rt} = $v"
   export Def.*
 
   enum Tm:
+    case Arg(ix: Int)
     case Var(name: LName)
     case Global(name: GName, ty: Ty)
 
@@ -75,6 +74,7 @@ object Syntax:
     case IntLit(value: Int)
 
     override def toString: String = this match
+      case Arg(i)          => s"'arg$i"
       case Var(x)          => s"'$x"
       case Global(x, _)    => s"$x"
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"

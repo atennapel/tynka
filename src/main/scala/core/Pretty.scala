@@ -90,6 +90,9 @@ object Pretty:
     case Lam(_, _, _, _) => prettyLam(tm)
     case App(_, _, _)    => prettyApp(tm)
 
+    case Fix(_, _, g, x, b, arg) =>
+      s"fix ($g $x. ${prettyParen(b)(x.toName :: g.toName :: ns)}) ${prettyParen(arg)}"
+
     case Sigma(_, _, _) => prettySigma(tm)
     case Pair(_, _, _) =>
       val es = flattenPair(tm)

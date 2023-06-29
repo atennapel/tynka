@@ -23,6 +23,7 @@ object Parser:
       keywords = Set(
         "def",
         "let",
+        "fix",
         "Meta",
         "Ty"
       ),
@@ -134,7 +135,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|>
+      ) <|> let <|> lam <|> fix <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -163,6 +164,16 @@ object Parser:
             )
           }
         }
+
+    private lazy val fix: Parsley[Tm] = positioned(
+      ("fix" *> "(" *> bind <~> bind <~> "." *> tm <* ")" <~> projAtom <~> many(
+        arg
+      ) <~> option(lam)).map { case (((((g, x), b), arg), args), opt) =>
+        val fn = Fix(g, x, b, arg)
+        (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
+          .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
+      }
+    )
 
     private type DefParam = (List[Bind], Icit, Option[Ty])
     private lazy val defParam: Parsley[DefParam] =

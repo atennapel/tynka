@@ -7,35 +7,41 @@ import jvmir.Syntax as J
 
 import scala.collection.mutable
 
-// TODO: tail-calls, proper name generation
 object Compilation:
   def compile(ds: Defs): J.Defs = J.Defs(ds.toList.flatMap(go))
 
+  private type LocalMap = mutable.Map[LName, (LName, Boolean)]
+  private case class LocalRename(
+      ref: Ref[LName] = Ref(0),
+      map: LocalMap = mutable.Map.empty
+  ):
+    def get(oldName: LName): (LName, Boolean) = map(oldName)
+    def set(oldName: LName, newName: LName, isArg: Boolean): Unit =
+      map += oldName -> (newName, isArg)
+    def fresh(oldName: LName, isArg: Boolean): LName =
+      val x = ref.updateGetOld(_ + 1)
+      map += oldName -> (x, isArg)
+      x
+
   private def go(d: Def): List[J.Def] =
     conv(d).map { case DDef(x, gen, t, v) =>
+      implicit val defname: GName = x
+      implicit val rename: LocalRename = LocalRename()
       v.flattenLams match
-        case (None, v) => J.DDef(x, gen, go(t), Nil, go(v))
+        case (None, v) => J.DDef(x, gen, go(t), go(v, true))
         case (Some((ps, bt)), v) =>
-          J.DDef(x, gen, go(t), ps.map((x, t) => (x, go(t))), go(v))
+          ps.zipWithIndex.foreach { case ((x, _), i) => rename.set(x, i, true) }
+          J.DDef(x, gen, go(t), go(v, true))
     }
 
-  private def dropLambdas(n: Int, t: Tm): Tm = (n, t) match
-    case (0, t)               => t
-    case (n, Lam(_, _, _, b)) => dropLambdas(n - 1, b)
-    case _                    => impossible()
-
-  private def conv(d: Def): List[Def] = d match
-    case DDef(x, gen, t, v) =>
-      val (ps, rt, b) = etaExpand(t, v)
-      implicit val newDefs: NewDefs = mutable.ArrayBuffer.empty
-      implicit val uniq: Ref[Int] = Ref(0)
-      implicit val defname: GName = x
-      val cb = conv(b).lams(ps, TDef(rt))
-      newDefs.toList.flatMap(conv) ++ List(DDef(x, gen, t, cb))
-
-  private def go(t: Tm): J.Tm =
+  private def go(t: Tm, tr: Boolean)(implicit
+      defname: GName,
+      localrename: LocalRename
+  ): J.Tm =
     t match
-      case Var(x, _) => J.Var(x)
+      case Var(x0, _) =>
+        val (x, arg) = localrename.get(x0)
+        if arg then J.Arg(x) else J.Var(x)
       case Global(x, t) =>
         if t.ps.nonEmpty then impossible()
         J.Global(x, go(t.rt))
@@ -45,12 +51,21 @@ object Compilation:
       case app @ App(_, _) =>
         val (f, as) = app.flattenApps
         f match
-          case Global(x, t) => J.GlobalApp(x, go(t), false, as.map(go))
-          case _            => impossible()
+          case Global(x, t) =>
+            J.GlobalApp(
+              x,
+              go(t),
+              tr && x == defname,
+              as.map(go(_, false))
+            )
+          case _ => impossible()
 
-      case Let(x, t, rt, v, b) => J.Let(x, go(t.ty), go(v), go(b))
+      case Let(x0, t, rt, v, b) =>
+        val x = localrename.fresh(x0, false)
+        J.Let(x, go(t.ty), go(v, false), go(b, tr))
 
-      case Lam(x, t, rt, b) => impossible()
+      case Lam(_, _, _, _)       => impossible()
+      case Fix(_, _, _, _, _, _) => impossible()
 
   private def go(t: Ty): J.Ty = t match
     case TInt => J.TInt
@@ -65,9 +80,31 @@ object Compilation:
   // simplify and lambdalift
   private type NewDefs = mutable.ArrayBuffer[Def]
 
+  private case class GlobalGen(ref: Ref[Int] = Ref(0)):
+    def gen()(implicit defname: GName): GName =
+      s"$defname$$${ref.updateGetOld(_ + 1)}"
+
+  private case class LocalGen(ref: Ref[LName] = Ref(0)):
+    def fresh(): LName = ref.updateGetOld(_ + 1)
+
+  private def conv(d: Def): List[Def] = d match
+    case DDef(x, gen, t, v) =>
+      val (ps, rt, b) = etaExpand(t, v)
+      implicit val defname: GName = x
+      implicit val newDefs: NewDefs = mutable.ArrayBuffer.empty
+      implicit val globalgen: GlobalGen = GlobalGen()
+      implicit val localgen: LocalGen = LocalGen()
+      val cb = conv(b).lams(ps, TDef(rt))
+      newDefs.toList.flatMap(conv) ++ List(DDef(x, gen, t, cb))
+
   private def conv(
       tm: Tm
-  )(implicit defs: NewDefs, uniq: Ref[Int], defname: GName): Tm = tm match
+  )(implicit
+      defs: NewDefs,
+      globalgen: GlobalGen,
+      localgen: LocalGen,
+      defname: GName
+  ): Tm = tm match
     case Var(x, t)    => tm
     case Global(x, t) => tm
     case IntLit(n)    => tm
@@ -100,7 +137,7 @@ object Compilation:
             val args = nps.zipWithIndex.map { case ((x, _), ix) =>
               x -> ix
             }.toMap
-            val gx = s"$defname$$${uniq.updateGetOld(_ + 1)}"
+            val gx = globalgen.gen()
             defs += DDef(
               gx,
               true,
@@ -111,6 +148,30 @@ object Compilation:
               .apps(fv.map((x, t) => Var(x, TDef(t))))
             val (vs2, spine2) = eta(bt.params)
             conv(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, TDef(bt.rt)))
+
+    case Fix(t1, t2, g, x, b0, arg) =>
+      val (vs, spine) = eta(t2.params)
+      val fv = b0.fvs
+        .filterNot((y, _) => y == g || y == x)
+        .map((x, t) => (x, t.ty))
+        .distinctBy((y, _) => y)
+      val nps = fv ++ List((x, t1)) ++ vs
+      val args = nps.zipWithIndex.map { case ((x, _), ix) =>
+        x -> ix
+      }.toMap
+      val gx = globalgen.gen()
+      val gl = Global(gx, TDef(nps.map(_._2), t2.rt))
+        .apps(fv.map((x, t) => Var(x, TDef(t))))
+      val b = conv(
+        b0.apps(spine).lams(nps, TDef(t2.rt)).subst(Map(g -> gl))
+      )
+      defs += DDef(
+        gx,
+        true,
+        TDef(fv.map(_._2) ++ List(t1), t2),
+        b
+      )
+      App(gl, conv(arg))
 
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)    => true
@@ -142,12 +203,11 @@ object Compilation:
       case _ => impossible()
 
   private def eta(ps: List[Ty])(implicit
-      uniq: Ref[Int]
+      localgen: LocalGen
   ): (List[(LName, Ty)], List[Tm]) =
     val vs =
       ps.foldLeft[List[(LName, Ty)]](Nil) { case (vs, ty) =>
-        val x = uniq.updateGetOld(_ + 1)
-        vs ++ List((x, ty))
+        vs ++ List((localgen.fresh(), ty))
       }
     val spine = vs.map((x, t) => Var(x, TDef(t)))
     (vs, spine)
