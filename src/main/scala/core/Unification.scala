@@ -199,6 +199,9 @@ object Unification:
       case VLift(cv, t) => Lift(go(cv), go(t))
       case VQuote(t)    => go(t).quote
 
+      case VTCon(x, as)         => TCon(x, as.map(go))
+      case VCon(x, cx, tas, as) => Con(x, cx, tas.map(go), as.map(go))
+
       case VIrrelevant => Irrelevant
     go(v)
 
@@ -352,6 +355,13 @@ object Unification:
         val w = VVar(l + 1)
         unify(f1(v, w), f2(v, w))(l + 1)
         unify(arg1, arg2)
+      case (VTCon(x, as1), VTCon(y, as2)) if x == y && as1.size == as2.size =>
+        as1.zip(as2).foreach((v, w) => unify(v, w))
+      case (VCon(x, cx, tas1, as1), VCon(y, cy, tas2, as2))
+          if x == y && cx == cy && tas1.size == tas2.size && as1.size == as2.size =>
+        tas1.zip(tas2).foreach((v, w) => unify(v, w))
+        as1.zip(as2).foreach((v, w) => unify(v, w))
+
       case (VIrrelevant, _) => ()
       case (_, VIrrelevant) => ()
 

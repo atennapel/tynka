@@ -114,6 +114,9 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
+    case TCon(x, as)         => VTCon(x, as.map(eval))
+    case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
+
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
 
@@ -184,6 +187,15 @@ object Evaluation:
 
       case VLift(cv, t) => Lift(quote(cv, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
+
+      case VTCon(x, as) => TCon(x, as.map(a => quote(a, unfold)))
+      case VCon(x, cx, tas, as) =>
+        Con(
+          x,
+          cx,
+          tas.map(a => quote(a, unfold)),
+          as.map(a => quote(a, unfold))
+        )
 
       case VIrrelevant => Irrelevant
 

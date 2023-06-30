@@ -8,9 +8,12 @@ object Syntax:
 
   enum Ty:
     case TInt
+    case TCon(x: GName, args: List[Ty])
 
     override def toString: String = this match
-      case TInt => "Int"
+      case TInt         => "Int"
+      case TCon(x, Nil) => s"$x"
+      case TCon(x, as)  => s"$x ${as.mkString(" ")}"
 
     def tdef: TDef = TDef(this)
   export Ty.*
@@ -73,6 +76,8 @@ object Syntax:
 
     case IntLit(value: Int)
 
+    case Con(name: GName, con: GName, targs: List[Ty], args: List[Tm])
+
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"
       case Var(x)          => s"'$x"
@@ -83,4 +88,10 @@ object Syntax:
 
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
+
+      case Con(x, cx, Nil, Nil) => s"(con $x $cx)"
+      case Con(x, cx, Nil, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Con(x, cx, tas, Nil) => s"(con $x $cx (${tas.mkString(" ")}))"
+      case Con(x, cx, tas, as) =>
+        s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
   export Tm.*

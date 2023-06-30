@@ -60,6 +60,9 @@ object Value:
     case VLift(cv: VTy, tm: VTy)
     case VQuote(tm: Val)
 
+    case VTCon(name: Name, args: List[Val])
+    case VCon(name: Name, con: Name, targs: List[Val], args: List[Val])
+
     case VIrrelevant
   export Val.*
 

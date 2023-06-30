@@ -64,11 +64,15 @@ object Compilation:
         val x = localrename.fresh(x0, false)
         J.Let(x, go(t.ty), go(v, false), go(b, tr))
 
+      case Con(x, cx, tas, as) =>
+        J.Con(x, cx, tas.map(go), as.map(go(_, false)))
+
       case Lam(_, _, _, _)       => impossible()
       case Fix(_, _, _, _, _, _) => impossible()
 
   private def go(t: Ty): J.Ty = t match
-    case TInt => J.TInt
+    case TInt        => J.TInt
+    case TCon(x, as) => J.TCon(x, as.map(go))
 
   private def go(t: TDef): J.TDef = t match
     case TDef(ps, rt) => J.TDef(ps.map(go), go(rt))
@@ -173,11 +177,14 @@ object Compilation:
       )
       App(gl, conv(arg))
 
+    case Con(x, cx, tas, as) => Con(x, cx, tas, as.map(conv))
+
   private def isSmall(v: Tm): Boolean = v match
-    case Var(_, _)    => true
-    case Global(_, _) => true
-    case IntLit(_)    => true
-    case _            => false
+    case Var(_, _)         => true
+    case Global(_, _)      => true
+    case IntLit(_)         => true
+    case Con(_, _, _, Nil) => true
+    case _                 => false
 
   private def etaExpand(t: TDef, v: Tm): (List[(LName, Ty)], Ty, Tm) =
     val (ps, b) = v.flattenLams

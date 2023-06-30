@@ -1,6 +1,6 @@
 package ir
 
-import common.Common.*
+import common.Common.impossible
 
 object Syntax:
   type LName = Int
@@ -8,9 +8,12 @@ object Syntax:
 
   enum Ty:
     case TInt
+    case TCon(x: GName, args: List[Ty])
 
     override def toString: String = this match
-      case TInt => "Int"
+      case TInt         => "Int"
+      case TCon(x, Nil) => s"$x"
+      case TCon(x, as)  => s"$x ${as.mkString(" ")}"
 
     def tdef: TDef = TDef(this)
   export Ty.*
@@ -60,6 +63,8 @@ object Syntax:
         body: Tm
     )
 
+    case Con(name: GName, con: GName, targs: List[Ty], args: List[Tm])
+
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
@@ -70,6 +75,12 @@ object Syntax:
       case Lam(x, t, _, b)         => s"(\\($x : $t). $b)"
       case Fix(_, _, g, x, b, arg) => s"(fix ($g $x. $b) $arg)"
       case Let(x, t, _, v, b)      => s"(let $x : $t = $v; $b)"
+
+      case Con(x, cx, Nil, Nil) => s"(con $x $cx)"
+      case Con(x, cx, Nil, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Con(x, cx, tas, Nil) => s"(con $x $cx (${tas.mkString(" ")}))"
+      case Con(x, cx, tas, as) =>
+        s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
 
     def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
       ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -107,6 +118,8 @@ object Syntax:
         b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
+      case Con(x, cx, tas, as) => as.flatMap(_.fvs)
+
     def usedNames: Set[LName] = this match
       case Var(x, _)    => Set(x)
       case Global(_, _) => Set.empty
@@ -116,6 +129,8 @@ object Syntax:
       case Lam(_, _, _, b)         => b.usedNames
       case Let(_, _, _, v, b)      => v.usedNames ++ b.usedNames
       case Fix(_, _, _, _, b, arg) => b.usedNames ++ arg.usedNames
+
+      case Con(_, _, _, as) => as.flatMap(_.usedNames).toSet
 
     def subst(sub: Map[LName, Tm]): Tm =
       subst(
@@ -169,4 +184,5 @@ object Syntax:
         case Let(x0, t, bt, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)
+        case Con(x, cx, tas, as) => Con(x, cx, tas, as.map(_.subst(sub, scope)))
   export Tm.*

@@ -28,6 +28,7 @@ object Staging:
     case VQuote1(v: Val0)
     case VType1
     case VPair1(fst: Val1, snd: Val1)
+    case VTCon1(x: Name, args: List[Val1])
   import Val1.*
 
   private enum Val0:
@@ -39,6 +40,7 @@ object Staging:
     case VLam0(fnty: Val1, body: Val0 => Val0)
     case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
+    case VCon0(x: Name, con: Name, tas: List[Val1], as: List[Val0])
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -76,6 +78,7 @@ object Staging:
     case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
     case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
     case Quote(t)              => VQuote1(eval0(t))
+    case TCon(x, as)           => VTCon1(x, as.map(eval1))
     case Wk(t)                 => eval1(t)(env.tail)
 
     case U(_)           => VType1
@@ -117,9 +120,10 @@ object Staging:
     case App(f, a, _) => VApp0(eval0(f), eval0(a))
     case Let(x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
-    case Splice(t) => vsplice0(eval1(t))
-    case Wk(t)     => eval0(t)(env.tail)
-    case _         => impossible()
+    case Splice(t)           => vsplice0(eval1(t))
+    case Con(x, cx, tas, as) => VCon0(x, cx, tas.map(eval1), as.map(eval0))
+    case Wk(t)               => eval0(t)(env.tail)
+    case _                   => impossible()
 
   // quotation
   private type NS = List[(IR.LName, IR.TDef)]
@@ -127,6 +131,7 @@ object Staging:
 
   private def quoteVTy(v: Val1): IR.Ty = v match
     case VPrim1(PInt, Nil) => IR.TInt
+    case VTCon1(x, as)     => IR.TCon(x.expose, as.map(quoteVTy))
     case _                 => impossible()
 
   private def quoteCTy(v: Val1): IR.TDef = v match
@@ -173,6 +178,9 @@ object Staging:
           quote(v),
           quote(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh)
         )
+
+      case VCon0(x, cx, tas, as) =>
+        IR.Con(x.expose, cx.expose, tas.map(quoteVTy), as.map(quote))
 
       case VPrim0(_)           => impossible()
       case VSplicePrim0(x, as) => impossible()

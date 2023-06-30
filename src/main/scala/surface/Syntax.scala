@@ -15,11 +15,23 @@ object Syntax:
         ty: Option[Ty],
         value: Tm
     )
+    case DData(
+        pos: PosInfo,
+        name: Name,
+        ps: List[Name],
+        cs: List[(PosInfo, Name, List[Ty])]
+    )
 
     override def toString: String = this match
       case DDef(_, x, m, Some(t), v) =>
         s"def $x : $t ${if m then "" else ":"}= $v"
       case DDef(_, x, m, None, v) => s"def $x ${if m then "" else ":"}= $v"
+      case DData(_, x, ps, Nil) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
+      case DData(_, x, ps, cs) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs
+            .map((_, x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
+            .mkString(" | ")}"
   export Def.*
 
   enum ArgInfo:

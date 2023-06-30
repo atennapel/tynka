@@ -12,10 +12,21 @@ object Syntax:
 
   enum Def:
     case DDef(name: Name, ty: Ty, stage: CStage, value: Tm)
+    case DData(
+        name: Name,
+        ps: List[Name],
+        cs: List[(Name, List[Ty])]
+    )
 
     override def toString: String = this match
       case DDef(x, t, SMeta, v)  => s"def $x : $t = $v"
       case DDef(x, t, STy(_), v) => s"def $x : $t := $v"
+      case DData(x, ps, Nil) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
+      case DData(x, ps, cs) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs
+            .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
+            .mkString(" | ")}"
   export Def.*
 
   enum ProjType:
@@ -50,6 +61,9 @@ object Syntax:
     case Lift(cv: Ty, tm: Ty)
     case Quote(tm: Tm)
     case Splice(tm: Tm)
+
+    case TCon(name: Name, args: List[Ty])
+    case Con(name: Name, con: Name, targs: List[Ty], args: List[Tm])
 
     case Wk(tm: Tm)
 
@@ -95,6 +109,14 @@ object Syntax:
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"
       case Splice(t)  => s"$$$t"
+
+      case TCon(name, Nil)      => s"(tcon $name)"
+      case TCon(name, as)       => s"(tcon $name ${as.mkString(" ")})"
+      case Con(x, cx, Nil, Nil) => s"(con $x $cx)"
+      case Con(x, cx, Nil, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Con(x, cx, tas, Nil) => s"(con $x $cx (${tas.mkString(" ")}))"
+      case Con(x, cx, tas, as) =>
+        s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
 
       case Wk(t)      => s"(Wk $t)"
       case Irrelevant => "Ir"

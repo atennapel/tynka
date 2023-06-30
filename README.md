@@ -8,3 +8,10 @@ Try it out:
 sbt "run examples/IO"
 java IO
 ```
+
+TODO:
+- [ ] Datatype monomorphization
+- [ ] Case expressions
+- [ ] JVM bytecode generation
+- [ ] Foreign datatypes and operations
+- [ ] IO

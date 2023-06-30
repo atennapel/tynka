@@ -24,6 +24,7 @@ object Parser:
         "def",
         "let",
         "fix",
+        "data",
         "Meta",
         "Ty"
       ),
@@ -40,7 +41,8 @@ object Parser:
         "_",
         "^",
         "`",
-        "$"
+        "$",
+        "|"
       ),
       identStart = Predicate(c => c.isLetter || c == '_'),
       identLetter = Predicate(c =>
@@ -115,7 +117,7 @@ object Parser:
 
     private lazy val nat: Parsley[Tm] = natural.map { i =>
       var c = nZ
-      for (_ <- 0 to i) c = App(nS, c, ArgIcit(Expl))
+      for (_ <- 0 until i) c = App(nS, c, ArgIcit(Expl))
       c
     }
 
@@ -302,7 +304,7 @@ object Parser:
 
     // definitions
     lazy val defs: Parsley[Defs] =
-      many(defP).map(Defs.apply)
+      many(defP <|> dataP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
       (pos <~> "def" *> identOrOp <~> many(defParam) <~> option(
@@ -316,6 +318,17 @@ object Parser:
             ty.map(typeFromParams(ps, _)),
             lamFromDefParams(ps, v, ty.isEmpty)
           )
+        }
+
+    private lazy val dataP: Parsley[Def] =
+      (pos <~> "data" *> identOrOp <~> many(
+        identOrOp
+      ) <~> (":=" <|> "|") *> sepBy(
+        pos <~> identOrOp <~> many(projAtom),
+        "|"
+      ))
+        .map { case (((pos, x), ps), cs) =>
+          DData(pos, x, ps, cs.map { case ((pos, x), ts) => (pos, x, ts) })
         }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)

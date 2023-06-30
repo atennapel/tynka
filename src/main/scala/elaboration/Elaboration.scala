@@ -784,6 +784,95 @@ object Elaboration:
         val ed = DDef(x, ety, estage, etm)
         debug(s"elaborated $ed")
         List(ed)
+      case S.DData(pos, dx, ps, cs) =>
+        implicit val ctx: Ctx = Ctx.empty(pos)
+        // TODO: check that datatype name is unique
+
+        // generate tcon
+        if getGlobal(dx).isDefined then error(s"duplicate datatype $dx")
+        val vty = U(STy(Prim(PVal)))
+        val tconty = ps.foldRight(vty)((_, t) => Pi(DontBind, Expl, vty, t))
+        val tcon =
+          ps.foldRight[(Tm, Ty)](
+            (
+              TCon(dx, (0 until ps.size).reverse.map(i => Var(mkIx(i))).toList),
+              vty
+            )
+          ) { case (x, (b, t)) =>
+            val ty = Pi(DontBind, Expl, vty, t)
+            (Lam(DoBind(x), Expl, ty, b), ty)
+          }._1
+        setGlobal(
+          GlobalEntry(
+            dx,
+            tcon,
+            tconty,
+            SMeta,
+            ctx.eval(tcon),
+            ctx.eval(tconty),
+            SMeta
+          )
+        )
+
+        // check cases
+        val ccs = {
+          implicit val casectx1: Ctx =
+            ps.foldLeft(ctx)((ctx, x) => ctx.bind(DoBind(x), VVTy(), SMeta))
+          val ccs = cs.map { (pos, cx, as) =>
+            implicit val casectx2: Ctx = casectx1.enter(pos)
+            if getGlobal(cx).isDefined then
+              error(s"duplicate datatype constructor $cx")
+            val cas = as.map { ta =>
+              // TODO: check recursion
+              val cta = check(ta, VVTy(), SMeta)
+              cta
+            }
+
+            // add global for datatype case
+            val rty = Lift(
+              Prim(PVal),
+              (0 until ps.size).reverse.foldLeft(Global(dx))((f, i) =>
+                App(f, Var(mkIx(i)), Expl)
+              )
+            )
+            val targs =
+              (0 until ps.size).reverse
+                .map(i => Var(mkIx(i + cas.size)))
+                .toList
+            val args =
+              (0 until cas.size).reverse.map(i => Splice(Var(mkIx(i)))).toList
+            val body = Quote(Con(dx, cx, targs, args))
+            val (con, conty) =
+              ps.foldRight[(Tm, Ty)](
+                cas.zipWithIndex.foldRight[(Tm, Ty)]((body, rty)) {
+                  case ((ty, i), (b, rt)) =>
+                    val nty = Pi(DontBind, Expl, Lift(Prim(PVal), ty), Wk(rt))
+                    (Lam(DoBind(Name(s"a$i")), Expl, nty, b), nty)
+                }
+              ) { case (p, (b, rt)) =>
+                val nty = Pi(DoBind(p), Impl, vty, rt)
+                (Lam(DoBind(p), Impl, nty, b), nty)
+              }
+
+            setGlobal(
+              GlobalEntry(
+                cx,
+                con,
+                conty,
+                SMeta,
+                ctx.eval(con),
+                ctx.eval(conty),
+                SMeta
+              )
+            )
+
+            ((cx, cas), DDef(cx, conty, SMeta, con))
+          }
+          ccs
+        }
+
+        List(DData(dx, ps, ccs.map(_._1)), DDef(dx, tconty, SMeta, tcon)) ++ ccs
+          .map(_._2)
 
   def elaborate(uri: String, ds: S.Defs): Defs =
     try Defs(ds.toList.flatMap(d => elaborate(d)))
