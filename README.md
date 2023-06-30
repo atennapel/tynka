@@ -11,7 +11,6 @@ java IO
 
 TODO:
 - [x] Datatype monomorphization
-- [ ] Improve datatype order in staging
 - [ ] Case expressions
 - [ ] If expressions
 - [ ] Higher-kinded type parameters for datatypes

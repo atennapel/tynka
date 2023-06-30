@@ -132,10 +132,13 @@ object Staging:
 
   private case class DataMonomorphizer(
       typeCache: mutable.Map[Name, DData] = mutable.Map.empty,
+      typeOrder: mutable.ArrayBuffer[Name] = mutable.ArrayBuffer.empty,
       cache: mutable.Map[(Name, List[IR.Ty]), IR.GName] = mutable.Map.empty,
       defCache: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty
   ):
-    def addDef(ddef: DData): Unit = typeCache += ddef.name -> ddef
+    def addDef(ddef: DData): Unit =
+      typeCache += ddef.name -> ddef
+      typeOrder += ddef.name
 
     def get(name: Name, cparams: List[Val1]): IR.GName =
       val params = cparams.map(quoteVTy(_)(this))
@@ -154,7 +157,12 @@ object Staging:
           )
           x
 
-    def defs: List[IR.Def] = defCache.toList
+    def defs: List[IR.Def] =
+      for {
+        dx <- typeOrder.toList
+        entry <- cache.filter { case ((y, _), _) => dx == y }
+        data <- defCache.find(d => d.name == entry._2)
+      } yield data
 
   private def quoteVTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.Ty =
     v match
