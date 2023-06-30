@@ -7,7 +7,8 @@ import Globals.getGlobal
 import ir.Syntax as IR
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
+import scala.collection.immutable.ListMap
 
 object Staging:
   // evaluation
@@ -129,16 +130,47 @@ object Staging:
   private type NS = List[(IR.LName, IR.TDef)]
   private type Fresh = () => IR.LName
 
-  private def quoteVTy(v: Val1): IR.Ty = v match
-    case VPrim1(PInt, Nil) => IR.TInt
-    case VTCon1(x, as)     => IR.TCon(x.expose, as.map(quoteVTy))
-    case _                 => impossible()
+  private case class DataMonomorphizer(
+      typeCache: mutable.Map[Name, DData] = mutable.Map.empty,
+      cache: mutable.Map[(Name, List[IR.Ty]), IR.GName] = mutable.Map.empty,
+      defCache: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty
+  ):
+    def addDef(ddef: DData): Unit = typeCache += ddef.name -> ddef
 
-  private def quoteCTy(v: Val1): IR.TDef = v match
-    case VPrim1(PFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteCTy(b))
-    case _                           => IR.TDef(quoteVTy(v))
+    def get(name: Name, cparams: List[Val1]): IR.GName =
+      val params = cparams.map(quoteVTy(_)(this))
+      cache.get((name, params)) match
+        case Some(x) => x
+        case None =>
+          val x =
+            s"${name.expose}${if params.isEmpty then "" else "_"}${params.mkString("_")}"
+          cache += (name, params) -> x
+          implicit val env: Env = cparams.foldLeft(Empty)(Def1.apply)
+          defCache += IR.DData(
+            x,
+            typeCache(name).cs.map((cx, as) =>
+              (cx.expose, as.map(a => quoteVTy(eval1(a))(this)))
+            )
+          )
+          x
 
-  private def quote(v: Val0)(implicit l: Lvl, ns: NS, fresh: Fresh): IR.Tm =
+    def defs: List[IR.Def] = defCache.toList
+
+  private def quoteVTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.Ty =
+    v match
+      case VTCon1(x, as) =>
+        val dx = dmono.get(x, as)
+        IR.TCon(dx)
+      case _ => impossible()
+
+  private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
+    v match
+      case VPrim1(PFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteCTy(b))
+      case _                           => IR.TDef(quoteVTy(v))
+
+  private def quote(
+      v: Val0
+  )(implicit l: Lvl, ns: NS, fresh: Fresh, dmono: DataMonomorphizer): IR.Tm =
     v match
       case VVar0(lvl) =>
         val (x, t) = ns(lvl.toIx.expose)
@@ -153,7 +185,7 @@ object Staging:
           x,
           qt.head,
           qt.tail,
-          quote(b(VVar0(l)))(l + 1, (x, IR.TDef(qt.head)) :: ns, fresh)
+          quote(b(VVar0(l)))(l + 1, (x, IR.TDef(qt.head)) :: ns, fresh, dmono)
         )
       case VFix0(ty, rty, b, arg) =>
         val ta = quoteVTy(ty)
@@ -163,7 +195,8 @@ object Staging:
         val qf = quote(b(VVar0(l), VVar0(l + 1)))(
           l + 2,
           (x, IR.TDef(ta)) :: (g, IR.TDef(ta, tb)) :: ns,
-          fresh
+          fresh,
+          dmono
         )
         val qarg = quote(arg)
         IR.Fix(ta, tb, g, x, qf, qarg)
@@ -176,20 +209,24 @@ object Staging:
           qt,
           quoteCTy(bty),
           quote(v),
-          quote(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh)
+          quote(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh, dmono)
         )
 
       case VCon0(x, cx, tas, as) =>
-        IR.Con(x.expose, cx.expose, tas.map(quoteVTy), as.map(quote))
+        val dx = dmono.get(x, tas)
+        IR.Con(dx, cx.expose, as.map(quote))
 
       case VPrim0(_)           => impossible()
       case VSplicePrim0(x, as) => impossible()
 
   // staging
-  private def stageFTy(t: Ty): IR.TDef = quoteCTy(eval1(t)(Empty))
+  private def stageCTy(t: Ty)(implicit dmono: DataMonomorphizer): IR.TDef =
+    quoteCTy(eval1(t)(Empty))
 
-  private def stageTm(tm: Tm)(implicit fresh: Fresh): IR.Tm =
-    quote(eval0(tm)(Empty))(lvl0, Nil, fresh)
+  private def stageTm(
+      tm: Tm
+  )(implicit fresh: Fresh, dmono: DataMonomorphizer): IR.Tm =
+    quote(eval0(tm)(Empty))(lvl0, Nil, fresh, dmono)
 
   private def newFresh(): Fresh =
     var n = 0
@@ -199,14 +236,18 @@ object Staging:
       c
     }
 
-  private def stageDef(d: Def): Option[IR.Def] = d match
+  private def stageDef(d: Def)(implicit
+      dmono: DataMonomorphizer
+  ): Option[IR.Def] = d match
     case DDef(x, t, st @ STy(_), v) =>
       implicit val fresh: Fresh = newFresh()
-      val ty = stageFTy(t)
+      val ty = stageCTy(t)
       val value = stageTm(v)
       Some(IR.DDef(x.expose, false, ty, value))
-    case _ => None
+    case d @ DData(_, _, _) => dmono.addDef(d); None
+    case _                  => None
 
   def stage(ds: Defs): IR.Defs =
+    implicit val dmono: DataMonomorphizer = DataMonomorphizer()
     val sds = ds.toList.flatMap(d => stageDef(d))
-    IR.Defs(sds)
+    IR.Defs(dmono.defs ++ sds)

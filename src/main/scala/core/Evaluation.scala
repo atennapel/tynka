@@ -213,5 +213,3 @@ object Evaluation:
 
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)
-
-    case PInt => (VVTy(), SMeta)

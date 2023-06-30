@@ -10,8 +10,12 @@ java IO
 ```
 
 TODO:
-- [ ] Datatype monomorphization
+- [x] Datatype monomorphization
+- [ ] Improve datatype order in staging
 - [ ] Case expressions
+- [ ] If expressions
+- [ ] Higher-kinded type parameters for datatypes
+- [ ] Recursion check in datatypes definitions
 - [ ] JVM bytecode generation
 - [ ] Foreign datatypes and operations
 - [ ] IO

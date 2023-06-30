@@ -24,14 +24,18 @@ object Compilation:
       x
 
   private def go(d: Def): List[J.Def] =
-    conv(d).map { case DDef(x, gen, t, v) =>
-      implicit val defname: GName = x
-      implicit val rename: LocalRename = LocalRename()
-      v.flattenLams match
-        case (None, v) => J.DDef(x, gen, go(t), go(v, true))
-        case (Some((ps, bt)), v) =>
-          ps.zipWithIndex.foreach { case ((x, _), i) => rename.set(x, i, true) }
-          J.DDef(x, gen, go(t), go(v, true))
+    conv(d).map {
+      case DDef(x, gen, t, v) =>
+        implicit val defname: GName = x
+        implicit val rename: LocalRename = LocalRename()
+        v.flattenLams match
+          case (None, v) => J.DDef(x, gen, go(t), go(v, true))
+          case (Some((ps, bt)), v) =>
+            ps.zipWithIndex.foreach { case ((x, _), i) =>
+              rename.set(x, i, true)
+            }
+            J.DDef(x, gen, go(t), go(v, true))
+      case DData(x, cs) => J.DData(x, cs.map((cx, as) => (cx, as.map(go))))
     }
 
   private def go(t: Tm, tr: Boolean)(implicit
@@ -64,15 +68,13 @@ object Compilation:
         val x = localrename.fresh(x0, false)
         J.Let(x, go(t.ty), go(v, false), go(b, tr))
 
-      case Con(x, cx, tas, as) =>
-        J.Con(x, cx, tas.map(go), as.map(go(_, false)))
+      case Con(x, cx, as) => J.Con(x, cx, as.map(go(_, false)))
 
       case Lam(_, _, _, _)       => impossible()
       case Fix(_, _, _, _, _, _) => impossible()
 
   private def go(t: Ty): J.Ty = t match
-    case TInt        => J.TInt
-    case TCon(x, as) => J.TCon(x, as.map(go))
+    case TCon(x) => J.TCon(x)
 
   private def go(t: TDef): J.TDef = t match
     case TDef(ps, rt) => J.TDef(ps.map(go), go(rt))
@@ -100,6 +102,7 @@ object Compilation:
       implicit val localgen: LocalGen = LocalGen()
       val cb = conv(b).lams(ps, TDef(rt))
       newDefs.toList.flatMap(conv) ++ List(DDef(x, gen, t, cb))
+    case d @ DData(_, _) => List(d)
 
   private def conv(
       tm: Tm
@@ -177,14 +180,14 @@ object Compilation:
       )
       App(gl, conv(arg))
 
-    case Con(x, cx, tas, as) => Con(x, cx, tas, as.map(conv))
+    case Con(x, cx, as) => Con(x, cx, as.map(conv))
 
   private def isSmall(v: Tm): Boolean = v match
-    case Var(_, _)         => true
-    case Global(_, _)      => true
-    case IntLit(_)         => true
-    case Con(_, _, _, Nil) => true
-    case _                 => false
+    case Var(_, _)      => true
+    case Global(_, _)   => true
+    case IntLit(_)      => true
+    case Con(_, _, Nil) => true
+    case _              => false
 
   private def etaExpand(t: TDef, v: Tm): (List[(LName, Ty)], Ty, Tm) =
     val (ps, b) = v.flattenLams

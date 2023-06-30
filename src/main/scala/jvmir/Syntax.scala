@@ -7,13 +7,10 @@ object Syntax:
   type GName = String
 
   enum Ty:
-    case TInt
-    case TCon(x: GName, args: List[Ty])
+    case TCon(x: GName)
 
     override def toString: String = this match
-      case TInt         => "Int"
-      case TCon(x, Nil) => s"$x"
-      case TCon(x, as)  => s"$x ${as.mkString(" ")}"
+      case TCon(x) => s"$x"
 
     def tdef: TDef = TDef(this)
   export Ty.*
@@ -53,11 +50,20 @@ object Syntax:
         ty: TDef,
         value: Tm
     )
+    case DData(
+        name: GName,
+        cs: List[(GName, List[Ty])]
+    )
 
     override def toString: String = this match
       case DDef(x, _, TDef(None, t), v) => s"def $x : $t = $v"
       case DDef(x, _, t, v) =>
         s"def $x (${t.params.mkString(", ")}) : ${t.rt} = $v"
+      case DData(x, Nil) => s"data $x"
+      case DData(x, cs) =>
+        s"data $x = ${cs
+            .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
+            .mkString(" | ")}"
   export Def.*
 
   enum Tm:
@@ -76,7 +82,7 @@ object Syntax:
 
     case IntLit(value: Int)
 
-    case Con(name: GName, con: GName, targs: List[Ty], args: List[Tm])
+    case Con(name: GName, con: GName, args: List[Tm])
 
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"
@@ -89,9 +95,6 @@ object Syntax:
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
 
-      case Con(x, cx, Nil, Nil) => s"(con $x $cx)"
-      case Con(x, cx, Nil, as)  => s"(con $x $cx ${as.mkString(" ")})"
-      case Con(x, cx, tas, Nil) => s"(con $x $cx (${tas.mkString(" ")}))"
-      case Con(x, cx, tas, as) =>
-        s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
+      case Con(x, cx, Nil) => s"(con $x $cx)"
+      case Con(x, cx, as)  => s"(con $x $cx ${as.mkString(" ")})"
   export Tm.*
