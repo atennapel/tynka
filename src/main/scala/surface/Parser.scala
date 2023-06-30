@@ -323,12 +323,20 @@ object Parser:
     private lazy val dataP: Parsley[Def] =
       (pos <~> "data" *> identOrOp <~> many(
         identOrOp
-      ) <~> (":=" <|> "|") *> sepBy(
-        pos <~> identOrOp <~> many(projAtom),
-        "|"
+      ) <~> option(
+        (":=" <|> "|") *> sepBy(
+          pos <~> identOrOp <~> many(projAtom),
+          "|"
+        )
       ))
         .map { case (((pos, x), ps), cs) =>
-          DData(pos, x, ps, cs.map { case ((pos, x), ts) => (pos, x, ts) })
+          DData(
+            pos,
+            x,
+            ps,
+            cs.map(cs => cs.map { case ((pos, x), ts) => (pos, x, ts) })
+              .getOrElse(Nil)
+          )
         }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)

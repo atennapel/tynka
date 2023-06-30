@@ -1,0 +1,21 @@
+data Void
+
+data Unit := MkUnit
+
+data Bool := False | True
+
+data Pair A B := MkPair A B
+
+data Either A B := Left A | Right B
+
+data Maybe A := Nothing | Just A
+
+data Nat := Z | S Nat
+
+data List A
+  | Nil
+  | (::) A (List A)
+
+data BTree A
+  | Leaf A
+  | Node (BTree A) A (BTree A)
