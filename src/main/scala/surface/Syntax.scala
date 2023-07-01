@@ -69,6 +69,12 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case Match(
+        scrut: Tm,
+        cs: List[(PosInfo, Name, List[Name], Tm)],
+        other: Option[(PosInfo, Tm)]
+    )
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -104,6 +110,11 @@ object Syntax:
       case Lift(t)   => s"^$t"
       case Quote(t)  => s"`$t"
       case Splice(t) => s"$$$t"
+
+      case Match(scrut, cs, other) =>
+        s"(match $scrut ${cs
+            .map((_, c, ps, b) => s"| $c ${ps.mkString(" ")}. $b")
+            .mkString(" ")} ${other.map((_, t) => s"|. $t").getOrElse("")})"
 
       case Hole(None)    => "_"
       case Hole(Some(x)) => s"_$x"

@@ -707,6 +707,42 @@ object Elaboration:
           check(b, vrty, STy(cv))(ctx.bind(g, ft, SCTy()).bind(x, vty, SVTy()))
         (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, STy(cv))
 
+      case S.Match(scrut, cs, other) =>
+        val (escrut, vscrutty) = infer(scrut, SVTy())
+        force(vscrutty) match
+          case VTCon(dx, as) =>
+            // TODO: create return type meta
+            val (dps, cons) = getGlobalData(dx).get
+            implicit val ctx0: Ctx = dps.zipWithIndex.foldLeft(ctx) {
+              case (ctx, (x, i)) =>
+                ctx.define(
+                  x,
+                  VVTy(),
+                  ctx.quote(VVTy()),
+                  SMeta,
+                  SMeta,
+                  as(i),
+                  ctx.quote(as(i))
+                )
+            }
+            val used = mutable.Set[Name]()
+            cs.foreach { (pos, cx, ps, b) =>
+              implicit val ctx1: Ctx = ctx0.enter(pos)
+              if !cons.contains(cx) then
+                error(s"$cx is not a constructor of type $dx: $tm")
+              if used.contains(cx) then
+                error(s"constructor appears twice in match $cx: $tm")
+              used += cx
+              // TODO: typecheck body
+              ???
+            }
+            // TODO: typecheck otherwise case
+            ???
+          case _ =>
+            error(
+              s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"
+            )
+
       case S.Lift(a) =>
         val cv = newCV()
         val vcv = ctx.eval(cv)
@@ -786,7 +822,7 @@ object Elaboration:
         List(ed)
       case S.DData(pos, dx, ps, cs) =>
         implicit val ctx: Ctx = Ctx.empty(pos)
-        // TODO: check that datatype name is unique
+        if getGlobalData(dx).isDefined then error(s"duplicate datatype $dx")
 
         // generate tcon
         if getGlobal(dx).isDefined then error(s"duplicate datatype $dx")
@@ -870,6 +906,8 @@ object Elaboration:
           }
           ccs
         }
+
+        setGlobalData(dx, ps, ccs.map(_._1))
 
         List(DData(dx, ps, ccs.map(_._1)), DDef(dx, tconty, SMeta, tcon)) ++ ccs
           .map(_._2)
