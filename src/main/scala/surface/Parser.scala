@@ -181,7 +181,7 @@ object Parser:
     private lazy val matchP: Parsley[Tm] = positioned(
       ("match" *> tm <~> many(
         pos <~>
-          "|" *> identOrOp <~> many(identOrOp) <~> "." *> tm
+          "|" *> identOrOp <~> many(bind) <~> "." *> tm
       ) <~> option(pos <~> "|" *> "." *> tm)).map { case ((scrut, cs), other) =>
         Match(
           scrut,

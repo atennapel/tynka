@@ -15,6 +15,15 @@ object Zonking:
   private def zonkLift(t: Tm)(implicit l: Lvl, e: Env): Tm =
     zonk(t)(l + 1, VVar(l) :: e)
 
+  private def zonkLiftN(n: Int, t: Tm)(implicit l: Lvl, e: Env): Tm =
+    zonk(t)(
+      l + n,
+      (l.expose until (l.expose + n))
+        .map(l => VVar(mkLvl(l)))
+        .reverse
+        .toList ++ e
+    )
+
   private def app(f: VT, a: Val, i: Icit)(implicit l: Lvl, e: Env): VT =
     f.fold(v => Left(vapp(v, a, i)), t => Right(App(t, quote(a), i)))
 
@@ -76,6 +85,12 @@ object Zonking:
 
     case TCon(x, as)         => TCon(x, as.map(zonk))
     case Con(x, cx, tas, as) => Con(x, cx, tas.map(zonk), as.map(zonk))
+    case Match(scrut, cs, other) =>
+      Match(
+        zonk(scrut),
+        cs.map((x, ps, b) => (x, ps, zonkLiftN(ps.size, b))),
+        other.map(zonk)
+      )
 
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))
 

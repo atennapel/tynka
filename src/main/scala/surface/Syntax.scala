@@ -71,7 +71,7 @@ object Syntax:
 
     case Match(
         scrut: Tm,
-        cs: List[(PosInfo, Name, List[Name], Tm)],
+        cs: List[(PosInfo, Name, List[Bind], Tm)],
         other: Option[(PosInfo, Tm)]
     )
 

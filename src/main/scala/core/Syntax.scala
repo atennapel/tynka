@@ -64,6 +64,11 @@ object Syntax:
 
     case TCon(name: Name, args: List[Ty])
     case Con(name: Name, con: Name, targs: List[Ty], args: List[Tm])
+    case Match(
+        scrut: Tm,
+        cs: List[(Name, List[(Bind, Ty)], Tm)],
+        other: Option[Tm]
+    )
 
     case Wk(tm: Tm)
 
@@ -117,6 +122,11 @@ object Syntax:
       case Con(x, cx, tas, Nil) => s"(con $x $cx (${tas.mkString(" ")}))"
       case Con(x, cx, tas, as) =>
         s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
+
+      case Match(scrut, cs, other) =>
+        s"(match $scrut ${cs
+            .map((c, ps, b) => s"| $c ${ps.mkString(" ")}. $b")
+            .mkString(" ")} ${other.map(t => s"|. $t").getOrElse("")})"
 
       case Wk(t)      => s"(Wk $t)"
       case Irrelevant => "Ir"

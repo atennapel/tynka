@@ -72,12 +72,25 @@ object Evaluation:
         VGlobal(y, SPrim(sp, x, as), () => vprimelim(x, as, v()))
       case _ => impossible()
 
+  private def vmatch(
+      cs: List[(Name, List[(Bind, Val)], Val)],
+      o: Option[Val],
+      v: Val
+  ): Val =
+    force(v) match
+      case VRigid(hd, sp) => VRigid(hd, SMatch(sp, cs, o))
+      case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, cs, o))
+      case VGlobal(y, sp, v) =>
+        VGlobal(y, SMatch(sp, cs, o), () => vmatch(cs, o, v()))
+      case _ => impossible()
+
   def vspine(v: Val, sp: Spine): Val = sp match
-    case SId              => v
-    case SApp(sp, a, i)   => vapp(vspine(v, sp), a, i)
-    case SSplice(sp)      => vsplice(vspine(v, sp))
-    case SProj(sp, proj)  => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as) => vprimelim(x, as, vspine(v, sp))
+    case SId               => v
+    case SApp(sp, a, i)    => vapp(vspine(v, sp), a, i)
+    case SSplice(sp)       => vsplice(vspine(v, sp))
+    case SProj(sp, proj)   => vproj(vspine(v, sp), proj)
+    case SPrim(sp, x, as)  => vprimelim(x, as, vspine(v, sp))
+    case SMatch(sp, cs, o) => vmatch(cs, o, vspine(v, sp))
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _, _) => v
@@ -114,8 +127,9 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
-    case TCon(x, as)         => VTCon(x, as.map(eval))
-    case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
+    case TCon(x, as)             => VTCon(x, as.map(eval))
+    case Con(x, cx, tas, as)     => VCon(x, cx, tas.map(eval), as.map(eval))
+    case Match(scrut, cs, other) => vmatch(cs, other.map(eval), eval(scrut))
 
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant

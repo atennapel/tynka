@@ -711,7 +711,6 @@ object Elaboration:
         val (escrut, vscrutty) = infer(scrut, SVTy())
         force(vscrutty) match
           case VTCon(dx, as) =>
-            // TODO: create return type meta
             val (dps, cons) = getGlobalData(dx).get
             implicit val ctx0: Ctx = dps.zipWithIndex.foldLeft(ctx) {
               case (ctx, (x, i)) =>
@@ -725,19 +724,36 @@ object Elaboration:
                   ctx.quote(as(i))
                 )
             }
+            val rcv = newCV()
+            val vrcv = ctx0.eval(rcv)
+            val rty = newMeta(VUTy(vrcv), SMeta)
+            val vrty = ctx0.eval(rty)
             val used = mutable.Set[Name]()
-            cs.foreach { (pos, cx, ps, b) =>
-              implicit val ctx1: Ctx = ctx0.enter(pos)
+            val ecs = cs.map { (pos, cx, ps, b) =>
               if !cons.contains(cx) then
-                error(s"$cx is not a constructor of type $dx: $tm")
+                error(s"$cx is not a constructor of type $dx: $tm")(
+                  ctx0.enter(pos)
+                )
               if used.contains(cx) then
-                error(s"constructor appears twice in match $cx: $tm")
+                error(s"constructor appears twice in match $cx: $tm")(
+                  ctx0.enter(pos)
+                )
               used += cx
-              // TODO: typecheck body
-              ???
+              val tas = cons(cx)
+              if ps.size != tas.size then
+                error(
+                  s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
+                )(ctx0.enter(pos))
+              implicit val ctx1: Ctx =
+                ps.zip(tas).foldLeft(ctx0.enter(pos)) { case (ctx, (x, t)) =>
+                  ctx.bind(x, ctx.eval(t), SVTy())
+                }
+              val eb = check(b, vrty, STy(vrcv))
+              (cx, ps.zip(tas), eb)
             }
+            println(ecs)
             // TODO: typecheck otherwise case
-            ???
+            (Match(escrut, ecs, None), vrty, STy(vrcv))
           case _ =>
             error(
               s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"
