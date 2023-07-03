@@ -751,7 +751,6 @@ object Elaboration:
               val eb = check(b, vrty, STy(vrcv))
               (cx, ps.zip(tas), eb)
             }
-            println(ecs)
             // TODO: typecheck otherwise case
             (Match(escrut, ecs, None), vrty, STy(vrcv))
           case _ =>

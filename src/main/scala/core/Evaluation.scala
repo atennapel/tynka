@@ -19,6 +19,11 @@ object Evaluation:
       case CClos2(env, tm) => eval(tm)(w :: v :: env)
       case CFun2(f)        => f(v, w)
 
+  extension (c: ClosN)
+    def apply(vs: List[Val]): Val = c match
+      case CClosN(env, tm) => eval(tm)(vs.reverse ++ env)
+      case CFunN(f)        => f(vs)
+
   // evaluation
   private def vglobal(x: Name): Val =
     val value = getGlobal(x).get.value
@@ -73,7 +78,7 @@ object Evaluation:
       case _ => impossible()
 
   private def vmatch(
-      cs: List[(Name, List[(Bind, Val)], Val)],
+      cs: List[(Name, List[(Bind, VTy)], ClosN)],
       o: Option[Val],
       v: Val
   ): Val =
@@ -127,9 +132,16 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
-    case TCon(x, as)             => VTCon(x, as.map(eval))
-    case Con(x, cx, tas, as)     => VCon(x, cx, tas.map(eval), as.map(eval))
-    case Match(scrut, cs, other) => vmatch(cs, other.map(eval), eval(scrut))
+    case TCon(x, as)         => VTCon(x, as.map(eval))
+    case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
+    case Match(scrut, cs, other) =>
+      vmatch(
+        cs.map((x, ps, b) =>
+          (x, ps.map((x, t) => (x, eval(t))), CClosN(env, b))
+        ),
+        other.map(eval),
+        eval(scrut)
+      )
 
     case Wk(tm)     => eval(tm)(env.tail)
     case Irrelevant => VIrrelevant
@@ -165,6 +177,16 @@ object Evaluation:
           App(f, quote(a, unfold), i)
         }
         App(as, quote(hd, sp, unfold), Expl)
+      case SMatch(sp, cs, other) =>
+        val qcs = cs.map((x, ps, b) =>
+          val end = l + ps.size
+          val qb = quote(
+            b((l.expose until end.expose).map(l => VVar(mkLvl(l))).toList),
+            unfold
+          )(end)
+          (x, ps.map((p, t) => (p, quote(t, unfold))), qb)
+        )
+        Match(quote(hd, sp, unfold), qcs, other.map(quote(_, unfold)))
 
   private def quote(hd: Head)(implicit l: Lvl): Tm = hd match
     case HVar(ix) => Var(ix.toIx)

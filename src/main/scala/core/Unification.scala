@@ -22,6 +22,11 @@ object Unification:
       sub: IntMap[Val]
   ):
     def lift: PSub = PSub(occ, dom + 1, cod + 1, sub + (cod.expose, VVar(dom)))
+    def liftN(n: Int): PSub = {
+      var c = this
+      for (_ <- 0 until n) c = c.lift
+      c
+    }
     def skip: PSub = PSub(occ, dom, cod + 1, sub)
 
   private def invert(sp: Spine)(implicit gamma: Lvl): (PSub, Option[Pruning]) =
@@ -151,6 +156,8 @@ object Unification:
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
       case SPrim(sp, x, args) =>
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
+      case SMatch(sp, cs, other) =>
+        or(go(sp), Some((sp, SId))).map((l, r) => (l, SMatch(r, cs, other)))
     go(sp).fold((sp, SId))(x => x)
 
   private def psubst(v: Val)(implicit psub: PSub): Tm =
@@ -162,6 +169,18 @@ object Unification:
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
+      case SMatch(sp, cs, other) =>
+        val qcs = cs.map((x, ps, b) =>
+          val qb = go(
+            b(
+              (psub.cod.expose until (psub.cod + ps.size).expose)
+                .map(l => VVar(mkLvl(l)))
+                .toList
+            )
+          )(psub.liftN(ps.size))
+          (x, ps.map((p, t) => (p, go(t))), qb)
+        )
+        Match(goSp(t, sp), qcs, other.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
@@ -323,6 +342,9 @@ object Unification:
     case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
       unify(a, b)
       as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
+    case (SMatch(s1, cs1, o1), SMatch(s2, cs2, o2)) =>
+      unify(s1, s2)
+      throw UnifyError(s"spine mismatch: match unimplemented")
     case _ => throw UnifyError(s"spine mismatch")
 
   private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =

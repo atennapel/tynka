@@ -19,6 +19,11 @@ object Value:
     case CFun2(fn: (Val, Val) => Val)
   export Clos2.*
 
+  enum ClosN:
+    case CClosN(env: Env, tm: Tm)
+    case CFunN(fn: List[Val] => Val)
+  export ClosN.*
+
   enum Spine:
     case SId
     case SApp(spine: Spine, arg: Val, icit: Icit)
@@ -27,7 +32,7 @@ object Value:
     case SPrim(spine: Spine, name: PrimName, args: List[(Val, Icit)])
     case SMatch(
         spine: Spine,
-        cs: List[(Name, List[(Bind, VTy)], Val)],
+        cs: List[(Name, List[(Bind, VTy)], ClosN)],
         other: Option[Val]
     )
 

@@ -182,12 +182,13 @@ object Parser:
       ("match" *> tm <~> many(
         pos <~>
           "|" *> identOrOp <~> many(bind) <~> "." *> tm
-      ) <~> option(pos <~> "|" *> "." *> tm)).map { case ((scrut, cs), other) =>
-        Match(
-          scrut,
-          cs.map { case (((pos, c), ps), b) => (pos, c, ps, b) },
-          other
-        )
+      ) <~> option(pos <~> "|" *> option("_") *> "." *> tm)).map {
+        case ((scrut, cs), other) =>
+          Match(
+            scrut,
+            cs.map { case (((pos, c), ps), b) => (pos, c, ps, b) },
+            other
+          )
       }
     )
 
