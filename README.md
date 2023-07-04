@@ -12,6 +12,7 @@ java IO
 TODO:
 - [x] Datatype monomorphization
 - [x] Match expressions
+- [ ] Figure out datatype from constructors in match
 - [ ] If expressions
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Recursion check in datatypes definitions

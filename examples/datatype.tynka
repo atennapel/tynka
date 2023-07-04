@@ -1,21 +1,61 @@
+def VTy = Ty Val
+
 data Void
 
 data Unit := MkUnit
 
 data Bool := False | True
 
+def if {A : VTy} (c : Bool) (a b : A) : A =
+  match c
+  | True. a
+  | False. b
+
 data Pair A B := MkPair A B
+
+def fst {A B : VTy} (p : Pair A B) : A =
+  match p
+  | MkPair fst snd. fst
+
+def snd {A B : VTy} (p : Pair A B) : B =
+  match p
+  | MkPair fst snd. snd
 
 data Either A B := Left A | Right B
 
 data Maybe A := Nothing | Just A
 
+-- natural numbers
 data Nat := Z | S Nat
 
+def (+) (a b : Nat) : Nat :=
+  fix (rec a. \acc. match a
+  | Z. acc
+  | S n. rec n (S acc)) a b
+
+-- lists
 data List A
   | Nil
   | (::) A (List A)
 
-data BTree A
-  | Leaf A
-  | Node (BTree A) A (BTree A)
+def isEmpty {A : VTy} (l : List A) : Bool =
+  match l
+  | Nil. True
+  | _. False
+
+def head {A : VTy} (d : A) (l : List A) : A =
+  match l
+  | Nil. d
+  | (::) hd _. hd
+
+def map {A B : VTy} (f : A -> B) (l : List A) : List B =
+  fix (rec l. match l
+  | Nil. Nil
+  | (::) hd tl. f hd :: rec tl
+  ) l
+
+def length {A : VTy} (l : List A) : Nat =
+  fix (rec l. \acc. match l
+  | Nil. acc
+  | (::) _ tl. rec tl (S acc)
+  ) l 0
