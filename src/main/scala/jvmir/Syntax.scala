@@ -103,8 +103,8 @@ object Syntax:
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
 
-      case Con(x, cx, Nil) => s"(con $x $cx)"
-      case Con(x, cx, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Con(x, cx, Nil) => s"(con $cx)"
+      case Con(x, cx, as)  => s"(con $cx ${as.mkString(" ")})"
       case Field(t, i)     => s"(field #$i $t)"
       case Match(_, _, scrut, cs, other) =>
         s"(match $scrut ${cs

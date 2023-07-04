@@ -87,7 +87,8 @@ object Compilation:
     case TCon(x) => J.TCon(x)
 
   private def go(t: TDef): J.TDef = t match
-    case TDef(ps, rt) => J.TDef(ps.map(go), go(rt))
+    case TDef(Nil, rt) => J.TDef(None, go(rt))
+    case TDef(ps, rt)  => J.TDef(ps.map(go), go(rt))
 
   private def goTy(t: TDef): J.Ty = t match
     case TDef(Nil, rt) => go(rt)

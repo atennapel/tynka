@@ -231,6 +231,7 @@ object Staging:
         val qdtytd = IR.TDef(quoteVTy(dty))
         val qrty = quoteCTy(rty)
         val x = fresh()
+        val vv = IR.Var(x, qdtytd)
         IR.Let(
           x,
           qdtytd,
@@ -239,12 +240,12 @@ object Staging:
           IR.Match(
             dataname,
             qrty,
-            quote(scrut),
+            vv,
             cs.map((cx, i, t) =>
               (
                 cx.expose,
                 (0 until i).foldLeft(quote(t))((f, i) =>
-                  IR.App(f, IR.Field(IR.Var(x, qdtytd), i))
+                  IR.App(f, IR.Field(vv, i))
                 )
               )
             ),

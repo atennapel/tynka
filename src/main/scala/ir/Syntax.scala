@@ -90,8 +90,8 @@ object Syntax:
       case Fix(_, _, g, x, b, arg) => s"(fix ($g $x. $b) $arg)"
       case Let(x, t, _, v, b)      => s"(let $x : $t = $v; $b)"
 
-      case Con(x, cx, Nil) => s"(con $x $cx)"
-      case Con(x, cx, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Con(x, cx, Nil) => s"(con $cx)"
+      case Con(x, cx, as)  => s"(con $cx ${as.mkString(" ")})"
       case Field(s, i)     => s"(field #$i $s)"
 
       case Match(_, _, scrut, cs, other) =>
