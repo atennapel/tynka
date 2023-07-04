@@ -156,8 +156,10 @@ object Unification:
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
       case SPrim(sp, x, args) =>
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
-      case SMatch(sp, cs, other) =>
-        or(go(sp), Some((sp, SId))).map((l, r) => (l, SMatch(r, cs, other)))
+      case SMatch(sp, rty, cs, other) =>
+        or(go(sp), Some((sp, SId))).map((l, r) =>
+          (l, SMatch(r, rty, cs, other))
+        )
     go(sp).fold((sp, SId))(x => x)
 
   private def psubst(v: Val)(implicit psub: PSub): Tm =
@@ -169,18 +171,9 @@ object Unification:
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
-      case SMatch(sp, cs, other) =>
-        val qcs = cs.map((x, ps, b) =>
-          val qb = go(
-            b(
-              (psub.cod.expose until (psub.cod + ps.size).expose)
-                .map(l => VVar(mkLvl(l)))
-                .toList
-            )
-          )(psub.liftN(ps.size))
-          (x, ps.map((p, t) => (p, go(t))), qb)
-        )
-        Match(goSp(t, sp), qcs, other.map(go))
+      case SMatch(sp, rty, cs, other) =>
+        val qcs = cs.map((x, b) => (x, go(b)))
+        Match(go(rty), goSp(t, sp), qcs, other.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
@@ -342,9 +335,14 @@ object Unification:
     case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
       unify(a, b)
       as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
-    case (SMatch(s1, cs1, o1), SMatch(s2, cs2, o2)) =>
+    case (SMatch(s1, rt1, cs1, o1), SMatch(s2, rt2, cs2, o2))
+        if cs1.size == cs2.size && o1.isDefined == o2.isDefined && cs1.toMap.keySet == cs2.toMap.keySet =>
       unify(s1, s2)
-      throw UnifyError(s"spine mismatch: match unimplemented")
+      unify(rt1, rt2)
+      val m1 = cs1.toMap
+      val m2 = cs2.toMap
+      m1.keySet.foreach(k => unify(m1(k), m2(k)))
+      o1.foreach(c1 => o2.foreach(c2 => unify(c1, c2)))
     case _ => throw UnifyError(s"spine mismatch")
 
   private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =

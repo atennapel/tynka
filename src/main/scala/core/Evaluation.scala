@@ -19,11 +19,6 @@ object Evaluation:
       case CClos2(env, tm) => eval(tm)(w :: v :: env)
       case CFun2(f)        => f(v, w)
 
-  extension (c: ClosN)
-    def apply(vs: List[Val]): Val = c match
-      case CClosN(env, tm) => eval(tm)(vs.reverse ++ env)
-      case CFunN(f)        => f(vs)
-
   // evaluation
   private def vglobal(x: Name): Val =
     val value = getGlobal(x).get.value
@@ -78,24 +73,25 @@ object Evaluation:
       case _ => impossible()
 
   private def vmatch(
-      cs: List[(Name, List[(Bind, VTy)], ClosN)],
+      rty: VTy,
+      cs: List[(Name, Val)],
       o: Option[Val],
       v: Val
   ): Val =
     force(v) match
-      case VRigid(hd, sp) => VRigid(hd, SMatch(sp, cs, o))
-      case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, cs, o))
+      case VRigid(hd, sp) => VRigid(hd, SMatch(sp, rty, cs, o))
+      case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, rty, cs, o))
       case VGlobal(y, sp, v) =>
-        VGlobal(y, SMatch(sp, cs, o), () => vmatch(cs, o, v()))
+        VGlobal(y, SMatch(sp, rty, cs, o), () => vmatch(rty, cs, o, v()))
       case _ => impossible()
 
   def vspine(v: Val, sp: Spine): Val = sp match
-    case SId               => v
-    case SApp(sp, a, i)    => vapp(vspine(v, sp), a, i)
-    case SSplice(sp)       => vsplice(vspine(v, sp))
-    case SProj(sp, proj)   => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as)  => vprimelim(x, as, vspine(v, sp))
-    case SMatch(sp, cs, o) => vmatch(cs, o, vspine(v, sp))
+    case SId                    => v
+    case SApp(sp, a, i)         => vapp(vspine(v, sp), a, i)
+    case SSplice(sp)            => vsplice(vspine(v, sp))
+    case SProj(sp, proj)        => vproj(vspine(v, sp), proj)
+    case SPrim(sp, x, as)       => vprimelim(x, as, vspine(v, sp))
+    case SMatch(sp, rty, cs, o) => vmatch(rty, cs, o, vspine(v, sp))
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _, _) => v
@@ -134,11 +130,10 @@ object Evaluation:
 
     case TCon(x, as)         => VTCon(x, as.map(eval))
     case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
-    case Match(scrut, cs, other) =>
+    case Match(rty, scrut, cs, other) =>
       vmatch(
-        cs.map((x, ps, b) =>
-          (x, ps.map((x, t) => (x, eval(t))), CClosN(env, b))
-        ),
+        eval(rty),
+        cs.map((x, b) => (x, eval(b))),
         other.map(eval),
         eval(scrut)
       )
@@ -177,16 +172,14 @@ object Evaluation:
           App(f, quote(a, unfold), i)
         }
         App(as, quote(hd, sp, unfold), Expl)
-      case SMatch(sp, cs, other) =>
-        val qcs = cs.map((x, ps, b) =>
-          val end = l + ps.size
-          val qb = quote(
-            b((l.expose until end.expose).map(l => VVar(mkLvl(l))).toList),
-            unfold
-          )(end)
-          (x, ps.map((p, t) => (p, quote(t, unfold))), qb)
+      case SMatch(sp, rty, cs, other) =>
+        val qcs = cs.map((x, b) => (x, quote(b, unfold)))
+        Match(
+          quote(rty, unfold),
+          quote(hd, sp, unfold),
+          qcs,
+          other.map(quote(_, unfold))
         )
-        Match(quote(hd, sp, unfold), qcs, other.map(quote(_, unfold)))
 
   private def quote(hd: Head)(implicit l: Lvl): Tm = hd match
     case HVar(ix) => Var(ix.toIx)

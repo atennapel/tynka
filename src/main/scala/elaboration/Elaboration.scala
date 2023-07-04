@@ -400,6 +400,11 @@ object Elaboration:
           )
         Fix(ctx.quote(pty), ctx.quote(ty), g, x, eb, earg)
 
+      case (S.Match(scrut, cs, other), _) if !stage.isMeta =>
+        val STy(vrcv) = stage: @unchecked
+        val etm = checkMatch(tm, scrut, cs, other, ctx.quote(ty), ty, vrcv)
+        etm
+
       case (S.Quote(t), VLift(cv, a)) => check(t, a, STy(cv)).quote
       case (t, VLift(cv, a))          => check(t, a, STy(cv)).quote
 
@@ -453,6 +458,69 @@ object Elaboration:
             s"expected sigma in named projection .$x, got ${ctx.pretty(ty)}"
           )
     go(ty, 0, Set.empty)
+
+  private def checkMatch(
+      tm: S.Tm,
+      scrut: S.Tm,
+      cs: List[(PosInfo, Name, List[Bind], S.Tm)],
+      other: Option[(PosInfo, S.Tm)],
+      rty: Tm,
+      vrty: VTy,
+      vrcv: VTy
+  )(implicit ctx: Ctx): Tm =
+    val (escrut, vscrutty) = infer(scrut, SVTy())
+    force(vscrutty) match
+      case VTCon(dx, as) =>
+        val (dps, cons) = getGlobalData(dx).get
+        val ctxConsTypes: Ctx = dps.zipWithIndex.foldLeft(ctx) {
+          case (ctx, (x, i)) =>
+            ctx.define(
+              x,
+              VVTy(),
+              ctx.quote(VVTy()),
+              SMeta,
+              SMeta,
+              as(i),
+              ctx.quote(as(i))
+            )
+        }
+        val used = mutable.Set[Name]()
+        val ecs = cs.map { (pos, cx, ps, b) =>
+          implicit val ctx1: Ctx = ctx.enter(pos)
+          if !cons.contains(cx) then
+            error(s"$cx is not a constructor of type $dx: $tm")
+          if used.contains(cx) then
+            error(s"constructor appears twice in match $cx: $tm")
+          used += cx
+          val tas = cons(cx)
+          if ps.size != tas.size then
+            error(
+              s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
+            )
+          val (fnty, ecv) = tas
+            .foldRight((vrty, vrcv)) { case (t, (rt, rcv)) =>
+              (VFun(ctxConsTypes.eval(t), rcv, rt), VComp())
+            }
+          val lam =
+            ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
+          val eb = check(lam, fnty, STy(ecv))
+          (cx, eb)
+        }
+        val left = cons.keySet -- used
+        if other.isEmpty && left.nonEmpty then
+          error(
+            s"non-exhaustive match, constructors left: ${left.mkString(" ")}"
+          )
+        val eother = other.map { (pos, b) =>
+          implicit val ctxOther: Ctx = ctx.enter(pos)
+          if left.isEmpty then error(s"other case does not match anything")
+          check(b, vrty, STy(vrcv))
+        }
+        Match(rty, escrut, ecs, eother)
+      case _ =>
+        error(
+          s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"
+        )
 
   private def inferType(ty: S.Ty)(implicit ctx: Ctx): (Tm, VStage) =
     val (t, a) = infer(ty, SMeta)
@@ -514,6 +582,13 @@ object Elaboration:
         val eb =
           check(b, vrty, STy(cv))(ctx.bind(g, ft, SCTy()).bind(x, vty, SVTy()))
         (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty)
+
+      case S.Match(scrut, cs, other) if !s.isMeta =>
+        val STy(vrcv) = s: @unchecked
+        val rty = newMeta(VUTy(vrcv), SMeta)
+        val vrty = ctx.eval(rty)
+        val etm = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        (etm, vrty)
 
       case _ =>
         val (t, a, si) = insert(infer(tm))
@@ -708,55 +783,11 @@ object Elaboration:
         (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, STy(cv))
 
       case S.Match(scrut, cs, other) =>
-        val (escrut, vscrutty) = infer(scrut, SVTy())
-        force(vscrutty) match
-          case VTCon(dx, as) =>
-            val (dps, cons) = getGlobalData(dx).get
-            implicit val ctx0: Ctx = dps.zipWithIndex.foldLeft(ctx) {
-              case (ctx, (x, i)) =>
-                ctx.define(
-                  x,
-                  VVTy(),
-                  ctx.quote(VVTy()),
-                  SMeta,
-                  SMeta,
-                  as(i),
-                  ctx.quote(as(i))
-                )
-            }
-            val rcv = newCV()
-            val vrcv = ctx0.eval(rcv)
-            val rty = newMeta(VUTy(vrcv), SMeta)
-            val vrty = ctx0.eval(rty)
-            val used = mutable.Set[Name]()
-            val ecs = cs.map { (pos, cx, ps, b) =>
-              if !cons.contains(cx) then
-                error(s"$cx is not a constructor of type $dx: $tm")(
-                  ctx0.enter(pos)
-                )
-              if used.contains(cx) then
-                error(s"constructor appears twice in match $cx: $tm")(
-                  ctx0.enter(pos)
-                )
-              used += cx
-              val tas = cons(cx)
-              if ps.size != tas.size then
-                error(
-                  s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
-                )(ctx0.enter(pos))
-              implicit val ctx1: Ctx =
-                ps.zip(tas).foldLeft(ctx0.enter(pos)) { case (ctx, (x, t)) =>
-                  ctx.bind(x, ctx.eval(t), SVTy())
-                }
-              val eb = check(b, vrty, STy(vrcv))
-              (cx, ps.zip(tas), eb)
-            }
-            // TODO: typecheck otherwise case
-            (Match(escrut, ecs, None), vrty, STy(vrcv))
-          case _ =>
-            error(
-              s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"
-            )
+        val vrcv = ctx.eval(newCV())
+        val rty = newMeta(VUTy(vrcv), SMeta)
+        val vrty = ctx.eval(rty)
+        val etm = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        (etm, vrty, STy(vrcv))
 
       case S.Lift(a) =>
         val cv = newCV()

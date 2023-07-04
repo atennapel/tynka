@@ -115,10 +115,10 @@ object Pretty:
       s"con $x $cx (${tas.map(prettyParen(_)).mkString(" ")}) ${as.map(prettyParen(_)).mkString(" ")}"
 
     // TODO
-    case Match(scrut, cs, other) =>
+    case Match(_, scrut, cs, other) =>
       s"(match $scrut ${cs
-          .map((c, ps, b) => s"| $c ${ps.mkString(" ")}. $b")
-          .mkString(" ")} ${other.map(t => s"|. $t").getOrElse("")})"
+          .map((c, b) => s"| $c $b")
+          .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
 
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"

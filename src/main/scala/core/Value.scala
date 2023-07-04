@@ -19,11 +19,6 @@ object Value:
     case CFun2(fn: (Val, Val) => Val)
   export Clos2.*
 
-  enum ClosN:
-    case CClosN(env: Env, tm: Tm)
-    case CFunN(fn: List[Val] => Val)
-  export ClosN.*
-
   enum Spine:
     case SId
     case SApp(spine: Spine, arg: Val, icit: Icit)
@@ -32,17 +27,18 @@ object Value:
     case SPrim(spine: Spine, name: PrimName, args: List[(Val, Icit)])
     case SMatch(
         spine: Spine,
-        cs: List[(Name, List[(Bind, VTy)], ClosN)],
+        rty: VTy,
+        cs: List[(Name, Val)],
         other: Option[Val]
     )
 
     def size: Int = this match
-      case SId              => 0
-      case SApp(sp, _, _)   => 1 + sp.size
-      case SProj(sp, _)     => 1 + sp.size
-      case SSplice(sp)      => 1 + sp.size
-      case SPrim(sp, _, _)  => 1 + sp.size
-      case SMatch(sp, _, _) => 1 + sp.size
+      case SId                 => 0
+      case SApp(sp, _, _)      => 1 + sp.size
+      case SProj(sp, _)        => 1 + sp.size
+      case SSplice(sp)         => 1 + sp.size
+      case SPrim(sp, _, _)     => 1 + sp.size
+      case SMatch(sp, _, _, _) => 1 + sp.size
 
     def isEmpty: Boolean = this match
       case SId => true

@@ -4,6 +4,8 @@ import scala.annotation.{targetName, unused}
 
 object Common:
   def impossible(): Nothing = throw new Exception("impossible")
+  def mapFst[A, B, C](f: A => C, p: (A, B)): (C, B) = (f(p._1), p._2)
+  def mapSnd[A, B, C](f: B => C, p: (A, B)): (A, C) = (p._1, f(p._2))
 
   type PosInfo = (Int, Int) // (line, col)
 
