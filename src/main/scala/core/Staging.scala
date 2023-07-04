@@ -40,6 +40,12 @@ object Staging:
     case VApp0(f: Val0, a: Val0)
     case VLam0(fnty: Val1, body: Val0 => Val0)
     case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
+    case VMatch0(
+        rty: Val1,
+        scrut: Val0,
+        cs: List[(Name, Val0)],
+        other: Option[Val0]
+    )
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
     case VCon0(x: Name, con: Name, tas: List[Val1], as: List[Val0])
   import Val0.*
@@ -117,6 +123,13 @@ object Staging:
         eval1(rty),
         (v, w) => eval0(b)(Def0(Def0(env, v), w)),
         eval0(arg)
+      )
+    case Match(rty, scrut, cs, o) =>
+      VMatch0(
+        eval1(rty),
+        eval0(scrut),
+        cs.map((x, t) => (x, eval0(t))),
+        o.map(eval0)
       )
     case App(f, a, _) => VApp0(eval0(f), eval0(a))
     case Let(x, t, _, bt, v, b) =>
@@ -208,6 +221,14 @@ object Staging:
         )
         val qarg = quote(arg)
         IR.Fix(ta, tb, g, x, qf, qarg)
+
+      case VMatch0(rty, scrut, cs, other) =>
+        IR.Match(
+          quoteCTy(rty),
+          quote(scrut),
+          cs.map((x, t) => (x.expose, quote(t))),
+          other.map(quote)
+        )
 
       case VLet0(ty, bty, v, b) =>
         val x = fresh()

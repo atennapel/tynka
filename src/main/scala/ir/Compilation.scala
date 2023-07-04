@@ -34,6 +34,7 @@ object Compilation:
             ps.zipWithIndex.foreach { case ((x, _), i) =>
               rename.set(x, i, true)
             }
+            println(s"def $x : $t = $v")
             J.DDef(x, gen, go(t), go(v, true))
       case DData(x, cs) => J.DData(x, cs.map((cx, as) => (cx, as.map(go))))
     }
@@ -70,6 +71,10 @@ object Compilation:
 
       case Con(x, cx, as) => J.Con(x, cx, as.map(go(_, false)))
 
+      case Match(rty, scrut, cs, other) =>
+        // TODO: remove lambdas
+        impossible()
+
       case Lam(_, _, _, _)       => impossible()
       case Fix(_, _, _, _, _, _) => impossible()
 
@@ -92,6 +97,8 @@ object Compilation:
 
   private case class LocalGen(ref: Ref[LName] = Ref(0)):
     def fresh(): LName = ref.updateGetOld(_ + 1)
+  private object LocalGen:
+    def apply(l: LName): LocalGen = LocalGen(Ref(l))
 
   private def conv(d: Def): List[Def] = d match
     case DDef(x, gen, t, v) =>
@@ -99,9 +106,9 @@ object Compilation:
       implicit val defname: GName = x
       implicit val newDefs: NewDefs = mutable.ArrayBuffer.empty
       implicit val globalgen: GlobalGen = GlobalGen()
-      implicit val localgen: LocalGen = LocalGen()
+      implicit val localgen: LocalGen = LocalGen(v.maxName + 1)
       val cb = conv(b).lams(ps, TDef(rt))
-      newDefs.toList.flatMap(conv) ++ List(DDef(x, gen, t, cb))
+      newDefs.toList ++ List(DDef(x, gen, t, cb))
     case d @ DData(_, _) => List(d)
 
   private def conv(
@@ -116,13 +123,14 @@ object Compilation:
     case Global(x, t) => tm
     case IntLit(n)    => tm
 
+    case Con(x, cx, as)   => Con(x, cx, as.map(conv))
+    case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
+
     case App(f, a) =>
       conv(f) match
         case Lam(x, t, rt, b)    => conv(Let(x, TDef(t), rt, a, b))
         case Let(x, t, rt, v, b) => conv(Let(x, t, rt.tail, v, App(b, a)))
         case f                   => App(f, conv(a))
-
-    case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
 
     case Let(x, t, bt, v, b0) =>
       conv(v) match
@@ -149,7 +157,7 @@ object Compilation:
               gx,
               true,
               TDef(fv.map(_._2), t),
-              v.apps(spine).lams(nps, TDef(t.rt))
+              conv(v.apps(spine).lams(nps, TDef(t.rt)))
             )
             val gl = Global(gx, TDef(nps.map(_._2), t.rt))
               .apps(fv.map((x, t) => Var(x, TDef(t))))
@@ -180,7 +188,23 @@ object Compilation:
       )
       App(gl, conv(arg))
 
-    case Con(x, cx, as) => Con(x, cx, as.map(conv))
+    case Match(rty, scrut, cs, other) =>
+      conv(scrut) match
+        case Con(_, x, as) =>
+          cs.toMap.get(x) match
+            case Some(b) => conv(as.foldLeft(b)(App.apply))
+            case None    => conv(other.get)
+        case cscrut =>
+          val (vs, spine) = eta(rty.params)
+          val res = Match(
+            TDef(rty.rt),
+            cscrut,
+            cs.map((x, t) =>
+              (x, conv(t.apps(spine)))
+            ), // TODO: apps under constructor lambdas
+            other.map(t => conv(t.apps(spine)))
+          ).lams(vs, TDef(rty.rt))
+          res
 
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)      => true
