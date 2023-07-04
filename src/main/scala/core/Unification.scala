@@ -156,9 +156,9 @@ object Unification:
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
       case SPrim(sp, x, args) =>
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
-      case SMatch(sp, rty, cs, other) =>
+      case SMatch(sp, dty, rty, cs, other) =>
         or(go(sp), Some((sp, SId))).map((l, r) =>
-          (l, SMatch(r, rty, cs, other))
+          (l, SMatch(r, dty, rty, cs, other))
         )
     go(sp).fold((sp, SId))(x => x)
 
@@ -171,9 +171,9 @@ object Unification:
       case SPrim(sp, x, args) =>
         val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
         App(as, goSp(t, sp), Expl)
-      case SMatch(sp, rty, cs, other) =>
-        val qcs = cs.map((x, b) => (x, go(b)))
-        Match(go(rty), goSp(t, sp), qcs, other.map(go))
+      case SMatch(sp, dty, rty, cs, other) =>
+        val qcs = cs.map((x, i, b) => (x, i, go(b)))
+        Match(go(dty), go(rty), goSp(t, sp), qcs, other.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
@@ -335,12 +335,15 @@ object Unification:
     case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
       unify(a, b)
       as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
-    case (SMatch(s1, rt1, cs1, o1), SMatch(s2, rt2, cs2, o2))
-        if cs1.size == cs2.size && o1.isDefined == o2.isDefined && cs1.toMap.keySet == cs2.toMap.keySet =>
+    case (SMatch(s1, dt1, rt1, cs1, o1), SMatch(s2, dt2, rt2, cs2, o2))
+        if cs1.size == cs2.size && o1.isDefined == o2.isDefined && cs1
+          .map(_._1)
+          .toSet == cs2.map(_._1).toSet =>
       unify(s1, s2)
+      unify(dt1, dt2)
       unify(rt1, rt2)
-      val m1 = cs1.toMap
-      val m2 = cs2.toMap
+      val m1 = cs1.map((x, _, t) => (x, t)).toMap
+      val m2 = cs2.map((x, _, t) => (x, t)).toMap
       m1.keySet.foreach(k => unify(m1(k), m2(k)))
       o1.foreach(c1 => o2.foreach(c2 => unify(c1, c2)))
     case _ => throw UnifyError(s"spine mismatch")

@@ -65,9 +65,10 @@ object Syntax:
     case TCon(name: Name, args: List[Ty])
     case Con(name: Name, con: Name, targs: List[Ty], args: List[Tm])
     case Match(
+        dty: Ty,
         rty: Ty,
         scrut: Tm,
-        cs: List[(Name, Tm)],
+        cs: List[(Name, Int, Tm)],
         other: Option[Tm]
     )
 
@@ -124,9 +125,9 @@ object Syntax:
       case Con(x, cx, tas, as) =>
         s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
 
-      case Match(_, scrut, cs, other) =>
+      case Match(_, _, scrut, cs, other) =>
         s"(match $scrut ${cs
-            .map((c, b) => s"| $c $b")
+            .map((c, _, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
 
       case Wk(t)      => s"(Wk $t)"

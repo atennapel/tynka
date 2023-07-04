@@ -83,6 +83,14 @@ object Syntax:
     case IntLit(value: Int)
 
     case Con(name: GName, con: GName, args: List[Tm])
+    case Field(scrut: Tm, ix: Int)
+    case Match(
+        dty: GName,
+        ty: Ty,
+        scrut: Tm,
+        cs: List[(GName, Tm)],
+        other: Option[Tm]
+    )
 
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"
@@ -97,4 +105,9 @@ object Syntax:
 
       case Con(x, cx, Nil) => s"(con $x $cx)"
       case Con(x, cx, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Field(t, i)     => s"(field #$i $t)"
+      case Match(_, _, scrut, cs, other) =>
+        s"(match $scrut ${cs
+            .map((c, b) => s"| $c $b")
+            .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
   export Tm.*

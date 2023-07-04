@@ -27,18 +27,19 @@ object Value:
     case SPrim(spine: Spine, name: PrimName, args: List[(Val, Icit)])
     case SMatch(
         spine: Spine,
+        dty: VTy,
         rty: VTy,
-        cs: List[(Name, Val)],
+        cs: List[(Name, Int, Val)],
         other: Option[Val]
     )
 
     def size: Int = this match
-      case SId                 => 0
-      case SApp(sp, _, _)      => 1 + sp.size
-      case SProj(sp, _)        => 1 + sp.size
-      case SSplice(sp)         => 1 + sp.size
-      case SPrim(sp, _, _)     => 1 + sp.size
-      case SMatch(sp, _, _, _) => 1 + sp.size
+      case SId                    => 0
+      case SApp(sp, _, _)         => 1 + sp.size
+      case SProj(sp, _)           => 1 + sp.size
+      case SSplice(sp)            => 1 + sp.size
+      case SPrim(sp, _, _)        => 1 + sp.size
+      case SMatch(sp, _, _, _, _) => 1 + sp.size
 
     def isEmpty: Boolean = this match
       case SId => true

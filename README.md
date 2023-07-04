@@ -11,7 +11,7 @@ java IO
 
 TODO:
 - [x] Datatype monomorphization
-- [ ] Case expressions
+- [x] Match expressions
 - [ ] If expressions
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Recursion check in datatypes definitions

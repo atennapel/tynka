@@ -41,9 +41,10 @@ object Staging:
     case VLam0(fnty: Val1, body: Val0 => Val0)
     case VFix0(ty: Val1, rty: Val1, b: (Val0, Val0) => Val0, arg: Val0)
     case VMatch0(
+        dty: Val1,
         rty: Val1,
         scrut: Val0,
-        cs: List[(Name, Val0)],
+        cs: List[(Name, Int, Val0)],
         other: Option[Val0]
     )
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
@@ -124,11 +125,12 @@ object Staging:
         (v, w) => eval0(b)(Def0(Def0(env, v), w)),
         eval0(arg)
       )
-    case Match(rty, scrut, cs, o) =>
+    case Match(dty, rty, scrut, cs, o) =>
       VMatch0(
+        eval1(dty),
         eval1(rty),
         eval0(scrut),
-        cs.map((x, t) => (x, eval0(t))),
+        cs.map((x, i, t) => (x, i, eval0(t))),
         o.map(eval0)
       )
     case App(f, a, _) => VApp0(eval0(f), eval0(a))
@@ -222,12 +224,32 @@ object Staging:
         val qarg = quote(arg)
         IR.Fix(ta, tb, g, x, qf, qarg)
 
-      case VMatch0(rty, scrut, cs, other) =>
-        IR.Match(
-          quoteCTy(rty),
+      case VMatch0(dty, rty, scrut, cs, other) =>
+        val qdty = quoteVTy(dty)
+        val dataname = qdty match
+          case IR.TCon(x) => x
+        val qdtytd = IR.TDef(quoteVTy(dty))
+        val qrty = quoteCTy(rty)
+        val x = fresh()
+        IR.Let(
+          x,
+          qdtytd,
+          qrty,
           quote(scrut),
-          cs.map((x, t) => (x.expose, quote(t))),
-          other.map(quote)
+          IR.Match(
+            dataname,
+            qrty,
+            quote(scrut),
+            cs.map((cx, i, t) =>
+              (
+                cx.expose,
+                (0 until i).foldLeft(quote(t))((f, i) =>
+                  IR.App(f, IR.Field(IR.Var(x, qdtytd), i))
+                )
+              )
+            ),
+            other.map(quote)
+          )
         )
 
       case VLet0(ty, bty, v, b) =>

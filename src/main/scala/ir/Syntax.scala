@@ -70,7 +70,14 @@ object Syntax:
     )
 
     case Con(name: GName, con: GName, args: List[Tm])
-    case Match(rty: TDef, scrut: Tm, cs: List[(GName, Tm)], other: Option[Tm])
+    case Field(scrut: Tm, ix: Int)
+    case Match(
+        dty: GName,
+        rty: TDef,
+        scrut: Tm,
+        cs: List[(GName, Tm)],
+        other: Option[Tm]
+    )
 
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
@@ -85,8 +92,9 @@ object Syntax:
 
       case Con(x, cx, Nil) => s"(con $x $cx)"
       case Con(x, cx, as)  => s"(con $x $cx ${as.mkString(" ")})"
+      case Field(s, i)     => s"(field #$i $s)"
 
-      case Match(_, scrut, cs, other) =>
+      case Match(_, _, scrut, cs, other) =>
         s"(match $scrut ${cs
             .map((c, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
@@ -128,7 +136,8 @@ object Syntax:
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
       case Con(x, cx, as) => as.flatMap(_.fvs)
-      case Match(_, s, cs, o) =>
+      case Field(s, i)    => s.fvs
+      case Match(_, _, s, cs, o) =>
         s.fvs ++ cs.flatMap(_._2.fvs) ++ o.map(_.fvs).getOrElse(Nil)
 
     def usedNames: Set[LName] = this match
@@ -142,7 +151,8 @@ object Syntax:
       case Fix(_, _, _, _, b, arg) => b.usedNames ++ arg.usedNames
 
       case Con(_, _, as) => as.flatMap(_.usedNames).toSet
-      case Match(_, s, cs, o) =>
+      case Field(s, i)   => s.usedNames
+      case Match(_, _, s, cs, o) =>
         s.usedNames ++ cs
           .flatMap(_._2.usedNames) ++ o.map(_.usedNames).getOrElse(Set.empty)
 
@@ -157,7 +167,8 @@ object Syntax:
       case Fix(_, _, x, y, b, arg) => x max y max b.maxName max arg.maxName
 
       case Con(_, _, as) => as.map(_.maxName).fold(-1)(_ max _)
-      case Match(_, s, cs, o) =>
+      case Field(s, i)   => s.maxName
+      case Match(_, _, s, cs, o) =>
         s.maxName max cs.map(_._2.maxName).fold(-1)(_ max _) max o
           .map(_.maxName)
           .getOrElse(-1)
@@ -215,8 +226,10 @@ object Syntax:
           val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)
         case Con(x, cx, as) => Con(x, cx, as.map(_.subst(sub, scope)))
-        case Match(rty, scrut, cs, other) =>
+        case Field(s, i)    => Field(s.subst(sub, scope), i)
+        case Match(dty, rty, scrut, cs, other) =>
           Match(
+            dty,
             rty,
             scrut.subst(sub, scope),
             cs.map((x, t) => (x, t.subst(sub, scope))),

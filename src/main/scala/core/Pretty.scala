@@ -115,9 +115,9 @@ object Pretty:
       s"con $x $cx (${tas.map(prettyParen(_)).mkString(" ")}) ${as.map(prettyParen(_)).mkString(" ")}"
 
     // TODO
-    case Match(_, scrut, cs, other) =>
+    case Match(_, _, scrut, cs, other) =>
       s"(match $scrut ${cs
-          .map((c, b) => s"| $c $b")
+          .map((c, _, b) => s"| $c $b")
           .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
 
     case Wk(tm)     => pretty(tm)(ns.tail)

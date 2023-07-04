@@ -76,11 +76,12 @@ object Zonking:
 
     case TCon(x, as)         => TCon(x, as.map(zonk))
     case Con(x, cx, tas, as) => Con(x, cx, tas.map(zonk), as.map(zonk))
-    case Match(rty, scrut, cs, other) =>
+    case Match(dty, rty, scrut, cs, other) =>
       Match(
+        zonk(dty),
         zonk(rty),
         zonk(scrut),
-        cs.map((x, b) => (x, zonk(b))),
+        cs.map((x, i, b) => (x, i, zonk(b))),
         other.map(zonk)
       )
 

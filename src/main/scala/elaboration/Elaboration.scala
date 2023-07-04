@@ -504,7 +504,7 @@ object Elaboration:
           val lam =
             ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
           val eb = check(lam, fnty, STy(ecv))
-          (cx, eb)
+          (cx, tas.size, eb)
         }
         val left = cons.keySet -- used
         if other.isEmpty && left.nonEmpty then
@@ -516,7 +516,7 @@ object Elaboration:
           if left.isEmpty then error(s"other case does not match anything")
           check(b, vrty, STy(vrcv))
         }
-        Match(rty, escrut, ecs, eother)
+        Match(ctx.quote(vscrutty), rty, escrut, ecs, eother)
       case _ =>
         error(
           s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"

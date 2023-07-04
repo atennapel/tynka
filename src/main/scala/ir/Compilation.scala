@@ -34,7 +34,6 @@ object Compilation:
             ps.zipWithIndex.foreach { case ((x, _), i) =>
               rename.set(x, i, true)
             }
-            println(s"def $x : $t = $v")
             J.DDef(x, gen, go(t), go(v, true))
       case DData(x, cs) => J.DData(x, cs.map((cx, as) => (cx, as.map(go))))
     }
@@ -70,10 +69,16 @@ object Compilation:
         J.Let(x, go(t.ty), go(v, false), go(b, tr))
 
       case Con(x, cx, as) => J.Con(x, cx, as.map(go(_, false)))
+      case Field(s, i)    => J.Field(go(s, false), i)
 
-      case Match(rty, scrut, cs, other) =>
-        // TODO: remove lambdas
-        impossible()
+      case Match(dty, rty, scrut, cs, other) =>
+        J.Match(
+          dty,
+          go(rty.ty),
+          go(scrut, false),
+          cs.map((x, t) => (x, go(t, tr))),
+          other.map(go(_, tr))
+        )
 
       case Lam(_, _, _, _)       => impossible()
       case Fix(_, _, _, _, _, _) => impossible()
@@ -125,6 +130,11 @@ object Compilation:
 
     case Con(x, cx, as)   => Con(x, cx, as.map(conv))
     case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
+
+    case Field(s, i) =>
+      conv(s) match
+        case Con(name, con, as) => as(i)
+        case cs                 => Field(cs, i)
 
     case App(f, a) =>
       conv(f) match
@@ -188,20 +198,19 @@ object Compilation:
       )
       App(gl, conv(arg))
 
-    case Match(rty, scrut, cs, other) =>
+    case Match(dty, rty, scrut, cs, other) =>
       conv(scrut) match
         case Con(_, x, as) =>
           cs.toMap.get(x) match
-            case Some(b) => conv(as.foldLeft(b)(App.apply))
+            case Some(b) => conv(b)
             case None    => conv(other.get)
         case cscrut =>
           val (vs, spine) = eta(rty.params)
           val res = Match(
+            dty,
             TDef(rty.rt),
             cscrut,
-            cs.map((x, t) =>
-              (x, conv(t.apps(spine)))
-            ), // TODO: apps under constructor lambdas
+            cs.map((x, t) => (x, conv(t.apps(spine)))),
             other.map(t => conv(t.apps(spine)))
           ).lams(vs, TDef(rty.rt))
           res

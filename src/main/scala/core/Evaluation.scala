@@ -73,25 +73,30 @@ object Evaluation:
       case _ => impossible()
 
   private def vmatch(
+      dty: VTy,
       rty: VTy,
-      cs: List[(Name, Val)],
+      cs: List[(Name, Int, Val)],
       o: Option[Val],
       v: Val
   ): Val =
     force(v) match
-      case VRigid(hd, sp) => VRigid(hd, SMatch(sp, rty, cs, o))
-      case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, rty, cs, o))
+      case VRigid(hd, sp) => VRigid(hd, SMatch(sp, dty, rty, cs, o))
+      case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, dty, rty, cs, o))
       case VGlobal(y, sp, v) =>
-        VGlobal(y, SMatch(sp, rty, cs, o), () => vmatch(rty, cs, o, v()))
+        VGlobal(
+          y,
+          SMatch(sp, dty, rty, cs, o),
+          () => vmatch(dty, rty, cs, o, v())
+        )
       case _ => impossible()
 
   def vspine(v: Val, sp: Spine): Val = sp match
-    case SId                    => v
-    case SApp(sp, a, i)         => vapp(vspine(v, sp), a, i)
-    case SSplice(sp)            => vsplice(vspine(v, sp))
-    case SProj(sp, proj)        => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as)       => vprimelim(x, as, vspine(v, sp))
-    case SMatch(sp, rty, cs, o) => vmatch(rty, cs, o, vspine(v, sp))
+    case SId                         => v
+    case SApp(sp, a, i)              => vapp(vspine(v, sp), a, i)
+    case SSplice(sp)                 => vsplice(vspine(v, sp))
+    case SProj(sp, proj)             => vproj(vspine(v, sp), proj)
+    case SPrim(sp, x, as)            => vprimelim(x, as, vspine(v, sp))
+    case SMatch(sp, dty, rty, cs, o) => vmatch(dty, rty, cs, o, vspine(v, sp))
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
     case Solved(v, _, _) => v
@@ -130,10 +135,11 @@ object Evaluation:
 
     case TCon(x, as)         => VTCon(x, as.map(eval))
     case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
-    case Match(rty, scrut, cs, other) =>
+    case Match(dty, rty, scrut, cs, other) =>
       vmatch(
+        eval(dty),
         eval(rty),
-        cs.map((x, b) => (x, eval(b))),
+        cs.map((x, i, b) => (x, i, eval(b))),
         other.map(eval),
         eval(scrut)
       )
@@ -172,9 +178,10 @@ object Evaluation:
           App(f, quote(a, unfold), i)
         }
         App(as, quote(hd, sp, unfold), Expl)
-      case SMatch(sp, rty, cs, other) =>
-        val qcs = cs.map((x, b) => (x, quote(b, unfold)))
+      case SMatch(sp, dty, rty, cs, other) =>
+        val qcs = cs.map((x, i, b) => (x, i, quote(b, unfold)))
         Match(
+          quote(dty, unfold),
           quote(rty, unfold),
           quote(hd, sp, unfold),
           qcs,
