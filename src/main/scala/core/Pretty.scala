@@ -114,11 +114,12 @@ object Pretty:
     case Con(x, cx, tas, as) =>
       s"con $x $cx (${tas.map(prettyParen(_)).mkString(" ")}) ${as.map(prettyParen(_)).mkString(" ")}"
 
-    // TODO
     case Match(_, _, scrut, cs, other) =>
-      s"(match $scrut ${cs
-          .map((c, _, b) => s"| $c $b")
-          .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
+      s"match ${prettyParen(scrut, true)} ${cs
+          .map((c, _, b) => s"| $c ${pretty(b)}")
+          .mkString(" ")}${if other.isDefined then " " else ""}${other
+          .map(t => s"| ${pretty(t)}")
+          .getOrElse("")}"
 
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"

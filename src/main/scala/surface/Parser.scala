@@ -27,7 +27,10 @@ object Parser:
         "data",
         "match",
         "Meta",
-        "Ty"
+        "Ty",
+        "if",
+        "then",
+        "else"
       ),
       operators = Set(
         "=",
@@ -138,7 +141,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> fix <|> matchP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -226,6 +229,18 @@ object Parser:
 
     private lazy val lam: Parsley[Tm] =
       positioned(("\\" *> many(lamParam) <~> "." *> tm).map(lamFromLamParams _))
+
+    private lazy val ifP: Parsley[Tm] =
+      positioned(
+        ("if" *> tm <~> "then" *> (pos <~> tm) <~> "else" *> (pos <~> tm))
+          .map { case ((c, (pt, t)), (pf, f)) =>
+            Match(
+              c,
+              List((pt, Name("True"), Nil, t), (pf, Name("False"), Nil, f)),
+              None
+            )
+          }
+      )
 
     private lazy val app: Parsley[Tm] =
       precedence[Tm](appAtom <|> lam)(
