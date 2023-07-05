@@ -4,13 +4,10 @@ data Unit := MkUnit
 
 data Pair A B := MkPair A B
 
-def fst {A B} (p : Pair A B) : A =
-  match p
-  | MkPair fst snd. fst
+def fst {A B} (p : Pair A B) : A = p.1
 
-def snd {A B} (p : Pair A B) : B =
-  match p
-  | MkPair fst snd. snd
+def unpair {A B C : VTy} (p : Pair A B) (f : A -> B -> C) : C =
+  match p | MkPair a b. f a b
 
 data Nat := Z | S Nat
 
@@ -23,7 +20,7 @@ def (+) (a b : Nat) : Nat :=
 def State (S A : VTy) = S -> Pair S A
 
 def runState {S A} (c : State S A) (s : S) : Pair S A = c s
-def execState {S A} (c : State S A) (s : S) : A = snd (c s)
+def execState {S A} (c : State S A) (s : S) : A = (c s).2
 
 def get {S} : State S S = \s. (s, s)
 def put {S : VTy} (s : S) : State S Unit = \_. (s, [])
@@ -35,10 +32,10 @@ def (<$>) {S A B : VTy} (f : A -> B) (c : State S A) : State S B =
   \s. match c s | MkPair s' res. (s', f res)
 
 def (>>=) {S A B : VTy} (c : State S A) (f : A -> State S B) : State S B =
-  \s. match c s | MkPair s' res. f res s'
+  \s. unpair (c s) \s' res. f res s'
 
 def (>>) {S A B : VTy} (c : State S A) (f : State S B) : State S B =
-  \s. match c s | MkPair s' res. f s'
+  \s. f (c s).1
 
 -- example
 def FibState = Pair Nat Nat

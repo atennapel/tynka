@@ -427,24 +427,13 @@ object Elaboration:
           )
         if candidates.size > 1 then
           error(
-            s"cannot check [] against ${ctx.pretty(ty)}: more than one suitable constructor: ${candidates.keySet
+            s"cannot check pair against ${ctx.pretty(ty)}: more than one suitable constructor: ${candidates.keySet
                 .mkString(" ")}"
           )
         val cinfo = candidates.head
         val cx = cinfo._1
         val cas = cinfo._2
-        val ctxConsTypes: Ctx = datainfo._1.zipWithIndex.foldLeft(ctx) {
-          case (ctx, (x, i)) =>
-            ctx.define(
-              x,
-              VVTy(),
-              ctx.quote(VVTy()),
-              SMeta,
-              SMeta,
-              as(i),
-              ctx.quote(as(i))
-            )
-        }
+        val ctxConsTypes = datatypeCtx(datainfo._1, as)
         val efst = check(fst, ctxConsTypes.eval(cas(0)), SVTy())
         val esnd = check(snd, ctxConsTypes.eval(cas(1)), SVTy())
         Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd))
@@ -503,6 +492,20 @@ object Elaboration:
           )
     go(ty, 0, Set.empty)
 
+  private def datatypeCtx(ps: List[Name], as: List[Val])(implicit
+      ctx: Ctx
+  ): Ctx =
+    ps.zipWithIndex.foldLeft(ctx) { case (ctx, (x, i)) =>
+      ctx.define(
+        x,
+        VVTy(),
+        ctx.quote(VVTy()),
+        SMeta,
+        SMeta,
+        as(i),
+        ctx.quote(as(i))
+      )
+    }
   private def checkMatch(
       tm: S.Tm,
       scrut: S.Tm,
@@ -527,18 +530,7 @@ object Elaboration:
         checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
       case VTCon(dx, as) =>
         val (dps, cons) = getGlobalData(dx).get
-        val ctxConsTypes: Ctx = dps.zipWithIndex.foldLeft(ctx) {
-          case (ctx, (x, i)) =>
-            ctx.define(
-              x,
-              VVTy(),
-              ctx.quote(VVTy()),
-              SMeta,
-              SMeta,
-              as(i),
-              ctx.quote(as(i))
-            )
-        }
+        val ctxConsTypes = datatypeCtx(dps, as)
         val used = mutable.Set[Name]()
         val ecs = cs.map { (pos, cx, ps, b) =>
           implicit val ctx1: Ctx = ctx.enter(pos)
@@ -807,6 +799,53 @@ object Elaboration:
           case (VSigma(_, _, sndty), S.Snd) =>
             val rt = sndty(vfst(ctx.eval(et)))
             (Proj(et, Snd, Irrelevant, Irrelevant), rt, SMeta)
+          case (VLift(_, inner), _) =>
+            force(inner) match
+              case VTCon(_, _) => infer(S.Proj(S.Splice(t), p))
+              case _           => error(s"cannot project a lifted type")
+          case (VTCon(dx, as), p) =>
+            val datainfo = getGlobalData(dx).get
+            val candidates = datainfo._2.filter((_, as) => as.size == 2)
+            if candidates.isEmpty then
+              error(
+                s"cannot project pair with type ${ctx.pretty(ty)}: no suitable constructors"
+              )
+            if candidates.size > 1 then
+              error(
+                s"cannot project pair with type ${ctx.pretty(ty)}: more than one suitable constructor: ${candidates.keySet
+                    .mkString(" ")}"
+              )
+            val cinfo = candidates.head
+            val cx = cinfo._1
+            val cas = cinfo._2
+            val datactx = datatypeCtx(datainfo._1, as)
+            val x = Name("x")
+            p match
+              case S.Fst =>
+                val pty = datactx.eval(cas(0))
+                val em = check(
+                  S.Match(
+                    t,
+                    List((ctx.pos, cx, List(DoBind(x), DontBind), S.Var(x))),
+                    None
+                  ),
+                  pty,
+                  SVTy()
+                )
+                (em, pty, SVTy())
+              case S.Snd =>
+                val pty = datactx.eval(cas(1))
+                val em = check(
+                  S.Match(
+                    t,
+                    List((ctx.pos, cx, List(DontBind, DoBind(x)), S.Var(x))),
+                    None
+                  ),
+                  pty,
+                  SVTy()
+                )
+                (em, pty, SVTy())
+              case _ => impossible()
           case (tty, _) =>
             st match
               case SMeta =>

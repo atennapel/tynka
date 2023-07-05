@@ -15,13 +15,8 @@ def (||) a b = if a then True else b
 
 data Pair A B := MkPair A B
 
-def fst {A B : VTy} (p : Pair A B) : A =
-  match p
-  | MkPair fst snd. fst
-
-def snd {A B : VTy} (p : Pair A B) : B =
-  match p
-  | MkPair fst snd. snd
+def fst {A B : VTy} (p : Pair A B) : A = p.1
+def snd {A B : VTy} (p : Pair A B) : B = p.2
 
 data Either A B := Left A | Right B
 
