@@ -1,0 +1,50 @@
+def VTy = Ty Val
+
+-- natural numbers
+data Nat := Z | S Nat
+
+def (+) (a b : Nat) : Nat :=
+  fix (rec a. \acc. match a
+  | Z. acc
+  | S n. rec n (S acc)) a b
+
+-- lists
+data List A
+  | Nil
+  | (::) A (List A)
+
+def foldr {A : VTy} {cv} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
+  fix (go l. match l
+  | Nil. n
+  | (::) hd tl. c hd (go tl)
+  ) l
+
+-- push lists
+def Push A = (cv : CV) (B : Ty cv) -> (A -> B -> B) -> B -> B
+
+def Push/cons {A : VTy} (hd : A) (tl : Push A) : Push A =
+  \cv B c n. c hd (tl cv B c n)
+
+def Push/fromList {A : VTy} (as : List A) : Push A =
+  \cv B f b. foldr b f as
+
+def Push/toList {A : VTy} (as : Push A) : List A = as _ _ (::) Nil
+
+def Push/map {A B : VTy} (f : A -> B) (as : Push A) : Push B =
+  \cv R c n. as cv R (\a bs. c (f a) bs) n
+
+def Push/foldr {A : VTy} {cv} {B : Ty cv} (b : B) (f : A -> B -> B) (as : Push A) : B =
+  as cv B f b
+
+def Push/foldl {A B : VTy} (b : B) (f : B -> A -> B) (as : Push A) : B =
+  as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
+
+def Push/sum = Push/foldl 0 (+)
+
+def Push/range (n : Nat) : Push Nat =
+  \cv B f b. fix (go c. match c | Z. b | S m. f c (go m)) n
+
+def test :=
+  Push/sum \.
+  Push/map (\x. x + x) \.
+  Push/range 3

@@ -1,0 +1,56 @@
+def VTy = Ty Val
+
+data Unit := MkUnit
+
+data Nat := Z | S Nat
+
+def Functor (F : Meta -> Meta) = {A B : Meta} -> (A -> B) -> F A -> F B
+
+-- church-encoded free monad
+def Free (F : Meta -> Meta) (A : VTy) = (cv : CV) (R : Ty cv) -> (A -> R) -> (F R -> R) -> R
+
+def handle
+  {F : Meta -> Meta} {A : VTy} {cv : CV} {R : Ty cv}
+  (c : Free F A) (pure : A -> R) (impure : F R -> R) : R =
+  c _ R pure impure
+
+def return {F} {A : VTy} (x : A) : Free F A = \cv R pure impure. pure x
+
+def (>>=) {F A B} (x : Free F A) (k : A -> Free F B) : Free F B =
+  \cv R pure impure. x _ R (\a. k a _ R pure impure) impure
+
+def (>>) {F A B} (x : Free F A) (k : Free F B) : Free F B = (>>=) {F} x \_. k
+
+def lift {F : Meta -> Meta} {A : VTy} (fmap : Functor F) (x : F A) : Free F A =
+  \cv R pure impure. impure (fmap pure x)
+
+-- church-encoded state monad
+def StateF (S : VTy) (A : Meta) = (cv : CV) (R : Ty cv) -> ((S -> A) -> R) -> (S -> A -> R) -> R
+
+def StateF/handle
+  {S : VTy} {A : Meta} {cv : CV} {R : Ty cv}
+  (s : StateF S A) (get : (S -> A) -> R) (put : S -> A -> R) : R =
+  s _ R get put
+
+def StateF/Functor {S : VTy} : Functor (StateF S) =
+  \{A B} f x. \cv R get put. x _ R (\k. get (\x. f (k x))) (\s k. put s (f k))
+
+def State S A = Free (StateF S) A
+
+def get {S : VTy} : State S S = lift StateF/Functor (\cv R get put. get (\s. s))
+def put {S : VTy} (s : S) : State S Unit = lift StateF/Functor (\cv R get put. put s MkUnit)
+
+-- unification is not strong enough to handle this without explicit types
+def example : State Nat Nat =
+  (>>) {StateF Nat} (put 1) \.
+  (>>=) {StateF Nat} get \x.
+  (>>) {StateF Nat} (put (S x)) \.
+  (>>=) {StateF Nat} get \y.
+  return {StateF Nat} y
+
+def test : Nat :=
+  handle {StateF Nat} example
+    (\x. x) -- pure
+    (\s. StateF/handle s -- impure:
+      (\k. k 1) -- get
+      (\_ k. k)) -- put

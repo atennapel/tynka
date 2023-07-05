@@ -48,14 +48,21 @@ def head {A : VTy} (d : A) (l : List A) : A =
   | Nil. d
   | (::) hd _. hd
 
-def map {A B : VTy} (f : A -> B) (l : List A) : List B =
-  fix (rec l. match l
-  | Nil. Nil
-  | (::) hd tl. f hd :: rec tl
+def foldr {A : VTy} {cv} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
+  fix (go l. match l
+  | Nil. n
+  | (::) hd tl. c hd (go tl)
   ) l
 
+def foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
+  foldr (\acc. acc) (\hd go acc. go (c acc hd)) l n
+
+def map {A B : VTy} (f : A -> B) (l : List A) : List B =
+  foldr Nil (\hd tl. f hd :: tl) l
+
 def length {A : VTy} (l : List A) : Nat =
-  fix (rec l. \acc. match l
-  | Nil. acc
-  | (::) _ tl. rec tl (S acc)
-  ) l 0
+  foldl 0 (\n _. S n) l
+
+def (++) {A : VTy} (a b : List A) : List A = foldr b (::) a
+
+def sum = foldl 0 (+)
