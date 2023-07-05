@@ -12,7 +12,6 @@ java IO
 TODO:
 - [x] Datatype monomorphization
 - [x] Match expressions
-- [ ] Pair and unit syntax
 - [ ] Pair projections
 - [ ] Improve unification with globals
 - [ ] Higher-kinded type parameters for datatypes

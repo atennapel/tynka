@@ -405,6 +405,50 @@ object Elaboration:
         val etm = checkMatch(tm, scrut, cs, other, ctx.quote(ty), ty, vrcv)
         etm
 
+      case (S.Var(Name("[]")), VTCon(dx, as)) if !stage.isMeta =>
+        val nilary = getGlobalData(dx).get._2.filter((_, as) => as.isEmpty)
+        if nilary.isEmpty then
+          error(
+            s"cannot check [] against ${ctx.pretty(ty)}: no nilary constructors"
+          )
+        if nilary.size > 1 then
+          error(
+            s"cannot check [] against ${ctx.pretty(ty)}: more than one nilary constructor: ${nilary.keySet
+                .mkString(" ")}"
+          )
+        val cx = nilary.head._1
+        check(S.Var(cx), ty, stage)
+      case (S.Pair(fst, snd), VTCon(dx, as)) if !stage.isMeta =>
+        val datainfo = getGlobalData(dx).get
+        val candidates = datainfo._2.filter((_, as) => as.size == 2)
+        if candidates.isEmpty then
+          error(
+            s"cannot check pair against ${ctx.pretty(ty)}: no suitable constructors"
+          )
+        if candidates.size > 1 then
+          error(
+            s"cannot check [] against ${ctx.pretty(ty)}: more than one suitable constructor: ${candidates.keySet
+                .mkString(" ")}"
+          )
+        val cinfo = candidates.head
+        val cx = cinfo._1
+        val cas = cinfo._2
+        val ctxConsTypes: Ctx = datainfo._1.zipWithIndex.foldLeft(ctx) {
+          case (ctx, (x, i)) =>
+            ctx.define(
+              x,
+              VVTy(),
+              ctx.quote(VVTy()),
+              SMeta,
+              SMeta,
+              as(i),
+              ctx.quote(as(i))
+            )
+        }
+        val efst = check(fst, ctxConsTypes.eval(cas(0)), SVTy())
+        val esnd = check(snd, ctxConsTypes.eval(cas(1)), SVTy())
+        Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd))
+
       case (S.Quote(t), VLift(cv, a)) => check(t, a, STy(cv)).quote
       case (t, VLift(cv, a))          => check(t, a, STy(cv)).quote
 

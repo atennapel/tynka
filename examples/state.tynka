@@ -2,13 +2,6 @@ def VTy = Ty Val
 
 data Unit := MkUnit
 
-data Bool := False | True
-
-def if {A : VTy} (c : Bool) (a b : A) : A =
-  match c
-  | True. a
-  | False. b
-
 data Pair A B := MkPair A B
 
 def fst {A B} (p : Pair A B) : A =
@@ -26,30 +19,20 @@ def (+) (a b : Nat) : Nat :=
   | Z. acc
   | S n. rec n (S acc)) a b
 
-def pred (n : Nat) : Nat =
-  match n
-  | Z. Z
-  | S m. m
-
-def isZero (n : Nat) : Bool =
-  match n
-  | Z. True
-  | S _. False
-
 -- State monad
 def State (S A : VTy) = S -> Pair S A
 
 def runState {S A} (c : State S A) (s : S) : Pair S A = c s
 def execState {S A} (c : State S A) (s : S) : A = snd (c s)
 
-def get {S} : State S S = \s. MkPair s s
-def put {S : VTy} (s : S) : State S Unit = \_. MkPair s MkUnit
-def update {S : VTy} (f : S -> S) : State S Unit = \s. MkPair (f s) MkUnit
+def get {S} : State S S = \s. (s, s)
+def put {S : VTy} (s : S) : State S Unit = \_. (s, [])
+def update {S : VTy} (f : S -> S) : State S Unit = \s. (f s, [])
 
-def return {S A : VTy} (a : A) : State S A = \s. MkPair s a 
+def return {S A : VTy} (a : A) : State S A = \s. (s, a) 
 
 def (<$>) {S A B : VTy} (f : A -> B) (c : State S A) : State S B =
-  \s. match c s | MkPair s' res. MkPair s' (f res)
+  \s. match c s | MkPair s' res. (s', f res)
 
 def (>>=) {S A B : VTy} (c : State S A) (f : A -> State S B) : State S B =
   \s. match c s | MkPair s' res. f res s'
@@ -61,7 +44,7 @@ def (>>) {S A B : VTy} (c : State S A) (f : State S B) : State S B =
 def FibState = Pair Nat Nat
 
 def fibStep (st : FibState) : FibState =
-  match st | MkPair x1 x2. MkPair x2 (x1 + x2)
+  match st | MkPair x1 x2. (x2, x1 + x2)
 
 def fibState (n : Nat) : State FibState Nat =
   fix (rec n. match n
@@ -69,4 +52,4 @@ def fibState (n : Nat) : State FibState Nat =
   | S m. update fibStep >> rec m
   ) n
 
-def fib (n : Nat) : Nat := execState (fibState n) (MkPair 0 1)
+def fib (n : Nat) : Nat := execState (fibState n) (0, 1)
