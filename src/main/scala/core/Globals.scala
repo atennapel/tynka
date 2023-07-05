@@ -9,9 +9,10 @@ import scala.collection.mutable
 object Globals:
   private val map: mutable.Map[Name, GlobalEntry] = mutable.Map.empty
   type DataEntry = (List[Name], Map[Name, List[Tm]])
+  type ConEntry = (Name, List[Tm])
   private val datamap: mutable.Map[Name, DataEntry] =
     mutable.Map.empty
-  private val conmap: mutable.Map[Name, (Name, List[Tm])] = mutable.Map.empty
+  private val conmap: mutable.Map[Name, ConEntry] = mutable.Map.empty
 
   case class GlobalEntry(
       name: Name,
@@ -35,6 +36,7 @@ object Globals:
     datamap += name -> (ps, data.toMap)
     data.foreach((c, ts) => conmap += c -> (name, ts))
   def getGlobalData(name: Name): Option[DataEntry] = datamap.get(name)
+  def getGlobalCon(name: Name): Option[ConEntry] = conmap.get(name)
 
   def resetGlobals(): Unit =
     map.clear()

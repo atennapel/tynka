@@ -28,7 +28,7 @@ data Maybe A := Nothing | Just A
 -- natural numbers
 data Nat := Z | S Nat
 
-def (+) (a b : Nat) : Nat :=
+def (+) a b :=
   fix (rec a. \acc. match a
   | Z. acc
   | S n. rec n (S acc)) a b

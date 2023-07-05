@@ -12,10 +12,10 @@ java IO
 TODO:
 - [x] Datatype monomorphization
 - [x] Match expressions
-- [ ] Figure out datatype from constructors in match
 - [ ] If expressions
 - [ ] Pair and unit syntax
 - [ ] Pair projections
+- [ ] Improve unification with globals
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Recursion check in datatypes definitions
 - [ ] JVM bytecode generation

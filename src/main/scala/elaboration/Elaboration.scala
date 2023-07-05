@@ -470,6 +470,17 @@ object Elaboration:
   )(implicit ctx: Ctx): Tm =
     val (escrut, vscrutty) = infer(scrut, SVTy())
     force(vscrutty) match
+      case VFlex(_, _) =>
+        // try to figure out datatype from constructors
+        val used = cs.flatMap(c => getGlobalCon(c._2).map(_._1))
+        if used.isEmpty then error(s"match contains undefined constructors")
+        val name = used.head
+        val arity = getGlobalData(name).get._1.size
+        val data = (0 until arity).toList
+          .map(_ => newMeta(VVTy(), SMeta))
+          .foldLeft(Global(name))((f, a) => App(f, a, Expl))
+        unify(vscrutty, ctx.eval(data))
+        checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
       case VTCon(dx, as) =>
         val (dps, cons) = getGlobalData(dx).get
         val ctxConsTypes: Ctx = dps.zipWithIndex.foldLeft(ctx) {
