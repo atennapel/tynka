@@ -44,7 +44,7 @@ def Push/sum = Push/foldl 0 (+)
 def Push/range (n : Nat) : Push Nat =
   \cv B f b. fix (go c. match c | Z. b | S m. f c (go m)) n
 
-def test :=
+def main :=
   Push/sum \.
   Push/map (\x. x + x) \.
   Push/range 3

@@ -8,6 +8,7 @@ import elaboration.Elaboration.elaborate
 import elaboration.Elaboration.ElaborateError
 import core.Staging.stage
 import ir.Compilation.compile
+import jvmir.Interpreter.interpret
 
 import java.io.File
 import scala.io.Source
@@ -29,10 +30,12 @@ object Main:
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
       println(pretty(eds))
+
+      /*
       getGlobal(Name("main")).foreach { g =>
         println("\nmain normal form:")
         println(pretty(nf(g.tm))(Nil))
-      }
+      }*/
 
       println("\nstaging:")
       val irds = stage(eds)
@@ -41,6 +44,9 @@ object Main:
       println("\ncompilation:")
       val jvmirds = compile(irds)
       println(jvmirds)
+
+      println("\ninterpret:")
+      interpret(jvmirds).foreach(println(_))
     catch
       case err: ElaborateError =>
         println(err.getMessage)

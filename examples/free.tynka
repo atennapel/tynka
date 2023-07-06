@@ -48,7 +48,7 @@ def example : State Nat Nat =
   (>>=) {StateF Nat} get \y.
   return {StateF Nat} y
 
-def test : Nat :=
+def main : Nat :=
   handle {StateF Nat} example
     (\x. x) -- pure
     (\s. StateF/handle s -- impure:

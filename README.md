@@ -5,7 +5,7 @@ We have a language with two layers, one compile-time layer with full dependent t
 
 Try it out:
 ```
-sbt "run examples/IO"
+sbt "run examples/state"
 java IO
 ```
 
@@ -13,9 +13,9 @@ TODO:
 - [x] Datatype monomorphization
 - [x] Match expressions
 - [x] IO
-- [ ] Interpreter
+- [x] Interpreter
 - [ ] JVM bytecode generation
 - [ ] Foreign datatypes and operations
+- [ ] Postponing
 - [ ] Recursion check in datatypes definitions
-- [ ] Improve unification with globals
 - [ ] Higher-kinded type parameters for datatypes

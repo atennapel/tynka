@@ -50,3 +50,5 @@ def fibState (n : Nat) : State FibState Nat =
   ) n
 
 def fib (n : Nat) : Nat := execState (fibState n) (0, 1)
+
+def main := fib 6
