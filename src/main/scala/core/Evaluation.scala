@@ -249,3 +249,31 @@ object Evaluation:
 
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)
+
+    case PIO => (vfun(VVTy(), VCTy()), SMeta)
+    // returnIO : {A : VTy} -> ^A -> ^(IO A)
+    case PReturnIO =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a => vfun(VLift(VVal(), a), VLift(VComp(), vappE(VPrim(PIO), a)))
+        ),
+        SMeta
+      )
+    // bindIO : {A B : VTy} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
+    case PBindIO =>
+      def vio(a: VTy) = VLift(VComp(), vappE(VPrim(PIO), a))
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "B",
+              VVTy(),
+              b => vfun(vio(a), vfun(vfun(VLift(VVal(), a), vio(b)), vio(b)))
+            )
+        ),
+        SMeta
+      )

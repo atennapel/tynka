@@ -101,7 +101,7 @@ object Syntax:
       case IntLit(v) => s"$v"
 
       case GlobalApp(x, _, tc, as) =>
-        s"(${if tc then "[tailcall] " else ""}$x ${as.mkString(" ")})"
+        s"(${if tc then "[tailcall] " else ""}$x(${as.mkString(", ")}))"
 
       case Con(x, cx, Nil) => s"(con $cx)"
       case Con(x, cx, as)  => s"(con $cx ${as.mkString(" ")})"

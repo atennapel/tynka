@@ -189,6 +189,7 @@ object Staging:
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
     v match
       case VPrim1(PFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteCTy(b))
+      case VPrim1(PIO, List(a))        => IR.TDef(Nil, true, quoteVTy(a))
       case _                           => IR.TDef(quoteVTy(v))
 
   private def quote(
@@ -267,6 +268,20 @@ object Staging:
       case VCon0(x, cx, tas, as) =>
         val dx = dmono.get(x, tas)
         IR.Con(dx, cx.expose, as.map(quote))
+
+      case VSplicePrim0(PReturnIO, List(ty, v)) =>
+        IR.ReturnIO(quote(vsplice0(v)))
+      case VSplicePrim0(PBindIO, List(t1, t2, c, k)) =>
+        val x = fresh()
+        val qt1 = quoteVTy(t1)
+        val qt2 = quoteVTy(t2)
+        val qk = quote(vsplice0(vapp1(k, VQuote1(VVar0(l)))))(
+          l + 1,
+          (x, IR.TDef(qt1)) :: ns,
+          fresh,
+          dmono
+        )
+        IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
 
       case VPrim0(_)           => impossible()
       case VSplicePrim0(x, as) => impossible()

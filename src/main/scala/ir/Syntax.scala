@@ -15,22 +15,23 @@ object Syntax:
     def tdef: TDef = TDef(this)
   export Ty.*
 
-  final case class TDef(ps: List[Ty], rt: Ty):
+  final case class TDef(ps: List[Ty], io: Boolean, rt: Ty):
     override def toString: String = ps match
-      case Nil => rt.toString
-      case _   => s"(${ps.mkString(", ")}) -> $rt"
+      case Nil if !io => rt.toString
+      case _ => s"(${ps.mkString(", ")}) ->${if io then " IO" else ""} $rt"
     def head: Ty = ps.head
-    def tail: TDef = TDef(ps.tail, rt)
+    def tail: TDef = TDef(ps.tail, io, rt)
     def ty: Ty =
-      if ps.nonEmpty then impossible()
+      if ps.nonEmpty || io then impossible()
       else rt
-    def drop(n: Int): TDef = TDef(ps.drop(n), rt)
+    def drop(n: Int): TDef = TDef(ps.drop(n), io, rt)
     def params: List[Ty] = ps
   object TDef:
-    def apply(rt: Ty): TDef = TDef(Nil, rt)
-    def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
-    def apply(t1: Ty, t2: TDef): TDef = TDef(t1 :: t2.ps, t2.rt)
-    def apply(ps: List[Ty], t2: TDef): TDef = TDef(ps ++ t2.ps, t2.rt)
+    def apply(rt: Ty): TDef = TDef(Nil, false, rt)
+    def apply(io: Boolean, rt: Ty): TDef = TDef(Nil, io, rt)
+    def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), false, t2)
+    def apply(t1: Ty, t2: TDef): TDef = TDef(t1 :: t2.ps, t2.io, t2.rt)
+    def apply(ps: List[Ty], t2: TDef): TDef = TDef(ps ++ t2.ps, t2.io, t2.rt)
 
   final case class Defs(defs: List[Def]):
     override def toString: String = defs.mkString("\n")
@@ -79,6 +80,9 @@ object Syntax:
         other: Option[Tm]
     )
 
+    case ReturnIO(value: Tm)
+    case BindIO(t1: Ty, t2: Ty, x: LName, value: Tm, body: Tm)
+
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
@@ -98,6 +102,9 @@ object Syntax:
         s"(match $scrut ${cs
             .map((c, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
+
+      case ReturnIO(v)           => s"(returnIO $v)"
+      case BindIO(_, _, x, v, b) => s"($x <- $v; $b)"
 
     def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
       ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -140,6 +147,9 @@ object Syntax:
       case Match(_, _, s, cs, o) =>
         s.fvs ++ cs.flatMap(_._2.fvs) ++ o.map(_.fvs).getOrElse(Nil)
 
+      case ReturnIO(v)           => v.fvs
+      case BindIO(_, _, x, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+
     def usedNames: Set[LName] = this match
       case Var(x, _)    => Set(x)
       case Global(_, _) => Set.empty
@@ -155,6 +165,9 @@ object Syntax:
       case Match(_, _, s, cs, o) =>
         s.usedNames ++ cs
           .flatMap(_._2.usedNames) ++ o.map(_.usedNames).getOrElse(Set.empty)
+
+      case ReturnIO(v)           => v.usedNames
+      case BindIO(_, _, x, v, b) => v.usedNames ++ b.usedNames
 
     def maxName: LName = this match
       case Var(x, _)    => x
@@ -172,6 +185,9 @@ object Syntax:
         s.maxName max cs.map(_._2.maxName).fold(-1)(_ max _) max o
           .map(_.maxName)
           .getOrElse(-1)
+
+      case ReturnIO(v)           => v.maxName
+      case BindIO(_, _, x, v, b) => v.maxName max b.maxName
 
     def subst(sub: Map[LName, Tm]): Tm =
       subst(
@@ -225,6 +241,7 @@ object Syntax:
         case Let(x0, t, bt, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
           Let(x, t, bt, v.subst(sub, scope), b)
+
         case Con(x, cx, as) => Con(x, cx, as.map(_.subst(sub, scope)))
         case Field(s, i)    => Field(s.subst(sub, scope), i)
         case Match(dty, rty, scrut, cs, other) =>
@@ -235,4 +252,9 @@ object Syntax:
             cs.map((x, t) => (x, t.subst(sub, scope))),
             other.map(_.subst(sub, scope))
           )
+
+        case ReturnIO(v) => ReturnIO(v.subst(sub, scope))
+        case BindIO(t1, t2, x0, v, b0) =>
+          val (List((x, _)), b) = underN(List((x0, TDef(t1))), b0, sub, scope)
+          BindIO(t1, t2, x, v.subst(sub, scope), b)
   export Tm.*

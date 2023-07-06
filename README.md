@@ -12,9 +12,10 @@ java IO
 TODO:
 - [x] Datatype monomorphization
 - [x] Match expressions
+- [x] IO
+- [ ] Interpreter
 - [ ] JVM bytecode generation
 - [ ] Foreign datatypes and operations
-- [ ] IO
 - [ ] Recursion check in datatypes definitions
 - [ ] Improve unification with globals
 - [ ] Higher-kinded type parameters for datatypes

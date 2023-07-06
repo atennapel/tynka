@@ -47,8 +47,9 @@ object Compilation:
         val (x, arg) = localrename.get(x0)
         if arg then J.Arg(x) else J.Var(x)
       case Global(x, t) =>
-        if t.ps.nonEmpty then impossible()
-        J.Global(x, go(t.rt))
+        t match
+          case TDef(Nil, false, rt) => J.Global(x, go(t.rt))
+          case ty => J.GlobalApp(x, go(ty), tr && x == defname, List())
 
       case IntLit(n) => J.IntLit(n)
 
@@ -74,11 +75,16 @@ object Compilation:
       case Match(dty, rty, scrut, cs, other) =>
         J.Match(
           dty,
-          go(rty.ty),
+          go(rty.rt),
           go(scrut, false),
           cs.map((x, t) => (x, go(t, tr))),
           other.map(go(_, tr))
         )
+
+      case ReturnIO(v) => go(v, tr)
+      case BindIO(t1, t2, x0, v, b) =>
+        val x = localrename.fresh(x0, false)
+        J.Let(x, go(t1), go(v, false), go(b, tr))
 
       case Lam(_, _, _, _)       => impossible()
       case Fix(_, _, _, _, _, _) => impossible()
@@ -87,12 +93,13 @@ object Compilation:
     case TCon(x) => J.TCon(x)
 
   private def go(t: TDef): J.TDef = t match
-    case TDef(Nil, rt) => J.TDef(None, go(rt))
-    case TDef(ps, rt)  => J.TDef(ps.map(go), go(rt))
+    case TDef(Nil, false, rt) => J.TDef(None, go(rt))
+    case TDef(Nil, true, rt)  => J.TDef(Some(Nil), go(rt))
+    case TDef(ps, _, rt)      => J.TDef(ps.map(go), go(rt))
 
   private def goTy(t: TDef): J.Ty = t match
-    case TDef(Nil, rt) => go(rt)
-    case _             => impossible()
+    case TDef(Nil, false, rt) => go(rt)
+    case _                    => impossible()
 
   // simplify and lambdalift
   private type NewDefs = mutable.ArrayBuffer[Def]
@@ -152,10 +159,10 @@ object Compilation:
           val c = b.fvs.count((y, _) => x == y)
           if c == 0 then b
           else if c == 1 || isSmall(v) then conv(b.subst(Map(x -> v)))
-          else if t.ps.isEmpty then
+          else if !t.io && t.ps.isEmpty then
             val (vs, spine) = eta(bt.params)
-            Let(x, t, TDef(bt.rt), v, conv(b.apps(spine)))
-              .lams(vs, TDef(bt.rt))
+            Let(x, t, TDef(bt.io, bt.rt), v, conv(b.apps(spine)))
+              .lams(vs, TDef(bt.io, bt.rt))
           else
             val (vs, spine) = eta(t.params)
             val fv = v.fvs.map((x, t) => (x, t.ty)).distinctBy((y, _) => y)
@@ -168,12 +175,14 @@ object Compilation:
               gx,
               true,
               TDef(fv.map(_._2), t),
-              conv(v.apps(spine).lams(nps, TDef(t.rt)))
+              conv(v.apps(spine).lams(nps, TDef(t.io, t.rt)))
             )
-            val gl = Global(gx, TDef(nps.map(_._2), t.rt))
+            val gl = Global(gx, TDef(nps.map(_._2), t.io, t.rt))
               .apps(fv.map((x, t) => Var(x, TDef(t))))
             val (vs2, spine2) = eta(bt.params)
-            conv(b.subst(Map(x -> gl)).apps(spine2).lams(vs2, TDef(bt.rt)))
+            conv(
+              b.subst(Map(x -> gl)).apps(spine2).lams(vs2, TDef(bt.io, bt.rt))
+            )
 
     case Fix(t1, t2, g, x, b0, arg) =>
       val (vs, spine) = eta(t2.params)
@@ -186,10 +195,10 @@ object Compilation:
         x -> ix
       }.toMap
       val gx = globalgen.gen()
-      val gl = Global(gx, TDef(nps.map(_._2), t2.rt))
+      val gl = Global(gx, TDef(nps.map(_._2), t2.io, t2.rt))
         .apps(fv.map((x, t) => Var(x, TDef(t))))
       val b = conv(
-        b0.apps(spine).lams(nps, TDef(t2.rt)).subst(Map(g -> gl))
+        b0.apps(spine).lams(nps, TDef(t2.io, t2.rt)).subst(Map(g -> gl))
       )
       defs += DDef(
         gx,
@@ -209,12 +218,20 @@ object Compilation:
           val (vs, spine) = eta(rty.params)
           val res = Match(
             dty,
-            TDef(rty.rt),
+            TDef(rty.io, rty.rt),
             cscrut,
             cs.map((x, t) => (x, conv(t.apps(spine)))),
             other.map(t => conv(t.apps(spine)))
-          ).lams(vs, TDef(rty.rt))
+          ).lams(vs, TDef(rty.io, rty.rt))
           res
+
+    case ReturnIO(v) => ReturnIO(conv(v))
+    case BindIO(t1, t2, x, v, b) =>
+      conv(v) match
+        case BindIO(t3, t4, y, v2, b2) =>
+          conv(BindIO(t3, t2, y, v2, BindIO(t4, t2, x, b2, b)))
+        case ReturnIO(v) => b.subst(Map(x -> v))
+        case v           => BindIO(t1, t2, x, v, conv(b))
 
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)      => true
@@ -237,13 +254,13 @@ object Compilation:
       scope: Set[LName] = Set.empty
   ): List[(LName, Ty)] =
     (t, ps) match
-      case (TDef(Nil, rt), Nil) => Nil
-      case (TDef(t :: ts, rt), Nil) =>
+      case (TDef(Nil, _, rt), Nil) => Nil
+      case (TDef(t :: ts, io, rt), Nil) =>
         val y = if scope.isEmpty then 0 else scope.max + 1
-        val rest = eta(TDef(ts, rt), Nil, scope + y)
+        val rest = eta(TDef(ts, io, rt), Nil, scope + y)
         (y, t) :: rest
-      case (TDef(t1 :: ts, rt), (x, t2) :: rest) if t1 == t2 =>
-        eta(TDef(ts, rt), rest, scope + x)
+      case (TDef(t1 :: ts, io, rt), (x, t2) :: rest) if t1 == t2 =>
+        eta(TDef(ts, io, rt), rest, scope + x)
       case _ => impossible()
 
   private def eta(ps: List[Ty])(implicit
