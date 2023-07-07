@@ -16,6 +16,5 @@ TODO:
 - [x] Interpreter
 - [ ] JVM bytecode generation
 - [ ] Foreign datatypes and operations
-- [ ] Postponing
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes

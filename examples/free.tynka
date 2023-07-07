@@ -25,32 +25,50 @@ def lift {F : Meta -> Meta} {A : VTy} (fmap : Functor F) (x : F A) : Free F A =
   \cv R pure impure. impure (fmap pure x)
 
 -- church-encoded state monad
-def StateF (S : VTy) (A : Meta) = (cv : CV) (R : Ty cv) -> ((S -> A) -> R) -> (S -> A -> R) -> R
+def StateF (S : VTy) (A : Meta) = (cv : CV) (R : Ty cv) -> ((S -> A) -> R) -> (S -> A -> R) -> R 
 
 def StateF/handle
   {S : VTy} {A : Meta} {cv : CV} {R : Ty cv}
-  (s : StateF S A) (get : (S -> A) -> R) (put : S -> A -> R) : R =
+  (get : (S -> A) -> R) (put : S -> A -> R) (s : StateF S A) : R =
   s _ R get put
 
 def StateF/Functor {S : VTy} : Functor (StateF S) =
-  \{A B} f x. \cv R get put. x _ R (\k. get (\x. f (k x))) (\s k. put s (f k))
+  \f x. \cv R get put. x _ R (\k. get (\x. f (k x))) (\s k. put s (f k))
 
 def State S A = Free (StateF S) A
 
 def get {S : VTy} : State S S = lift StateF/Functor (\cv R get put. get (\s. s))
 def put {S : VTy} (s : S) : State S Unit = lift StateF/Functor (\cv R get put. put s MkUnit)
 
--- unification is not strong enough to handle this without explicit types
-def example : State Nat Nat =
-  (>>) {StateF Nat} (put 1) \.
-  (>>=) {StateF Nat} get \x.
-  (>>) {StateF Nat} (put (S x)) \.
-  (>>=) {StateF Nat} get \y.
-  return {StateF Nat} y
+-- concrete State monad
+data Pair A B := MkPair A B
+def StateI (S A : VTy) = S -> Pair S A
+def returnI {S A : VTy} (a : A) : StateI S A = \s. (s, a)
+def getI {S} : StateI S S = \s. (s, s)
+def putI {S : VTy} (s : S) : StateI S Unit = \_. (s, [])
+def bindI {S A B : VTy} (c : StateI S A) (f : A -> StateI S B) : StateI S B =
+  \s. match (c s) | MkPair s' res. f res s'
 
-def main : Nat :=
-  handle {StateF Nat} example
-    (\x. x) -- pure
-    (\s. StateF/handle s -- impure:
-      (\k. k 1) -- get
-      (\_ k. k)) -- put
+-- example
+def example : State Nat Nat =
+  put 1 >>
+  get >>= \x.
+  put (S x) >>
+  get >>= \y.
+  return y
+
+def handleConstant {S A : VTy} (c : S) (s : State S A) : A =
+  handle s (\x. x) \. StateF/handle
+    (\k. k c)
+    (\_ k. k)
+
+def handleConcrete {S A : VTy} (s : State S A) : StateI S A =
+  handle s (\x. returnI x) \. StateF/handle
+    (\k. bindI getI k)
+    (\x k. bindI (putI x) \_. k)
+
+def testmain : Nat :=
+  handleConstant 1 example
+
+def main : Pair Nat Nat :=
+  handleConcrete example 1

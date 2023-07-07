@@ -19,9 +19,10 @@ object Unification:
       occ: Option[MetaId],
       dom: Lvl,
       cod: Lvl,
-      sub: IntMap[Val]
+      sub: IntMap[(Val, Boolean)]
   ):
-    def lift: PSub = PSub(occ, dom + 1, cod + 1, sub + (cod.expose, VVar(dom)))
+    def lift: PSub =
+      PSub(occ, dom + 1, cod + 1, sub + (cod.expose, (VVar(dom), false)))
     def liftN(n: Int): PSub = {
       var c = this
       for (_ <- 0 until n) c = c.lift
@@ -30,21 +31,24 @@ object Unification:
     def skip: PSub = PSub(occ, dom, cod + 1, sub)
 
   private def invert(sp: Spine)(implicit gamma: Lvl): (PSub, Option[Pruning]) =
-    def go(sp: Spine): (Lvl, Set[Lvl], IntMap[Val], Pruning, Boolean) = sp match
+    def go(
+        sp: Spine
+    ): (Lvl, Set[Lvl], IntMap[(Val, Boolean)], Pruning, Boolean) = sp match
       case SId => (lvl0, Set.empty, IntMap.empty, Nil, true)
       case SApp(f, a, i) =>
         val (dom, domvars, sub, pr, isLinear) = go(f)
         def invertVal(
             x: Lvl,
-            invx: Val
-        ): (Lvl, Set[Lvl], IntMap[Val], Pruning, Boolean) =
+            invx: Val,
+            lifted: Boolean = false
+        ): (Lvl, Set[Lvl], IntMap[(Val, Boolean)], Pruning, Boolean) =
           if domvars.contains(x) then
             (dom + 1, domvars, sub - x.expose, None :: pr, false)
           else
             (
               dom + 1,
               domvars + x,
-              sub + (x.expose -> invx),
+              sub + (x.expose -> (invx, lifted)),
               Some(i) :: pr,
               isLinear
             )
@@ -52,6 +56,7 @@ object Unification:
           case VVar(x)         => invertVal(x, VVar(dom))
           case VQuote(VVar(x)) => invertVal(x, VRigid(HVar(dom), SSplice(SId)))
           case VRigid(HVar(x), SSplice(SId)) => invertVal(x, VQuote(VVar(dom)))
+          case VLift(_, VVar(x))             => invertVal(x, VVar(dom), true)
           case _ => throw UnifyError(s"non-var in meta spine")
       case _ => throw UnifyError(s"non-app in meta spine")
     val (dom, _, sub, pr, isLinear) = go(sp)
@@ -177,8 +182,10 @@ object Unification:
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
-          case None    => throw UnifyError(s"escaping variable '$x")
-          case Some(w) => goSp(quote(w)(psub.dom), sp)
+          case None => throw UnifyError(s"escaping variable '$x")
+          case Some((w, true)) =>
+            throw UnifyError(s"lifted variable in non-lifted position '$x")
+          case Some((w, _)) => goSp(quote(w)(psub.dom), sp)
       case VRigid(HPrim(x), sp) => goSp(Prim(x), sp)
       case VU(s)                => U(s.map(go))
 
@@ -208,6 +215,10 @@ object Unification:
       case VSigma(x, t, b) => Sigma(x, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VPair(fst, snd, t) => Pair(go(fst), go(snd), go(t))
 
+      case VLift(cv, t @ VVar(x)) =>
+        psub.sub.get(x.expose) match
+          case Some((w, true)) => quote(w)(psub.dom)
+          case _               => Lift(go(cv), go(t))
       case VLift(cv, t) => Lift(go(cv), go(t))
       case VQuote(t)    => go(t).quote
 
