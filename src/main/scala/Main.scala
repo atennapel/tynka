@@ -46,7 +46,12 @@ object Main:
       println(jvmirds)
 
       println("\ninterpret:")
+      val interpretTimeStart = System.nanoTime()
       interpret(jvmirds).foreach(println(_))
+      val interpretTime = System.nanoTime() - interpretTimeStart
+      println(
+        s"interpret time: ${interpretTime / 1000000}ms (${interpretTime}ns)"
+      )
     catch
       case err: ElaborateError =>
         println(err.getMessage)

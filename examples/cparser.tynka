@@ -1,4 +1,3 @@
--- WIP
 def VTy = Ty Val
 
 data Unit := U
@@ -72,32 +71,31 @@ def char : Parser Char =
   \s. \cv R err res. match s | Nil. err UnexpectedEof | (::) c s. res s c
 
 def satisfy (f : Char -> Bool) : Parser Char =
-  \s. \cv R err res. char s cv R err (\s' v. if f v then res s' v else err (UnexpectedChar v))
+  \s. \cv R err res. let err' e := err e; char s cv R err' (\s' v. if f v then res s' v else err' (UnexpectedChar v))
 
 def is (c : Char) : Parser Char = satisfy ((==) c)
 
 def (<|>) {A : VTy} (p1 p2 : Parser A) : Parser A =
-  \s. \cv R err res. p1 s cv R (\_. p2 s cv R err res) res
+  \s. \cv R err res. let res' s v := res s v; p1 s cv R (\_. p2 s cv R err res') res'
 
---def many {A : VTy} (p : Parser A) : Parser (List A) =
---  reverse <$> \s. fix (go s. \acc.
---    match p s
---    | Error e. Result s acc
---    | Result s' hd. go s' (hd :: acc)
---    ) s Nil
+def many {A : VTy} (p : Parser A) : Parser (List A) =
+  \s. \cv R err res.
+    fix (go s. \acc.
+      p s cv R
+        (\_. res s (reverse acc))
+        (\s' hd. go s' (hd :: acc))
+    ) s Nil
 
 def digit : Parser Char =
   is 48 <|> is 49 <|> is 50 <|> is 51 <|> is 52 <|> is 53 <|> is 54 <|> is 55 <|> is 56 <|> is 57
 
---def spaces : Parser Unit = (\_. U) <$> many (is 32)
+def spaces : Parser Unit = (\_. U) <$> many (is 32)
 
---def number : Parser (List Char) = many digit
+def number : Parser (List Char) = many digit
 
 data PR A := E ParseError | R String A
-
 def parse {A : VTy} (p : Parser A) (s : String) : PR A =
   p s _ (PR A) E R
 
-def parsetest s := parse (is 48 <|> is 10) s
-
-def main := parsetest #[48, 10] 
+def input := #[48, 49, 10]
+def main := parse number input

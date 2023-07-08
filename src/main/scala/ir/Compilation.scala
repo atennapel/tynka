@@ -150,14 +150,13 @@ object Compilation:
         case Let(x, t, rt, v, b) => conv(Let(x, t, rt.tail, v, App(b, a)))
         case f                   => App(f, conv(a))
 
-    case Let(x, t, bt, v, b0) =>
+    case Let(x, t, bt, v, b) =>
       conv(v) match
         case Let(y, t2, bt2, v2, b2) =>
-          conv(Let(y, t2, bt, v2, Let(x, t, bt, b2, b0)))
+          conv(Let(y, t2, bt, v2, Let(x, t, bt, b2, b)))
         case v =>
-          val b = conv(b0)
           val c = b.fvs.count((y, _) => x == y)
-          if c == 0 then b
+          if c == 0 then conv(b)
           else if c == 1 || isSmall(v) then conv(b.subst(Map(x -> v)))
           else if !t.io && t.ps.isEmpty then
             val (vs, spine) = eta(bt.params)

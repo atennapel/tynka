@@ -98,4 +98,5 @@ def spaces : Parser Unit = (\_. U) <$> many (is 32)
 
 def number : Parser (List Char) = many digit
 
-def main := number #[48, 49, 10]
+def input := #[48, 49, 10]
+def main := number input
