@@ -1,0 +1,103 @@
+-- WIP
+def VTy = Ty Val
+
+data Unit := U
+
+data Bool := False | True
+
+data Pair A B := MkPair A B
+
+data Nat := Z | S Nat
+
+def isZero a = match a | Z. True | S _. False
+
+def (+) a b :=
+  fix (rec a. \acc. match a
+  | Z. acc
+  | S n. rec n (S acc)) a b
+
+def (==) a b :=
+  fix (rec a. \b. match a
+  | Z. isZero b
+  | S n. match b
+    | Z. False
+    | S m. rec n m
+  ) a b
+
+data List A
+  | Nil
+  | (::) A (List A)
+
+def reverse {A : VTy} (l : List A) : List A =
+  fix (go l. \acc. match l
+  | Nil. acc
+  | (::) hd tl. go tl (hd :: acc)
+  ) l Nil
+
+-- parser combinators
+-- translated from https://tgdwyer.github.io/parsercombinators/
+def Char = Nat
+def String = List Char
+
+data ParseError
+  | UnexpectedEof
+  | ExpectedEof String
+  | UnexpectedChar Char
+  | UnexpectedString String
+
+def ParseResult A = (cv : CV) (R : Ty cv) -> (ParseError -> R) -> (String -> A -> R) -> R
+
+def Parser (A : VTy) : Meta = String -> ParseResult A
+
+def return {A : VTy} (a : A) : Parser A = \s. \cv R err res. res s a
+
+def fail {A : VTy} (e : ParseError) : Parser A = \_. \cv R err res. err e
+
+def ParseResult/map {A B : VTy} (f : A -> B) (p : ParseResult A) : ParseResult B =
+  \cv R err res. p cv R err (\s v. res s (f v))
+
+def (<$>) {A B : VTy} (f : A -> B) (p : Parser A) : Parser B =
+  \s. ParseResult/map f (p s)
+
+def (>>=) {A B : VTy} (p : Parser A) (f : A -> Parser B) : Parser B =
+  \s. \cv R err res. p s cv R err (\s' a. f a s' cv R err res)
+
+def (>>) {A B : VTy} (p : Parser A) (k : Parser B) : Parser B =
+  p >>= \_. k
+
+def (<$$>) {A B C : VTy} (f : A -> B -> C) (p1 : Parser A) (p2 : Parser B) : Parser C =
+  p1 >>= \a. p2 >>= \b. return (f a b)
+
+def char : Parser Char =
+  \s. \cv R err res. match s | Nil. err UnexpectedEof | (::) c s. res s c
+
+def satisfy (f : Char -> Bool) : Parser Char =
+  \s. \cv R err res. char s cv R err (\s' v. if f v then res s' v else err (UnexpectedChar v))
+
+def is (c : Char) : Parser Char = satisfy ((==) c)
+
+def (<|>) {A : VTy} (p1 p2 : Parser A) : Parser A =
+  \s. \cv R err res. p1 s cv R (\_. p2 s cv R err res) res
+
+--def many {A : VTy} (p : Parser A) : Parser (List A) =
+--  reverse <$> \s. fix (go s. \acc.
+--    match p s
+--    | Error e. Result s acc
+--    | Result s' hd. go s' (hd :: acc)
+--    ) s Nil
+
+def digit : Parser Char =
+  is 48 <|> is 49 <|> is 50 <|> is 51 <|> is 52 <|> is 53 <|> is 54 <|> is 55 <|> is 56 <|> is 57
+
+--def spaces : Parser Unit = (\_. U) <$> many (is 32)
+
+--def number : Parser (List Char) = many digit
+
+data PR A := E ParseError | R String A
+
+def parse {A : VTy} (p : Parser A) (s : String) : PR A =
+  p s _ (PR A) E R
+
+def parsetest s := parse (is 48 <|> is 10) s
+
+def main := parsetest #[48, 10] 

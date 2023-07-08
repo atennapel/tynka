@@ -103,6 +103,13 @@ object Syntax:
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x(${as.mkString(", ")}))"
 
+      case Con(_, "Z", Nil) => "0"
+      case full @ Con(_, "S", as @ List(n)) =>
+        def tryNat(n: Tm): Option[Int] = n match
+          case Con(_, "Z", Nil)     => Some(0)
+          case Con(_, "S", List(n)) => tryNat(n).map(_ + 1)
+          case _                    => None
+        tryNat(full).map(_.toString).getOrElse(s"(con S ${as.mkString(" ")})")
       case Con(x, cx, Nil) => s"(con $cx)"
       case Con(x, cx, as)  => s"(con $cx ${as.mkString(" ")})"
       case Field(t, i)     => s"(field #$i $t)"

@@ -4,7 +4,7 @@ data Void
 
 data Unit := MkUnit
 
-data Bool := False | True 
+data Bool := False | True
 
 def cond {A : VTy} (a b : A) (c : Bool) : A =
   if c then a else b
