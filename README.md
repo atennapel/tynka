@@ -18,3 +18,6 @@ TODO:
 - [ ] Foreign datatypes and operations
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
+- [ ] Implicit generalization
+- [ ] Records/variants
+- [ ] Val Rep
