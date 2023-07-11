@@ -1,0 +1,32 @@
+def Functor (F : Meta -> Meta) = {A B} -> (A -> B) -> F A -> F B
+def Fix (F : Meta -> Meta) = (cv : CV) (R : Ty cv) -> (F R -> R) -> R
+def In {F : Meta -> Meta} {map : Functor F} (x : F (Fix F)) : Fix F =
+  \cv R alg. alg (map {Fix F} (\f. f cv R alg) x)
+
+def cata {cv} {A : Ty cv} {F : Meta -> Meta} (x : Fix F) (alg : F A -> A) : A =
+  x cv A alg
+
+data Nat := Z | S Nat
+
+def CNatF X = (cv : CV) (R : Ty cv) -> R -> (X -> R) -> R
+def FunctorCNatF : Functor CNatF = \{A B} f x cv R z s. x cv R z (\a. s (f a))
+def CNat = Fix CNatF
+def CZ : CNat = In {CNatF} {FunctorCNatF} (\cv R z s. z)
+def CS (n : CNat) : CNat = In {CNatF} {FunctorCNatF} (\cv R z s. s n)
+
+def cnat2nat (n : CNat) : Nat = cata {F = CNatF} n \x. x _ _ Z S
+def nat2cnat (n : Nat) : CNat =
+  \cv R alg. fix (go n. match n
+  | Z. CZ cv R alg
+  | S m. alg (\cv2 R2 z s. s (go m))) n
+
+def VTy = Ty Val
+def fold {A : VTy} {F : Meta -> Meta} {conv : A -> Fix F}
+  {cv} {R : Ty cv} (x : A) (alg : F R -> R) : R = cata {A = R} {F = F} (conv x) alg
+
+def double (n : CNat) : CNat = \cv R alg. cata n
+  \n. n _ _
+    (CZ cv R alg)
+    (\m. let res = alg (\cv2 R2 z s. s m); alg (\cv2 R2 z s. s res))
+
+def main := cnat2nat \. double \. double \. nat2cnat 3

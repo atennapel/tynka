@@ -1,0 +1,25 @@
+def Type = (Type : Meta) -> Type -> (Type -> Type -> Type) -> Type
+def TBase : Type = \Type b f. b
+def TFun (t1 t2 : Type) : Type = \Type b f. f (t1 Type b f) (t2 Type b f)
+
+def Con = (Con : Meta) -> Con -> (Con -> Type -> Con) -> Con
+def Empty : Con = \Con n c. n
+def Snoc (ctx : Con) (t : Type) : Con = \Con n c. c (ctx Con n c) t
+
+def Var (G : Con) (A : Type) =
+  (Var : Con -> Type -> Meta) ->
+  ({G A} -> Var (Snoc G A) A) ->
+  ({G A B} -> Var G A -> Var (Snoc G B) A) ->
+  Var G A
+def VZ {G A} : Var (Snoc G A) A = \V vz vs. vz
+def VS {G A B} (v : Var G A) : Var (Snoc G B) A = \V vz vs. vs (v V vz vs)
+
+def Tm (G : Con) (A : Type) =
+  (Tm : Con -> Type -> Meta) ->
+  ({G A} -> Var G A -> Tm G A) ->
+  ({G A B} -> Tm (Snoc G A) B -> Tm G (TFun A B)) ->
+  ({G A B} -> Tm G (TFun A B) -> Tm G A -> Tm G B) ->
+  Tm G A
+def TmVar {G A} (vr : Var G A) : Tm G A = \Tm v l a. v vr
+def Lam {G A B} (b : Tm (Snoc G A) B) : Tm G (TFun A B) = \Tm v l a. l (b Tm v l a)
+def App {G A B} (fn : Tm G (TFun A B)) (arg : Tm G A) : Tm G B = \Tm v l a. a (fn Tm v l a) (arg Tm v l a)
