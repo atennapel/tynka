@@ -45,7 +45,7 @@ def head {A : VTy} (d : A) (l : List A) : A =
   | Nil. d
   | (::) hd _. hd
 
-def foldr {A : VTy} {cv} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
+def foldr {A : VTy} {cv : CV} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
   fix (go l. match l
   | Nil. n
   | (::) hd tl. c hd (go tl)

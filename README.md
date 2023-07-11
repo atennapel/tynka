@@ -14,10 +14,10 @@ TODO:
 - [x] Match expressions
 - [x] IO
 - [x] Interpreter
+- [x] Implicit generalization
 - [ ] JVM bytecode generation
 - [ ] Foreign datatypes and operations
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
-- [ ] Implicit generalization
 - [ ] Records/variants
 - [ ] Val Rep

@@ -335,7 +335,7 @@ object Elaboration:
   ): (Tm, Ty, VTy) = ty match
     case Some(ty0) =>
       val ty =
-        if !topLevel then ty0
+        if !topLevel || !stage.isMeta then ty0
         else
           ty0.free.distinct
             .filter(x => getGlobal(x).isEmpty && !primNames.contains(x))
@@ -941,14 +941,102 @@ object Elaboration:
             .prettyS(estage)}\n\n${prettyHoles}"
       )
     val ums = unsolvedMetas()
-    if ums.nonEmpty then
-      error(
-        s"unsolved metas: ${ctx.pretty(etm)} : ${ctx
-            .pretty(ety)}\n${ums
-            .map((id, ty, s) => s"?$id : ${ctx.pretty(ty)} : $s")
-            .mkString("\n")}"
+    val (etm1, ety1) =
+      if ums.nonEmpty && !estage.isMeta then
+        error(
+          s"unsolved metas: ${ctx.pretty(etm)} : ${ctx
+              .pretty(ety)}\n${ums
+              .map((id, ty, s) => s"?$id : ${ctx.pretty(ty)} : $s")
+              .mkString("\n")}"
+        )
+      else if estage.isMeta then
+        val uu = orderUnsolvedMetas
+        val tt =
+          orderUnsolvedMetas.map(id => (id, ctx.zonk(getMetaUnsolved(id).cty)))
+        tt.foldRight((etm, ety)) { case ((id, mty), (tm, ty)) =>
+          val x = DoBind(Name(mty match
+            case Prim(PCV) => "cv"
+            case U(SMeta)  => "M"
+            case U(STy(_)) => "T"
+            case _         => s"x$id"
+          ))
+          val nty = Pi(x, Impl, mty, replaceMeta(id, ty, ix0))
+          val ntm = Lam(x, Impl, nty, replaceMeta(id, tm, ix0))
+          (ntm, nty)
+        }
+      else (etm, ety)
+    (etm1, ety1, estage)
+
+  private def replaceMeta(id: MetaId, t: Tm, ix: Ix): Tm = t match
+    case Var(ix)      => t
+    case Irrelevant   => t
+    case Global(name) => t
+    case Prim(name)   => t
+
+    case Meta(id1) if id == id1 => Var(ix)
+    case Meta(id)               => t
+
+    case U(stage)     => U(stage.map(replaceMeta(id, _, ix)))
+    case Lift(cv, tm) => Lift(replaceMeta(id, cv, ix), replaceMeta(id, tm, ix))
+    case Quote(tm)    => Quote(replaceMeta(id, tm, ix))
+    case Splice(tm)   => Splice(replaceMeta(id, tm, ix))
+    case Wk(tm)       => Wk(replaceMeta(id, tm, ix))
+    case TCon(name, args) => TCon(name, args.map(replaceMeta(id, _, ix)))
+    case Con(name, con, targs, args) =>
+      Con(
+        name,
+        con,
+        targs.map(replaceMeta(id, _, ix)),
+        args.map(replaceMeta(id, _, ix))
       )
-    (etm, ety, estage)
+    case Pair(fst, snd, ty) =>
+      Pair(
+        replaceMeta(id, fst, ix),
+        replaceMeta(id, snd, ix),
+        replaceMeta(id, ty, ix)
+      )
+    case Proj(tm, proj, ty, pty) =>
+      Pair(
+        replaceMeta(id, tm, ix),
+        replaceMeta(id, ty, ix),
+        replaceMeta(id, pty, ix)
+      )
+    case AppPruning(tm, spine) => AppPruning(replaceMeta(id, tm, ix), spine)
+
+    case Let(name, ty, stage, bty, value, body) =>
+      Let(
+        name,
+        replaceMeta(id, ty, ix),
+        stage.map(replaceMeta(id, _, ix)),
+        replaceMeta(id, bty, ix),
+        replaceMeta(id, value, ix),
+        replaceMeta(id, body, ix + 1)
+      )
+    case Pi(name, icit, ty, body) =>
+      Pi(name, icit, replaceMeta(id, ty, ix), replaceMeta(id, body, ix + 1))
+    case Lam(name, icit, fnty, body) =>
+      Lam(name, icit, replaceMeta(id, fnty, ix), replaceMeta(id, body, ix + 1))
+    case App(fn, arg, icit) =>
+      App(replaceMeta(id, fn, ix), replaceMeta(id, arg, ix), icit)
+    case Fix(ty, rty, g, x, b, arg) =>
+      Fix(
+        replaceMeta(id, ty, ix),
+        replaceMeta(id, rty, ix),
+        g,
+        x,
+        replaceMeta(id, b, ix + 2),
+        replaceMeta(id, arg, ix)
+      )
+    case Sigma(name, ty, body) =>
+      Sigma(name, replaceMeta(id, ty, ix), replaceMeta(id, body, ix + 1))
+    case Match(dty, rty, scrut, cs, other) =>
+      Match(
+        replaceMeta(id, dty, ix),
+        replaceMeta(id, rty, ix),
+        replaceMeta(id, scrut, ix),
+        cs.map((x, i, t) => (x, i, replaceMeta(id, t, ix))),
+        other.map(replaceMeta(id, _, ix))
+      )
 
   private def elaborate(d: S.Def): List[Def] =
     debug(s"elaborate $d")
