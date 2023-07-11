@@ -60,8 +60,8 @@ object Elaboration:
     force(ty) match
       case VUnitType() => Prim(PUnit)
       case _ =>
-        val closed = ctx.closeVTy(ty)
-        val m = freshMeta(closed, s)
+        val (closed, cclosed) = ctx.closeVTy(ty)
+        val m = freshMeta(closed, cclosed, s)
         debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
         AppPruning(Meta(m), ctx.pruning)
 
@@ -325,10 +325,21 @@ object Elaboration:
   private def checkVTy(ty: S.Ty)(implicit ctx: Ctx): Tm =
     check(ty, VVTy(), SMeta)
 
-  private def check(tm: S.Tm, ty: Option[S.Ty], stage: VStage)(implicit
+  private def check(
+      tm: S.Tm,
+      ty: Option[S.Ty],
+      stage: VStage,
+      topLevel: Boolean = false
+  )(implicit
       ctx: Ctx
   ): (Tm, Ty, VTy) = ty match
-    case Some(ty) =>
+    case Some(ty0) =>
+      val ty =
+        if !topLevel then ty0
+        else
+          ty0.free.distinct
+            .filter(x => getGlobal(x).isEmpty && !primNames.contains(x))
+            .foldRight(ty0)((x, rt) => S.Pi(DoBind(x), Impl, S.Hole(None), rt))
       val ety = checkType(ty, stage)
       val vty = ctx.eval(ety)
       val etm = check(tm, vty, stage)
@@ -916,7 +927,7 @@ object Elaboration:
     holes.clear()
 
     val vstage = if meta then SMeta else STy(ctx.eval(newCV()))
-    val (etm_, ety_, _) = check(tm, ty, vstage)
+    val (etm_, ety_, _) = check(tm, ty, vstage, true)
     val etm = ctx.zonk(etm_)
     val ety = ctx.zonk(ety_)
     val estage = ctx.zonk(vstage)

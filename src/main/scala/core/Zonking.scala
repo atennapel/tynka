@@ -29,8 +29,8 @@ object Zonking:
 
   private def meta(id: MetaId)(implicit l: Lvl, e: Env): VT =
     getMeta(id) match
-      case Solved(v, _, _) => Left(v)
-      case Unsolved(_, _)  => Right(Meta(id))
+      case Solved(_, v, _, _)   => Left(v)
+      case Unsolved(_, _, _, _) => Right(Meta(id))
 
   private def zonkSp(t: Tm)(implicit l: Lvl, e: Env): VT = t match
     case Meta(id)            => meta(id)

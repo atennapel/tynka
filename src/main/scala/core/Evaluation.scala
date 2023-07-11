@@ -99,8 +99,8 @@ object Evaluation:
     case SMatch(sp, dty, rty, cs, o) => vmatch(dty, rty, cs, o, vspine(v, sp))
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
-    case Solved(v, _, _) => v
-    case Unsolved(_, _)  => VMeta(id)
+    case Solved(_, v, _, _)   => v
+    case Unsolved(_, _, _, _) => VMeta(id)
 
   def vappPruning(v: Val, p: Pruning)(implicit env: Env): Val =
     (env, p) match
@@ -161,8 +161,8 @@ object Evaluation:
   def force(v: Val, unfold: Unfold = UnfoldAll): Val = v match
     case VFlex(id, sp) =>
       getMeta(id) match
-        case Solved(v, _, _) => force(vspine(v, sp), unfold)
-        case Unsolved(_, _)  => v
+        case Solved(_, v, _, _)   => force(vspine(v, sp), unfold)
+        case Unsolved(_, _, _, _) => v
     case VGlobal(_, _, v) if unfold == UnfoldAll => force(v(), UnfoldAll)
     case _                                       => v
 

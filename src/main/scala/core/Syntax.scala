@@ -92,6 +92,43 @@ object Syntax:
       case Quote(t) => t
       case t        => Splice(t)
 
+    def metas: Set[MetaId] = this match
+      case Var(ix)      => Set.empty
+      case Global(name) => Set.empty
+      case Prim(name)   => Set.empty
+      case U(stage)     => stage.fold(Set.empty, _.metas)
+      case Let(name, ty, stage, bty, value, body) =>
+        ty.metas ++ stage.fold(
+          Set.empty,
+          _.metas
+        ) ++ bty.metas ++ value.metas ++ body.metas
+      case Pi(name, icit, ty, body)    => ty.metas ++ body.metas
+      case Lam(name, icit, fnty, body) => fnty.metas ++ body.metas
+      case App(fn, arg, icit)          => fn.metas ++ arg.metas
+      case Fix(ty, rty, g, x, b, arg) =>
+        ty.metas ++ rty.metas ++ b.metas ++ arg.metas
+      case Sigma(name, ty, body)   => ty.metas ++ body.metas
+      case Pair(fst, snd, ty)      => fst.metas ++ snd.metas ++ ty.metas
+      case Proj(tm, proj, ty, pty) => tm.metas ++ ty.metas ++ pty.metas
+      case Lift(cv, tm)            => cv.metas ++ tm.metas
+      case Quote(tm)               => tm.metas
+      case Splice(tm)              => tm.metas
+      case TCon(name, args) => args.map(_.metas).foldLeft(Set.empty)(_ ++ _)
+      case Con(name, con, targs, args) =>
+        targs.map(_.metas).foldLeft(Set.empty[MetaId])(_ ++ _) ++ args
+          .map(_.metas)
+          .foldLeft(Set.empty[MetaId])(_ ++ _)
+      case Match(dty, rty, scrut, cs, other) =>
+        dty.metas ++ rty.metas ++ scrut.metas ++ cs
+          .map((_, _, t) => t.metas)
+          .foldLeft(Set.empty[MetaId])(_ ++ _) ++ other
+          .map(_.metas)
+          .getOrElse(Set.empty[MetaId])
+      case Wk(tm)                => tm.metas
+      case Meta(id)              => Set(id)
+      case AppPruning(tm, spine) => tm.metas
+      case Irrelevant            => Set.empty
+
     override def toString: String = this match
       case Var(x)                     => s"'$x"
       case Global(x)                  => s"$x"

@@ -83,6 +83,36 @@ object Syntax:
       case Pos(_, _) => true
       case _         => false
 
+    def free: List[Name] = this match
+      case Var(name) => List(name)
+      case Let(name, meta, ty, value, body) =>
+        ty.map(_.free).getOrElse(Nil) ++ value.free ++ body.free.filterNot(
+          _ == name
+        )
+      case U(stage) => Nil
+      case Pi(name, icit, ty, body) =>
+        ty.free ++ body.free.filterNot(_ == name.toName)
+      case Lam(name, info, ty, body) =>
+        ty.map(_.free).getOrElse(Nil) ++ body.free.filterNot(_ == name.toName)
+      case App(fn, arg, info) => fn.free ++ arg.free
+      case Fix(g, x, b, arg) =>
+        b.free.filterNot(y => y == g.toName || y == x.toName) ++ arg.free
+      case Sigma(name, ty, body) =>
+        ty.free ++ body.free.filterNot(_ == name.toName)
+      case Pair(fst, snd) => fst.free ++ snd.free
+      case Proj(tm, proj) => tm.free
+      case Lift(ty)       => ty.free
+      case Quote(tm)      => tm.free
+      case Splice(tm)     => tm.free
+      case Match(scrut, cs, other) =>
+        scrut.free ++ cs
+          .map((_, _, ps, t) => t.free.filterNot(x => ps.contains(DoBind(x))))
+          .foldLeft(List.empty[Name])((acc, xs) => acc ++ xs) ++ other
+          .map((_, t) => t.free)
+          .getOrElse(Nil)
+      case Hole(name)   => Nil
+      case Pos(pos, tm) => tm.free
+
     override def toString: String = this match
       case Var(x)                => s"$x"
       case Let(x, m, None, v, b) => s"(let $x ${if m then "" else ":"}= $v; $b)"

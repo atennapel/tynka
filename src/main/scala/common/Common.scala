@@ -92,6 +92,10 @@ object Common:
       case SMeta   => SMeta
       case STy(cv) => STy(f(cv))
 
+    def fold[R](m: R, t: CV => R): R = this match
+      case SMeta   => m
+      case STy(cv) => t(cv)
+
     def isMeta: Boolean = this match
       case SMeta => true
       case _     => false
@@ -125,6 +129,10 @@ object Common:
       case PBindIO   => "bindIO"
   export PrimName.*
   object PrimName:
+    val primNames: List[Name] =
+      List("CV", "Val", "Comp", "Fun", "()", "[]", "IO", "returnIO", "bindIO")
+        .map(Name.apply)
+
     def apply(x: Name): Option[PrimName] = x.expose match
       case "CV"   => Some(PCV)
       case "Val"  => Some(PVal)

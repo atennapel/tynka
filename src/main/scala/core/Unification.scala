@@ -74,10 +74,12 @@ object Unification:
   private def pruneMeta(p: Pruning, m: MetaId): Val =
     val u = getMetaUnsolved(m)
     val mty = u.ty
-    val prunedty = eval(pruneTy(revPruning(p), mty))(Nil)
-    val m2 = freshMeta(prunedty, u.stage)
-    val solution = eval(lams(mkLvl(p.size), mty, AppPruning(Meta(m2), p)))(Nil)
-    solveMeta(m, solution)
+    val cprunedty = pruneTy(revPruning(p), mty)
+    val prunedty = eval(cprunedty)(Nil)
+    val m2 = freshMeta(prunedty, cprunedty, u.stage)
+    val csolution = lams(mkLvl(p.size), mty, AppPruning(Meta(m2), p))
+    val solution = eval(csolution)(Nil)
+    solveMeta(m, solution, csolution.metas ++ cprunedty.metas)
     solution
 
   private def etaExpandMeta(m: MetaId): Val =
@@ -100,12 +102,14 @@ object Unification:
           )
         case VLift(cv, a) => go(a, STy(cv), lvl, p, locals).quote
         case a =>
-          val closed = eval(locals.closeTy(quote(a)(lvl)))(Nil)
-          val m = freshMeta(closed, s)
+          val cclosed = locals.closeTy(quote(a)(lvl))
+          val closed = eval(cclosed)(Nil)
+          val m = freshMeta(closed, cclosed, s)
           AppPruning(Meta(m), p)
     val t = go(a, SMeta, lvl0, Nil, Empty)
     val v = eval(t)(Nil)
-    solveMeta(m, v)
+    val deps = t.metas ++ quote(a)(lvl0).metas
+    solveMeta(m, v, deps)
     v
 
   @tailrec
@@ -284,7 +288,8 @@ object Unification:
     val rhs2 = psubst(rhs)(psub.copy(occ = Some(m)))
     val solution = lams(psub.dom, mty, rhs2)
     debug(s"solution ?$m = $solution")
-    solveMeta(m, eval(solution)(Nil))
+    val deps = solution.metas ++ quote(mty)(lvl0).metas
+    solveMeta(m, eval(solution)(Nil), deps)
 
   private def flexFlex(m: MetaId, sp: Spine, m2: MetaId, sp2: Spine)(implicit
       gamma: Lvl
