@@ -6,7 +6,7 @@ data Unit := MkUnit
 
 data Bool := False | True
 
-def cond {A : VTy} (a b : A) (c : Bool) : A =
+def cond {cv : CV} {A : Ty cv} (a b : A) (c : Bool) : A =
   if c then a else b
 
 def (!) b = if b then False else True

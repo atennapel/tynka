@@ -58,14 +58,15 @@ object Interpreter:
       case IntLit(_)       => t
       case Con(dx, cx, as) => Con(dx, cx, as.map(interpret))
 
-      case Field(scrut, ix) =>
+      case Field(_, _, scrut, ix) =>
         interpret(scrut) match
           case Con(_, _, as) => as(ix)
           case _             => impossible()
 
-      case Match(_, _, scrut, cs, other) =>
+      case Match(_, _, ix, scrut, cs, other) =>
         interpret(scrut) match
-          case Con(_, dx, as) =>
+          case v @ Con(_, dx, as) =>
+            frame.vars(ix) = v
             cs.find((dx1, _) => dx1 == dx)
               .map(_._2)
               .orElse(other)

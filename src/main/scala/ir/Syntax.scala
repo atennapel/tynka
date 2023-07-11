@@ -71,10 +71,11 @@ object Syntax:
     )
 
     case Con(name: GName, con: GName, args: List[Tm])
-    case Field(scrut: Tm, ix: Int)
+    case Field(dty: GName, con: GName, scrut: Tm, ix: Int)
     case Match(
         dty: GName,
         rty: TDef,
+        x: LName,
         scrut: Tm,
         cs: List[(GName, Tm)],
         other: Option[Tm]
@@ -101,12 +102,12 @@ object Syntax:
           case Con(_, "S", List(n)) => tryNat(n).map(_ + 1)
           case _                    => None
         tryNat(full).map(_.toString).getOrElse(s"(con S ${as.mkString(" ")})")
-      case Con(x, cx, Nil) => s"(con $cx)"
-      case Con(x, cx, as)  => s"(con $cx ${as.mkString(" ")})"
-      case Field(s, i)     => s"(field #$i $s)"
+      case Con(x, cx, Nil)   => s"(con $cx)"
+      case Con(x, cx, as)    => s"(con $cx ${as.mkString(" ")})"
+      case Field(_, _, s, i) => s"(field #$i $s)"
 
-      case Match(_, _, scrut, cs, other) =>
-        s"(match $scrut ${cs
+      case Match(_, _, x, scrut, cs, other) =>
+        s"(match $x = $scrut; ${cs
             .map((c, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
 
@@ -149,10 +150,12 @@ object Syntax:
         b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
       case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
-      case Con(x, cx, as) => as.flatMap(_.fvs)
-      case Field(s, i)    => s.fvs
-      case Match(_, _, s, cs, o) =>
-        s.fvs ++ cs.flatMap(_._2.fvs) ++ o.map(_.fvs).getOrElse(Nil)
+      case Con(x, cx, as)    => as.flatMap(_.fvs)
+      case Field(_, _, s, i) => s.fvs
+      case Match(_, _, x, s, cs, o) =>
+        s.fvs ++ cs.flatMap(_._2.fvs.filterNot((y, _) => x == y)) ++ o
+          .map(_.fvs)
+          .getOrElse(Nil)
 
       case ReturnIO(v)           => v.fvs
       case BindIO(_, _, x, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
@@ -167,9 +170,9 @@ object Syntax:
       case Let(_, _, _, v, b)      => v.usedNames ++ b.usedNames
       case Fix(_, _, _, _, b, arg) => b.usedNames ++ arg.usedNames
 
-      case Con(_, _, as) => as.flatMap(_.usedNames).toSet
-      case Field(s, i)   => s.usedNames
-      case Match(_, _, s, cs, o) =>
+      case Con(_, _, as)     => as.flatMap(_.usedNames).toSet
+      case Field(_, _, s, i) => s.usedNames
+      case Match(_, _, x, s, cs, o) =>
         s.usedNames ++ cs
           .flatMap(_._2.usedNames) ++ o.map(_.usedNames).getOrElse(Set.empty)
 
@@ -186,10 +189,10 @@ object Syntax:
       case Let(x, _, _, v, b)      => x max v.maxName max b.maxName
       case Fix(_, _, x, y, b, arg) => x max y max b.maxName max arg.maxName
 
-      case Con(_, _, as) => as.map(_.maxName).fold(-1)(_ max _)
-      case Field(s, i)   => s.maxName
-      case Match(_, _, s, cs, o) =>
-        s.maxName max cs.map(_._2.maxName).fold(-1)(_ max _) max o
+      case Con(_, _, as)     => as.map(_.maxName).fold(-1)(_ max _)
+      case Field(_, _, s, i) => s.maxName
+      case Match(_, _, x, s, cs, o) =>
+        x max s.maxName max cs.map(_._2.maxName).fold(-1)(_ max _) max o
           .map(_.maxName)
           .getOrElse(-1)
 
@@ -250,13 +253,29 @@ object Syntax:
           Let(x, t, bt, v.subst(sub, scope), b)
 
         case Con(x, cx, as) => Con(x, cx, as.map(_.subst(sub, scope)))
-        case Field(s, i)    => Field(s.subst(sub, scope), i)
-        case Match(dty, rty, scrut, cs, other) =>
+        case Field(dty, cx, s, i) =>
+          Field(dty, cx, s.subst(sub, scope), i)
+        case Match(dty, rty, x, scrut, cs, other) if scope.contains(x) =>
+          val y = scope.max
+          val nsub = sub + (x -> Var(y, TDef(TCon(dty))))
+          val nscope = scope + y
           Match(
             dty,
             rty,
+            y,
             scrut.subst(sub, scope),
-            cs.map((x, t) => (x, t.subst(sub, scope))),
+            cs.map((x, t) => (x, t.subst(nsub, nscope))),
+            other.map(_.subst(sub, scope))
+          )
+        case Match(dty, rty, x, scrut, cs, other) =>
+          val nsub = sub - x
+          val nscope = scope + x
+          Match(
+            dty,
+            rty,
+            x,
+            scrut.subst(sub, scope),
+            cs.map((x, t) => (x, t.subst(nsub, nscope))),
             other.map(_.subst(sub, scope))
           )
 

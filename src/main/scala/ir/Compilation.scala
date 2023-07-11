@@ -69,13 +69,15 @@ object Compilation:
         val x = localrename.fresh(x0, false)
         J.Let(x, go(t.ty), go(v, false), go(b, tr))
 
-      case Con(x, cx, as) => J.Con(x, cx, as.map(go(_, false)))
-      case Field(s, i)    => J.Field(go(s, false), i)
+      case Con(x, cx, as)       => J.Con(x, cx, as.map(go(_, false)))
+      case Field(dty, cx, s, i) => J.Field(dty, cx, go(s, false), i)
 
-      case Match(dty, rty, scrut, cs, other) =>
+      case Match(dty, rty, x0, scrut, cs, other) =>
+        val x = localrename.fresh(x0, false)
         J.Match(
           dty,
           go(rty.rt),
+          x,
           go(scrut, false),
           cs.map((x, t) => (x, go(t, tr))),
           other.map(go(_, tr))
@@ -139,10 +141,10 @@ object Compilation:
     case Con(x, cx, as)   => Con(x, cx, as.map(conv))
     case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
 
-    case Field(s, i) =>
+    case Field(dty, cx, s, i) =>
       conv(s) match
         case Con(name, con, as) => as(i)
-        case cs                 => Field(cs, i)
+        case cs                 => Field(dty, cx, cs, i)
 
     case App(f, a) =>
       conv(f) match
@@ -207,22 +209,22 @@ object Compilation:
       )
       App(gl, conv(arg))
 
-    case Match(dty, rty, scrut, cs, other) =>
+    case Match(dty, rty, mx, scrut, cs, other) =>
       conv(scrut) match
-        case Con(_, x, as) =>
+        case v @ Con(_, x, as) =>
           cs.toMap.get(x) match
-            case Some(b) => conv(b)
+            case Some(b) => conv(b.subst(Map(mx -> v)))
             case None    => conv(other.get)
-        case cscrut =>
+        case v @ cscrut =>
           val (vs, spine) = eta(rty.params)
-          val res = Match(
+          Match(
             dty,
             TDef(rty.io, rty.rt),
+            mx,
             cscrut,
             cs.map((x, t) => (x, conv(t.apps(spine)))),
             other.map(t => conv(t.apps(spine)))
           ).lams(vs, TDef(rty.io, rty.rt))
-          res
 
     case ReturnIO(v) => ReturnIO(conv(v))
     case BindIO(t1, t2, x, v, b) =>

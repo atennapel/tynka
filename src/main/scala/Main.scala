@@ -9,6 +9,7 @@ import elaboration.Elaboration.ElaborateError
 import core.Staging.stage
 import ir.Compilation.compile
 import jvmir.Interpreter.interpret
+import jvmir.JvmGenerator.generate
 
 import java.io.File
 import scala.io.Source
@@ -52,6 +53,9 @@ object Main:
       println(
         s"interpret time: ${interpretTime / 1000000}ms (${interpretTime}ns)"
       )
+
+      println("\ngenerate JVM bytecode")
+      generate(uri, jvmirds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

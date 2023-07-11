@@ -83,10 +83,11 @@ object Syntax:
     case IntLit(value: Int)
 
     case Con(name: GName, con: GName, args: List[Tm])
-    case Field(scrut: Tm, ix: Int)
+    case Field(dty: GName, con: GName, scrut: Tm, ix: Int)
     case Match(
         dty: GName,
         ty: Ty,
+        x: LName,
         scrut: Tm,
         cs: List[(GName, Tm)],
         other: Option[Tm]
@@ -110,11 +111,11 @@ object Syntax:
           case Con(_, "S", List(n)) => tryNat(n).map(_ + 1)
           case _                    => None
         tryNat(full).map(_.toString).getOrElse(s"(con S ${as.mkString(" ")})")
-      case Con(x, cx, Nil) => s"(con $cx)"
-      case Con(x, cx, as)  => s"(con $cx ${as.mkString(" ")})"
-      case Field(t, i)     => s"(field #$i $t)"
-      case Match(_, _, scrut, cs, other) =>
-        s"(match $scrut ${cs
+      case Con(x, cx, Nil)   => s"(con $cx)"
+      case Con(x, cx, as)    => s"(con $cx ${as.mkString(" ")})"
+      case Field(_, _, t, i) => s"(field #$i $t)"
+      case Match(_, _, x, scrut, cs, other) =>
+        s"(match $x = $scrut; ${cs
             .map((c, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
   export Tm.*

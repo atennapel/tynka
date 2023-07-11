@@ -233,25 +233,23 @@ object Staging:
         val qrty = quoteCTy(rty)
         val x = fresh()
         val vv = IR.Var(x, qdtytd)
-        IR.Let(
-          x,
-          qdtytd,
+        IR.Match(
+          dataname,
           qrty,
+          x,
           quote(scrut),
-          IR.Match(
-            dataname,
-            qrty,
-            vv,
-            cs.map((cx, i, t) =>
-              (
-                cx.expose,
-                (0 until i).foldLeft(quote(t))((f, i) =>
-                  IR.App(f, IR.Field(vv, i))
+          cs.map((cx, i, t) =>
+            (
+              cx.expose,
+              (0 until i).foldLeft(quote(t))((f, i) =>
+                IR.App(
+                  f,
+                  IR.Field(dataname, cx.expose, vv, i)
                 )
               )
-            ),
-            other.map(quote)
-          )
+            )
+          ),
+          other.map(quote)
         )
 
       case VLet0(ty, bty, v, b) =>

@@ -6,7 +6,7 @@ We have a language with two layers, one compile-time layer with full dependent t
 Try it out:
 ```
 sbt "run examples/state"
-java IO
+java examples/state
 ```
 
 TODO:
@@ -15,7 +15,7 @@ TODO:
 - [x] IO
 - [x] Interpreter
 - [x] Implicit generalization
-- [ ] JVM bytecode generation
+- [x] JVM bytecode generation
 - [ ] Foreign datatypes and operations
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
