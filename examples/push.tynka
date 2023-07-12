@@ -1,5 +1,6 @@
 def VTy = Ty Val
 
+data Unit := MkUnit
 data Bool := False | True
 
 def Int = Foreign "I"
@@ -38,6 +39,11 @@ def Push/foldr {A : VTy} {cv} {B : Ty cv} (b : B) (f : A -> B -> B) (as : Push A
 
 def Push/foldl {A B : VTy} (b : B) (f : B -> A -> B) (as : Push A) : B =
   as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
+
+def (>>=) = bindIO
+def (>>>) {A B : VTy} (a : IO A) (b : IO B) : IO B = a >>= \_. b
+def Push/foldIO_ {A : VTy} (f : A -> IO Unit) (as : Push A) : IO Unit =
+  Push/foldr (returnIO MkUnit) (\hd tl. f hd >>> tl) as
 
 def Push/sum = Push/foldl 0 (+)
 def Push/product = Push/foldl 1 (*)

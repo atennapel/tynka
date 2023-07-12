@@ -31,7 +31,8 @@ object Parser:
         "if",
         "then",
         "else",
-        "foreign"
+        "foreign",
+        "foreignIO"
       ),
       operators = Set(
         "=",
@@ -185,9 +186,12 @@ object Parser:
     )
 
     private lazy val foreignP: Parsley[Tm] = positioned(
-      ("foreign" *> projAtom <~> projAtom <~> many(projAtom)).map {
-        case ((rt, l), as) => Foreign(rt, l, as)
-      }
+      (("foreignIO" #> true <|> "foreign" #> false) <~> projAtom <~> projAtom <~> many(
+        projAtom
+      ))
+        .map { case (((io, rt), l), as) =>
+          Foreign(io, rt, l, as)
+        }
     )
 
     private lazy val matchP: Parsley[Tm] = positioned(

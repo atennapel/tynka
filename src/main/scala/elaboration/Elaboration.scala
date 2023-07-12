@@ -354,6 +354,16 @@ object Elaboration:
     (tm, force(ty)) match
       case (S.Pos(pos, tm), _) => check(tm, ty, stage)(ctx.enter(pos))
 
+      case (
+            S.StringLit(v),
+            VLift(VVal(), lty)
+          ) =>
+        force(lty) match
+          case VForeignType(VStringLit("Ljava/lang/String;")) =>
+            StringLit(v).quote
+          case _ =>
+            val (etm, ty2) = insert(stage, infer(tm, stage))
+            coe(etm, ty2, stage, ty, stage)
       case (S.StringLit(v), _) =>
         val (etm, ty2) = insert(stage, infer(tm, stage))
         coe(etm, ty2, stage, ty, stage)
@@ -923,11 +933,12 @@ object Elaboration:
         val (et2, a2) = adjustStage(et, a, SMeta, STy(cv))
         (et2, a2, STy(cv))
 
-      case S.Foreign(rt, l, as) =>
+      case S.Foreign(io, rt, l, as) =>
         val ert = checkVTy(rt)
         val el = check(l, VLabel(), SMeta)
         val eas = as.map(a => infer(a, SVTy())).map((a, t) => (a, ctx.quote(t)))
-        (Foreign(ert, el, eas), ctx.eval(ert), SVTy())
+        if io then (Foreign(ert, el, eas), VIO(ctx.eval(ert)), SCTy())
+        else (Foreign(ert, el, eas), ctx.eval(ert), SVTy())
 
   // elaboration
   private def prettyHoles(implicit ctx0: Ctx): String =

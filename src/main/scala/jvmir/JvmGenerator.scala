@@ -97,6 +97,28 @@ object JvmGenerator:
     ds.toList.foreach(prepareData)
     ds.toList.foreach(gen)
 
+    // generate main
+    val mainexists = ds.defs.exists {
+      case DDef("main", false, TDef(Some(Nil), _), _) => true
+      case _                                          => false
+    }
+    if mainexists then
+      val m = new Method(
+        "main",
+        Type.VOID_TYPE,
+        List(Type.getType("[Ljava/lang/String;")).toArray
+      )
+      val main: GeneratorAdapter =
+        new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC, m, null, null, cw)
+      main.invokeStatic(
+        ctx.moduleType,
+        new Method("main", Type.BOOLEAN_TYPE, List().toArray)
+      )
+      main.pop()
+      main.visitInsn(RETURN)
+      main.visitMaxs(3, 1)
+      main.visitEnd
+
     // generate static block
     genStaticBlock(ds)
 

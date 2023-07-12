@@ -1,4 +1,5 @@
 def VTy = Ty Val
+data Unit := MkUnit
 data Bool := False | True
 data Option A := None | Some A
 
@@ -31,6 +32,9 @@ def Str = Foreign "Ljava/lang/String;"
 def strAppend (a b : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.concat" a b
 
+def strEquals (x y : Str) : Bool =
+  foreign Bool "invokeVirtual:java.lang.Object.equals" x y
+
 -- exceptions
 def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =
   foreign A (appendLabel "catch:" exc) try default
@@ -40,3 +44,13 @@ def parseInt (s : Str) : Option Int :=
     let n = foreign Int "invokeStatic:java.lang.Integer.parseInt" s;
     Some n
   ) None
+
+-- IO
+def putLn {A : VTy} (x : A) : IO Unit =
+  let out = foreign (Foreign "Ljava/io/PrintStream;") "getStatic:java.lang.System.out";
+  foreignIO Unit "invokeVirtualVoid:java.io.PrintStream.println" out x
+
+def getLn : IO Str =
+  let in = foreign (Foreign "Ljava/io/InputStream;") "getStatic:java.lang.System.in";
+  let scanner = foreign (Foreign "Ljava/util/Scanner;") "instantiate" in;
+  foreignIO Str "invokeVirtual:java.util.Scanner.nextLine" scanner
