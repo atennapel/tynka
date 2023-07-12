@@ -30,6 +30,7 @@ object Staging:
     case VType1
     case VPair1(fst: Val1, snd: Val1)
     case VTCon1(x: Name, args: List[Val1])
+    case VStringLit1(v: String)
   import Val1.*
 
   private enum Val0:
@@ -49,6 +50,8 @@ object Staging:
     )
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
     case VCon0(x: Name, con: Name, tas: List[Val1], as: List[Val0])
+    case VStringLit0(v: String)
+    case VIntLit0(v: Int)
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -88,6 +91,7 @@ object Staging:
     case Quote(t)              => VQuote1(eval0(t))
     case TCon(x, as)           => VTCon1(x, as.map(eval1))
     case Wk(t)                 => eval1(t)(env.tail)
+    case StringLit(v)          => VStringLit1(v)
 
     case U(_)           => VType1
     case Pi(_, _, _, _) => VType1
@@ -139,6 +143,8 @@ object Staging:
     case Splice(t)           => vsplice0(eval1(t))
     case Con(x, cx, tas, as) => VCon0(x, cx, tas.map(eval1), as.map(eval0))
     case Wk(t)               => eval0(t)(env.tail)
+    case StringLit(v)        => VStringLit0(v)
+    case IntLit(v)           => VIntLit0(v)
     case _                   => impossible()
 
   // quotation
@@ -184,7 +190,8 @@ object Staging:
       case VTCon1(x, as) =>
         val dx = dmono.get(x, as)
         IR.TCon(dx)
-      case _ => impossible()
+      case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
+      case _                                          => impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
     v match
@@ -229,6 +236,7 @@ object Staging:
         val qdty = quoteVTy(dty)
         val dataname = qdty match
           case IR.TCon(x) => x
+          case _          => impossible()
         val qdtytd = IR.TDef(quoteVTy(dty))
         val qrty = quoteCTy(rty)
         val x = fresh()
@@ -280,6 +288,9 @@ object Staging:
           dmono
         )
         IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
+
+      case VIntLit0(v)    => IR.IntLit(v)
+      case VStringLit0(v) => IR.StringLit(v)
 
       case VPrim0(_)           => impossible()
       case VSplicePrim0(x, as) => impossible()

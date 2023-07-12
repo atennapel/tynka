@@ -1,0 +1,2 @@
+def Int = Foreign "I"
+def String = Foreign "Ljava/lang/String;"

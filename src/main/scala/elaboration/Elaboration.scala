@@ -354,6 +354,10 @@ object Elaboration:
     (tm, force(ty)) match
       case (S.Pos(pos, tm), _) => check(tm, ty, stage)(ctx.enter(pos))
 
+      case (S.StringLit(v), _) =>
+        val (etm, ty2) = insert(stage, infer(tm, stage))
+        coe(etm, ty2, stage, ty, stage)
+
       case (S.Lam(x, i, ot, b), VPi(y, i2, a, rt)) if icitMatch(i, y, i2) =>
         ot.foreach(t0 => {
           val ety = checkType(t0, SMeta)
@@ -591,6 +595,14 @@ object Elaboration:
     tm match
       case S.Pos(pos, tm) => infer(tm, s)(ctx.enter(pos))
 
+      case S.StringLit(v) =>
+        s match
+          case SMeta =>
+            (StringLit(v), VLabel())
+          case STy(cv) =>
+            unify(cv, VVal())
+            (StringLit(v), VForeignType(VStringLit("Ljava/lang/String;")))
+
       case S.Lam(x, S.ArgIcit(i), ot, b) =>
         s match
           case SMeta =>
@@ -659,6 +671,8 @@ object Elaboration:
     if !tm.isPos then debug(s"infer $tm")
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
+      case S.IntLit(v)    => (IntLit(v), VForeignType(VStringLit("I")), SVTy())
+      case S.StringLit(v) => (StringLit(v), VLabel(), SMeta)
       case S.Hole(ox)     => error(s"cannot infer hole $tm")
       case S.U(SMeta)     => (U(SMeta), VUMeta(), SMeta)
       case S.U(STy(cv)) =>
@@ -972,6 +986,8 @@ object Elaboration:
     case Irrelevant   => t
     case Global(name) => t
     case Prim(name)   => t
+    case IntLit(_)    => t
+    case StringLit(_) => t
 
     case Meta(id1) if id == id1 => Var(ix)
     case Meta(id)               => t

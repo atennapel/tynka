@@ -56,6 +56,9 @@ object Syntax:
     case Let(name: Name, meta: Boolean, ty: Option[Ty], value: Tm, body: Tm)
     case U(stage: Stage[Ty])
 
+    case IntLit(value: Int)
+    case StringLit(value: String)
+
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
@@ -112,6 +115,8 @@ object Syntax:
           .getOrElse(Nil)
       case Hole(name)   => Nil
       case Pos(pos, tm) => tm.free
+      case IntLit(_)    => Nil
+      case StringLit(_) => Nil
 
     override def toString: String = this match
       case Var(x)                => s"$x"
@@ -119,6 +124,9 @@ object Syntax:
       case Let(x, m, Some(t), v, b) =>
         s"(let $x : $t ${if m then "" else ":"}= $v; $b)"
       case U(s) => s"$s"
+
+      case IntLit(v)    => s"$v"
+      case StringLit(v) => s"\"$v\""
 
       case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
       case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"

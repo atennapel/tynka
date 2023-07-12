@@ -58,8 +58,8 @@ def map {A B : VTy} (f : A -> B) (l : List A) : List B =
   foldr Nil (\hd tl. f hd :: tl) l
 
 def length {A : VTy} (l : List A) : Nat =
-  foldl 0 (\n _. S n) l
+  foldl Z (\n _. S n) l
 
 def (++) {A : VTy} (a b : List A) : List A = foldr b (::) a
 
-def sum = foldl 0 (+)
+def sum = foldl Z (+)

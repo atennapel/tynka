@@ -8,9 +8,11 @@ object Syntax:
 
   enum Ty:
     case TCon(x: GName)
+    case TForeign(cls: String)
 
     override def toString: String = this match
-      case TCon(x) => s"$x"
+      case TCon(x)     => s"$x"
+      case TForeign(x) => s"Foreign($x)"
 
     def tdef: TDef = TDef(this)
   export Ty.*
@@ -81,6 +83,7 @@ object Syntax:
     )
 
     case IntLit(value: Int)
+    case StringLit(value: String)
 
     case Con(name: GName, con: GName, args: List[Tm])
     case Field(dty: GName, con: GName, scrut: Tm, ix: Int)
@@ -99,7 +102,8 @@ object Syntax:
       case Global(x, _)    => s"$x"
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
 
-      case IntLit(v) => s"$v"
+      case IntLit(v)    => s"$v"
+      case StringLit(v) => s"\"$v\""
 
       case GlobalApp(x, _, tc, as) =>
         s"(${if tc then "[tailcall] " else ""}$x(${as.mkString(", ")}))"

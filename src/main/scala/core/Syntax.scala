@@ -49,6 +49,9 @@ object Syntax:
     case Let(name: Name, ty: Ty, stage: CStage, bty: Ty, value: Tm, body: Tm)
     case U(stage: CStage)
 
+    case IntLit(value: Int)
+    case StringLit(value: String)
+
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, icit: Icit, fnty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
@@ -96,6 +99,8 @@ object Syntax:
       case Var(ix)      => Set.empty
       case Global(name) => Set.empty
       case Prim(name)   => Set.empty
+      case IntLit(_)    => Set.empty
+      case StringLit(_) => Set.empty
       case U(stage)     => stage.fold(Set.empty, _.metas)
       case Let(name, ty, stage, bty, value, body) =>
         ty.metas ++ stage.fold(
@@ -136,6 +141,9 @@ object Syntax:
       case Let(x, t, SMeta, _, v, b)  => s"(let $x : $t = $v; $b)"
       case Let(x, t, STy(_), _, v, b) => s"(let $x : $t := $v; $b)"
       case U(s)                       => s"$s"
+
+      case IntLit(v)    => s"$v"
+      case StringLit(v) => s"\"$v\""
 
       case Pi(DontBind, Expl, t, b) => s"($t -> $b)"
       case Pi(x, i, t, b)           => s"(${i.wrap(s"$x : $t")} -> $b)"

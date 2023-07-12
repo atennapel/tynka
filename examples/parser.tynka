@@ -91,12 +91,31 @@ def many {A : VTy} (p : Parser A) : Parser (List A) =
     | Result s' hd. go s' (hd :: acc)
     ) s Nil
 
-def digit : Parser Char =
-  is 48 <|> is 49 <|> is 50 <|> is 51 <|> is 52 <|> is 53 <|> is 54 <|> is 55 <|> is 56 <|> is 57
+def n0 = Z
+def n1 = S n0
+def n2 = n1 + n1
+def n4 = n2 + n2
+def n8 = n4 + n4
+def n10 = n2 + n8
+def n16 = n8 + n8
+def n32 = n16 + n16
+def n48 = n16 + n32
+def n49 = S n48
+def n50 = S n49
+def n51 = S n50
+def n52 = S n51
+def n53 = S n52
+def n54 = S n53
+def n55 = S n54
+def n56 = S n55
+def n57 = S n56
 
-def spaces : Parser Unit = (\_. U) <$> many (is 32)
+def digit : Parser Char =
+  is n48 <|> is n49 <|> is n50 <|> is n51 <|> is n52 <|> is n53 <|> is n54 <|> is n55 <|> is n56 <|> is n57
+
+def spaces : Parser Unit = (\_. U) <$> many (is n32)
 
 def number : Parser (List Char) = many digit
 
-def input := #[48, 49, 10]
+def input := #[n48, n49, n10]
 def main := number input

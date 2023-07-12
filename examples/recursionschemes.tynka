@@ -29,4 +29,4 @@ def double (n : CNat) : CNat = \cv R alg. cata n
     (CZ cv R alg)
     (\m. let res = alg (\cv2 R2 z s. s m); alg (\cv2 R2 z s. s res))
 
-def main := cnat2nat \. double \. double \. nat2cnat 3
+def main := cnat2nat \. double \. double \. nat2cnat (S (S (S Z)))

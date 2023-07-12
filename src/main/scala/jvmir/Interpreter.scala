@@ -56,6 +56,7 @@ object Interpreter:
         interpret(b)
 
       case IntLit(_)       => t
+      case StringLit(_)    => t
       case Con(dx, cx, as) => Con(dx, cx, as.map(interpret))
 
       case Field(_, _, scrut, ix) =>

@@ -39,7 +39,7 @@ def Push/foldr {A : VTy} {cv} {B : Ty cv} (b : B) (f : A -> B -> B) (as : Push A
 def Push/foldl {A B : VTy} (b : B) (f : B -> A -> B) (as : Push A) : B =
   as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
 
-def Push/sum = Push/foldl 0 (+)
+def Push/sum = Push/foldl Z (+)
 
 def Push/range (n : Nat) : Push Nat =
   \cv B f b. fix (go c. match c | Z. b | S m. f c (go m)) n
@@ -47,4 +47,4 @@ def Push/range (n : Nat) : Push Nat =
 def main :=
   Push/sum \.
   Push/map (\x. x + x) \.
-  Push/range 3
+  Push/range (S (S (S Z)))

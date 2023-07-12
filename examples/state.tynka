@@ -49,6 +49,6 @@ def fibState (n : Nat) : State FibState Nat =
   | S m. update fibStep >> rec m
   ) n
 
-def fib (n : Nat) : Nat := execState (fibState n) (0, 1)
+def fib (n : Nat) : Nat := execState (fibState n) (Z, S Z)
 
-def main := fib 6
+def main := fib (S (S (S (S (S Z)))))

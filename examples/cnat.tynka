@@ -10,4 +10,7 @@ def addM (m : NatS) (a b : m.Nat) : m.Nat = m.fold a b m.S
 
 def (+) = addM CNatM
 
-def main = 1 + 2
+def n1 = S Z
+def n2 = S n1
+
+def main = n1 + n2

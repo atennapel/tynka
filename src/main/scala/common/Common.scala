@@ -115,6 +115,12 @@ object Common:
     case PReturnIO
     case PBindIO
 
+    case PLabel
+    case PEqLabel
+    case PAppendLabel
+
+    case PForeignType
+
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -127,10 +133,30 @@ object Common:
       case PIO       => "IO"
       case PReturnIO => "returnIO"
       case PBindIO   => "bindIO"
+
+      case PLabel       => "Label"
+      case PEqLabel     => "eqLabel"
+      case PAppendLabel => "appendLabel"
+
+      case PForeignType => "Foreign"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
-      List("CV", "Val", "Comp", "Fun", "()", "[]", "IO", "returnIO", "bindIO")
+      List(
+        "CV",
+        "Val",
+        "Comp",
+        "Fun",
+        "()",
+        "[]",
+        "IO",
+        "returnIO",
+        "bindIO",
+        "Label",
+        "eqLabel",
+        "appendLabel",
+        "Foreign"
+      )
         .map(Name.apply)
 
     def apply(x: Name): Option[PrimName] = x.expose match
@@ -145,5 +171,10 @@ object Common:
       case "IO"       => Some(PIO)
       case "returnIO" => Some(PReturnIO)
       case "bindIO"   => Some(PBindIO)
+
+      case "Label"       => Some(PLabel)
+      case "eqLabel"     => Some(PEqLabel)
+      case "appendLabel" => Some(PAppendLabel)
+      case "Foreign"     => Some(PForeignType)
 
       case _ => None

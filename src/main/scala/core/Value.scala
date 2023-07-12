@@ -58,6 +58,9 @@ object Value:
     case VGlobal(name: Name, spine: Spine, value: () => Val)
     case VU(stage: VStage)
 
+    case VIntLit(value: Int)
+    case VStringLit(value: String)
+
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
     case VFix(ty: VTy, rty: VTy, g: Bind, x: Bind, b: Clos2, arg: Val)
@@ -182,3 +185,21 @@ object Value:
     def unapply(value: Val): Boolean = value match
       case VRigid(HPrim(PUnit), SId) => true
       case _                         => false
+
+  object VLabel:
+    def apply(): Val = VRigid(HPrim(PLabel), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PLabel), SId) => true
+      case _                          => false
+
+  object VIO:
+    def apply(t: Val): Val = VRigid(HPrim(PIO), SApp(SId, t, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PIO), SApp(SId, t, Expl)) => Some(t)
+      case _                                      => None
+
+  object VForeignType:
+    def apply(t: Val): Val = VRigid(HPrim(PForeignType), SApp(SId, t, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PForeignType), SApp(SId, t, Expl)) => Some(t)
+      case _                                               => None

@@ -102,6 +102,7 @@ object Parser:
       ("^" *> projAtom).map(Lift.apply)
         <|> ("`" *> projAtom).map(Quote.apply)
         <|> ("$" *> projAtom).map(Splice.apply)
+        <|> string.map(StringLit.apply)
         <|> attempt("(" *> userOp.map(Var.apply) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
@@ -119,11 +120,12 @@ object Parser:
     private val nZ = Var(Name("Z"))
     private val nS = Var(Name("S"))
 
-    private lazy val nat: Parsley[Tm] = natural.map { i =>
+    private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
+    /*natural.map { i =>
       var c = nZ
       for (_ <- 0 until i) c = App(nS, c, ArgIcit(Expl))
       c
-    }
+    }*/
 
     private def mkPair(ts: List[Tm]): Tm = ts match
       case Nil => unittype

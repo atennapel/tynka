@@ -229,7 +229,9 @@ object Unification:
       case VTCon(x, as)         => TCon(x, as.map(go))
       case VCon(x, cx, tas, as) => Con(x, cx, tas.map(go), as.map(go))
 
-      case VIrrelevant => Irrelevant
+      case VIrrelevant   => Irrelevant
+      case VIntLit(v)    => IntLit(v)
+      case VStringLit(v) => StringLit(v)
     go(v)
 
   private def lams(l: Lvl, a: VTy, t: Tm): Tm =
@@ -377,7 +379,9 @@ object Unification:
   def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
-      case (VU(s1), VU(s2)) => unify(s1, s2)
+      case (VU(s1), VU(s2))                         => unify(s1, s2)
+      case (VIntLit(a), VIntLit(b)) if a == b       => ()
+      case (VStringLit(a), VStringLit(b)) if a == b => ()
       case (VPi(_, i1, a1, b1), VPi(_, i2, a2, b2)) if i1 == i2 =>
         unify(a1, a2); unify(b1, b2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>

@@ -66,6 +66,15 @@ object Evaluation:
 
   private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
     (x, force(v), as) match
+      case (PEqLabel, VStringLit(a), List((VStringLit(b), _))) =>
+        if a == b then
+          vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => t)))
+        else vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => f)))
+      case (PAppendLabel, VStringLit(""), List((b, _))) => b
+      case (PAppendLabel, _, List((VStringLit(""), _))) => v
+      case (PAppendLabel, VStringLit(a), List((VStringLit(b), _))) =>
+        VStringLit(a + b)
+
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
       case (_, VGlobal(y, sp, v), _) =>
@@ -110,6 +119,24 @@ object Evaluation:
       case _                        => impossible()
 
   private def vprim(x: PrimName): Val = x match
+    case PEqLabel =>
+      vlam(
+        "a",
+        VIrrelevant,
+        a =>
+          vlam("b", VIrrelevant, b => vprimelim(PEqLabel, List((b, Expl)), a))
+      )
+    case PAppendLabel =>
+      vlam(
+        "a",
+        VIrrelevant,
+        a =>
+          vlam(
+            "b",
+            VIrrelevant,
+            b => vprimelim(PAppendLabel, List((b, Expl)), a)
+          )
+      )
     case _ => VPrim(x)
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
@@ -118,6 +145,9 @@ object Evaluation:
     case Prim(x)               => vprim(x)
     case Let(_, _, _, _, v, b) => eval(b)(eval(v) :: env)
     case U(s)                  => VU(s.map(eval))
+
+    case IntLit(v)    => VIntLit(v)
+    case StringLit(v) => VStringLit(v)
 
     case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
     case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
@@ -202,6 +232,9 @@ object Evaluation:
       case VGlobal(x, sp, _) => quote(Global(x), sp, unfold)
       case VU(s)             => U(quoteS(s))
 
+      case VIntLit(v)    => IntLit(v)
+      case VStringLit(v) => StringLit(v)
+
       case VLam(x, i, ty, b) =>
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPi(x, i, t, b) =>
@@ -277,3 +310,13 @@ object Evaluation:
         ),
         SMeta
       )
+
+    case PLabel       => (VUMeta(), SMeta)
+    case PEqLabel     => (vfun(VLabel(), vfun(VLabel(), vcbool)), SMeta)
+    case PAppendLabel => (vfun(VLabel(), vfun(VLabel(), VLabel())), SMeta)
+
+    // Label -> VTy
+    case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
+
+  // (R : Meta) -> R -> R -> R
+  val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))

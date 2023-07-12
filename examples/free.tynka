@@ -51,7 +51,7 @@ def bindI {S A B : VTy} (c : StateI S A) (f : A -> StateI S B) : StateI S B =
 
 -- example
 def example : State Nat Nat =
-  put 1 >>
+  put (S Z) >>
   get >>= \x.
   put (S x) >>
   get >>= \y.
@@ -68,7 +68,7 @@ def handleConcrete {S A : VTy} (s : State S A) : StateI S A =
     (\x k. bindI (putI x) \_. k)
 
 def testmain : Nat :=
-  handleConstant 1 example
+  handleConstant (S Z) example
 
 def main : Pair Nat Nat :=
-  handleConcrete example 1
+  handleConcrete example (S Z)

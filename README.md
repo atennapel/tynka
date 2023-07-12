@@ -16,7 +16,11 @@ TODO:
 - [x] Interpreter
 - [x] Implicit generalization
 - [x] JVM bytecode generation
-- [ ] Foreign datatypes and operations
+- [x] Foreign datatypes
+- [ ] Foreign operations
+- [ ] Integrate foreign with IO
+- [ ] Support trampolines
+- [ ] Improve syntax for recursive functions
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Records/variants

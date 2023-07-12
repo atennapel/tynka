@@ -45,7 +45,7 @@ object JvmGenerator:
     case ADT
   import DataKind.*
 
-  private type Locals = IntMap[Int]
+  private type Locals = IntMap[(Int, Ty)]
 
   private final case class Ctx(moduleName: String, moduleType: Type)
   private val tcons: mutable.Map[GName, (Type, DataKind, List[GName])] =
@@ -109,6 +109,7 @@ object JvmGenerator:
     bos.close()
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
+    case TForeign(cls) => Type.getType(cls)
     case TCon(x) =>
       val (t, k, _) = tcons(x)
       k match
@@ -123,6 +124,23 @@ object JvmGenerator:
     case IntLit(n)          => Some(n)
     case Con(_, _, List(v)) => constantValue(v)
     case _                  => None
+
+  private val primitives = "BCDFIJSZ".split("")
+  private def descriptorIsPrimitive(d: String): Boolean = primitives.contains(d)
+
+  private def isBoxed(t: Ty): Boolean = t match
+    case TForeign(d) if descriptorIsPrimitive(d) => false
+    case TForeign(_)                             => true
+    case TCon(x) =>
+      val (_, k, _) = tcons(x)
+      k match
+        case UnitLike       => false
+        case BoolLike       => false
+        case VoidLike       => false
+        case FiniteLike(_)  => false
+        case NewtypeLike(t) => isBoxed(t)
+        case ProductLike(_) => true
+        case ADT            => true
 
   private def genStaticBlock(
       ds0: Defs
@@ -423,12 +441,19 @@ object JvmGenerator:
       locals: Locals,
       methodStart: Label
   ): Unit = t match
-    case IntLit(v) => mg.push(v)
-    case Arg(ix)   => mg.loadArg(ix)
-    case Var(x)    => mg.loadLocal(locals(x))
+    case IntLit(v)    => mg.push(v)
+    case StringLit(v) => mg.push(v)
+    case Arg(ix)      => mg.loadArg(ix)
+    case Var(x)       => mg.loadLocal(locals(x)._1)
 
     case Global(x, t) => mg.getStatic(ctx.moduleType, name(x), gen(t))
     case GlobalApp(x, TDef(Some(ps), rt), true, as) if name(x) == mg.getName =>
+      // local clearing to allow gc (taken from Clojure)
+      locals.values.foreach { (l, ty) =>
+        if isBoxed(ty) then
+          mg.visitInsn(Opcodes.ACONST_NULL)
+          mg.storeLocal(l)
+      }
       as.foreach(gen)
       Range.inclusive(as.size - 1, 0, -1).foreach(i => mg.storeArg(i))
       mg.visitJumpInsn(GOTO, methodStart)
@@ -444,7 +469,7 @@ object JvmGenerator:
       val vr = mg.newLocal(gen(t))
       gen(v)
       mg.storeLocal(vr)
-      gen(b)(mg, ctx, locals + (x -> vr), methodStart)
+      gen(b)(mg, ctx, locals + (x -> (vr, t)), methodStart)
 
     case Con(ty, con, as) =>
       val (jty, kind, cs) = tcons(ty)
@@ -541,12 +566,12 @@ object JvmGenerator:
           val local = mg.newLocal(gen(t))
           gen(scrut)
           mg.storeLocal(local)
-          gen(cs(0)._2)(mg, ctx, locals + (x -> local), methodStart)
+          gen(cs(0)._2)(mg, ctx, locals + (x -> (local, TCon(ty))), methodStart)
         case ProductLike(_) =>
           val local = mg.newLocal(jty)
           gen(scrut)
           mg.storeLocal(local)
-          gen(cs(0)._2)(mg, ctx, locals + (x -> local), methodStart)
+          gen(cs(0)._2)(mg, ctx, locals + (x -> (local, TCon(ty))), methodStart)
         case _ =>
           gen(scrut)
           val lEnd = new Label
@@ -574,7 +599,7 @@ object JvmGenerator:
               mg.checkCast(contype)
               val local = mg.newLocal(contype)
               mg.storeLocal(local)
-              gen(b)(mg, ctx, locals + (x -> local), methodStart)
+              gen(b)(mg, ctx, locals + (x -> (local, TCon(ty))), methodStart)
             mg.visitJumpInsn(GOTO, lEnd)
           }
           mg.visitLabel(lNextCase)
@@ -591,6 +616,11 @@ object JvmGenerator:
                 mg.checkCast(contype)
                 val local = mg.newLocal(contype)
                 mg.storeLocal(local)
-                gen(last)(mg, ctx, locals + (x -> local), methodStart)
+                gen(last)(
+                  mg,
+                  ctx,
+                  locals + (x -> (local, TCon(ty))),
+                  methodStart
+                )
             case Some(last) => mg.pop(); gen(last)
           mg.visitLabel(lEnd)

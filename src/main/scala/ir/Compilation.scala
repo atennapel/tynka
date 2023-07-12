@@ -51,7 +51,8 @@ object Compilation:
           case TDef(Nil, false, rt) => J.Global(x, go(t.rt))
           case ty => J.GlobalApp(x, go(ty), tr && x == defname, List())
 
-      case IntLit(n) => J.IntLit(n)
+      case IntLit(n)    => J.IntLit(n)
+      case StringLit(v) => J.StringLit(v)
 
       case app @ App(_, _) =>
         val (f, as) = app.flattenApps
@@ -92,7 +93,8 @@ object Compilation:
       case Fix(_, _, _, _, _, _) => impossible()
 
   private def go(t: Ty): J.Ty = t match
-    case TCon(x) => J.TCon(x)
+    case TCon(x)     => J.TCon(x)
+    case TForeign(x) => J.TForeign(x)
 
   private def go(t: TDef): J.TDef = t match
     case TDef(Nil, false, rt) => J.TDef(None, go(rt))
@@ -137,6 +139,7 @@ object Compilation:
     case Var(x, t)    => tm
     case Global(x, t) => tm
     case IntLit(n)    => tm
+    case StringLit(v) => tm
 
     case Con(x, cx, as)   => Con(x, cx, as.map(conv))
     case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))

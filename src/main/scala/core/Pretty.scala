@@ -44,6 +44,8 @@ object Pretty:
   ): String =
     tm match
       case Var(_)              => pretty(tm)
+      case IntLit(_)           => pretty(tm)
+      case StringLit(_)        => pretty(tm)
       case Global(_)           => pretty(tm)
       case Prim(_)             => pretty(tm)
       case Pair(_, _, _)       => pretty(tm)
@@ -78,6 +80,8 @@ object Pretty:
     case Global(x) if ns.contains(x) => s"$x@"
     case Global(x)                   => s"$x"
     case Prim(x)                     => s"$x"
+    case IntLit(x)                   => s"$x"
+    case StringLit(x)                => s"\"$x\""
     case Let(x, t, s, _, v, b) =>
       val ss = s match
         case SMeta  => ""

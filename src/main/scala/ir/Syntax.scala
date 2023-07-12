@@ -8,9 +8,11 @@ object Syntax:
 
   enum Ty:
     case TCon(x: GName)
+    case TForeign(x: String)
 
     override def toString: String = this match
-      case TCon(x) => s"$x"
+      case TCon(x)     => s"$x"
+      case TForeign(x) => s"Foreign($x)"
 
     def tdef: TDef = TDef(this)
   export Ty.*
@@ -58,6 +60,7 @@ object Syntax:
     case Global(name: GName, ty: TDef)
 
     case IntLit(n: Int)
+    case StringLit(s: String)
 
     case App(fn: Tm, arg: Tm)
     case Lam(name: LName, t1: Ty, t2: TDef, body: Tm)
@@ -88,7 +91,8 @@ object Syntax:
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
 
-      case IntLit(n) => s"$n"
+      case IntLit(n)    => s"$n"
+      case StringLit(s) => s"\"$s\""
 
       case App(f, a)               => s"($f $a)"
       case Lam(x, t, _, b)         => s"(\\($x : $t). $b)"
@@ -143,6 +147,7 @@ object Syntax:
       case Var(x, t)    => List((x, t))
       case Global(_, _) => Nil
       case IntLit(_)    => Nil
+      case StringLit(_) => Nil
 
       case App(f, a)       => f.fvs ++ a.fvs
       case Lam(x, _, _, b) => b.fvs.filterNot((y, _) => y == x)
@@ -164,6 +169,7 @@ object Syntax:
       case Var(x, _)    => Set(x)
       case Global(_, _) => Set.empty
       case IntLit(_)    => Set.empty
+      case StringLit(_) => Set.empty
 
       case App(f, a)               => f.usedNames ++ a.usedNames
       case Lam(_, _, _, b)         => b.usedNames
@@ -183,6 +189,7 @@ object Syntax:
       case Var(x, _)    => x
       case Global(_, _) => -1
       case IntLit(_)    => -1
+      case StringLit(_) => -1
 
       case App(f, a)               => f.maxName max a.maxName
       case Lam(x, _, _, b)         => x max b.maxName
@@ -234,6 +241,7 @@ object Syntax:
         case Var(x, _)    => sub.get(x).getOrElse(this)
         case Global(_, _) => this
         case IntLit(_)    => this
+        case StringLit(_) => this
 
         case App(f, a) => App(f.subst(sub, scope), a.subst(sub, scope))
         case Lam(x0, t1, t2, b0) =>
