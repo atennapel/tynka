@@ -30,7 +30,8 @@ object Parser:
         "Ty",
         "if",
         "then",
-        "else"
+        "else",
+        "foreign"
       ),
       operators = Set(
         "=",
@@ -143,7 +144,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -180,6 +181,12 @@ object Parser:
         val fn = Fix(g, x, b, arg)
         (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
           .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
+      }
+    )
+
+    private lazy val foreignP: Parsley[Tm] = positioned(
+      ("foreign" *> projAtom <~> projAtom <~> many(projAtom)).map {
+        case ((rt, l), as) => Foreign(rt, l, as)
       }
     )
 

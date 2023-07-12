@@ -65,6 +65,8 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case Foreign(rt: Ty, cmd: Tm, args: List[(Tm, Ty)])
+
     case TCon(name: Name, args: List[Ty])
     case Con(name: Name, con: Name, targs: List[Ty], args: List[Tm])
     case Match(
@@ -133,6 +135,10 @@ object Syntax:
       case Meta(id)              => Set(id)
       case AppPruning(tm, spine) => tm.metas
       case Irrelevant            => Set.empty
+      case Foreign(rt, cmd, args) =>
+        rt.metas ++ cmd.metas ++ args
+          .map((a, b) => a.metas ++ b.metas)
+          .foldLeft(Set.empty[MetaId])(_ ++ _)
 
     override def toString: String = this match
       case Var(x)                     => s"'$x"
@@ -161,6 +167,10 @@ object Syntax:
       case Lift(_, t) => s"^$t"
       case Quote(t)   => s"`$t"
       case Splice(t)  => s"$$$t"
+
+      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
+      case Foreign(rt, cmd, as) =>
+        s"(foreign $rt $cmd ${as.map(_._1).mkString(" ")})"
 
       case TCon(name, Nil)      => s"(tcon $name)"
       case TCon(name, as)       => s"(tcon $name ${as.mkString(" ")})"

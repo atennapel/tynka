@@ -923,6 +923,12 @@ object Elaboration:
         val (et2, a2) = adjustStage(et, a, SMeta, STy(cv))
         (et2, a2, STy(cv))
 
+      case S.Foreign(rt, l, as) =>
+        val ert = checkVTy(rt)
+        val el = check(l, VLabel(), SMeta)
+        val eas = as.map(a => infer(a, SVTy())).map((a, t) => (a, ctx.quote(t)))
+        (Foreign(ert, el, eas), ctx.eval(ert), SVTy())
+
   // elaboration
   private def prettyHoles(implicit ctx0: Ctx): String =
     holes.toList
@@ -1052,6 +1058,13 @@ object Elaboration:
         replaceMeta(id, scrut, ix),
         cs.map((x, i, t) => (x, i, replaceMeta(id, t, ix))),
         other.map(replaceMeta(id, _, ix))
+      )
+
+    case Foreign(rt, cmd, args) =>
+      Foreign(
+        replaceMeta(id, rt, ix),
+        replaceMeta(id, cmd, ix),
+        args.map((a, b) => (replaceMeta(id, a, ix), replaceMeta(id, b, ix)))
       )
 
   private def elaborate(d: S.Def): List[Def] =

@@ -46,6 +46,7 @@ object Main:
       val jvmirds = compile(irds)
       println(jvmirds)
 
+      /*
       println("\ninterpret:")
       val interpretTimeStart = System.nanoTime()
       interpret(jvmirds).foreach(println(_))
@@ -53,6 +54,7 @@ object Main:
       println(
         s"interpret time: ${interpretTime / 1000000}ms (${interpretTime}ns)"
       )
+       */
 
       println("\ngenerate JVM bytecode")
       generate(uri, jvmirds)

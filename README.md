@@ -17,8 +17,10 @@ TODO:
 - [x] Implicit generalization
 - [x] JVM bytecode generation
 - [x] Foreign datatypes
-- [ ] Foreign operations
+- [x] Foreign operations
 - [ ] Integrate foreign with IO
+- [ ] Imports
+- [ ] Fix naming issues in generated JVM bytecode
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
 - [ ] Recursion check in datatypes definitions

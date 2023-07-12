@@ -2,6 +2,8 @@ def VTy = Ty Val
 
 data Unit := MkUnit
 
+data Bool := False | True
+
 data Pair A B := MkPair A B
 
 def fst {A B} (p : Pair A B) : A = p.1
@@ -9,12 +11,10 @@ def fst {A B} (p : Pair A B) : A = p.1
 def unpair {A B C : VTy} (p : Pair A B) (f : A -> B -> C) : C =
   match p | MkPair a b. f a b
 
-data Nat := Z | S Nat
-
-def (+) (a b : Nat) : Nat :=
-  fix (rec a. \acc. match a
-  | Z. acc
-  | S n. rec n (S acc)) a b
+def Int = Foreign "I"
+def (+) a b = foreign Int "op:96" a b
+def (-) a b = foreign Int "op:100" a b
+def (<=) a b = foreign Bool "branch:158" a b
 
 -- State monad
 def State (S A : VTy) = S -> Pair S A
@@ -38,17 +38,19 @@ def (>>) {S A B : VTy} (c : State S A) (f : State S B) : State S B =
   \s. f (c s).1
 
 -- example
-def FibState = Pair Nat Nat
+def FibState = Pair Int Int
 
 def fibStep (st : FibState) : FibState =
   match st | MkPair x1 x2. (x2, x1 + x2)
 
-def fibState (n : Nat) : State FibState Nat =
-  fix (rec n. match n
-  | Z. fst <$> get
-  | S m. update fibStep >> rec m
+def fibState (n : Int) : State FibState Int =
+  fix (rec n.
+    if n <= 0 then
+      fst <$> get
+    else
+      update fibStep >> rec (n - 1)
   ) n
 
-def fib (n : Nat) : Nat := execState (fibState n) (Z, S Z)
+def fib (n : Int) : Int := execState (fibState n) (0, 1)
 
-def main := fib (S (S (S (S (S Z)))))
+def main := fib 8

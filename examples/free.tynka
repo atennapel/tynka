@@ -2,7 +2,8 @@ def VTy = Ty Val
 
 data Unit := MkUnit
 
-data Nat := Z | S Nat
+def Int = Foreign "I"
+def (+) a b = foreign Int "op:96" a b
 
 def Functor (F : Meta -> Meta) = {A B : Meta} -> (A -> B) -> F A -> F B
 
@@ -50,10 +51,10 @@ def bindI {S A B : VTy} (c : StateI S A) (f : A -> StateI S B) : StateI S B =
   \s. match (c s) | MkPair s' res. f res s'
 
 -- example
-def example : State Nat Nat =
-  put (S Z) >>
+def example : State Int Int =
+  put 1 >>
   get >>= \x.
-  put (S x) >>
+  put (x + 1) >>
   get >>= \y.
   return y
 
@@ -67,8 +68,8 @@ def handleConcrete {S A : VTy} (s : State S A) : StateI S A =
     (\k. bindI getI k)
     (\x k. bindI (putI x) \_. k)
 
-def testmain : Nat :=
-  handleConstant (S Z) example
+def testmain : Int :=
+  handleConstant 1 example
 
-def main : Pair Nat Nat :=
-  handleConcrete example (S Z)
+def main : Pair Int Int :=
+  handleConcrete example 1

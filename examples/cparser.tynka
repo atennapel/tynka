@@ -3,25 +3,13 @@ def VTy = Ty Val
 data Unit := U
 
 data Bool := False | True
+def (&&) a b = if a then b else False
 
-data Pair A B := MkPair A B
-
-data Nat := Z | S Nat
-
-def isZero a = match a | Z. True | S _. False
-
-def (+) a b :=
-  fix (rec a. \acc. match a
-  | Z. acc
-  | S n. rec n (S acc)) a b
-
-def (==) a b :=
-  fix (rec a. \b. match a
-  | Z. isZero b
-  | S n. match b
-    | Z. False
-    | S m. rec n m
-  ) a b
+def Int = Foreign "I"
+def (+) a b = foreign Int "op:96" a b
+def (==) a b = foreign Bool "branch:153" a b
+def (>=) a b = foreign Bool "branch:156" a b
+def (<=) a b = foreign Bool "branch:158" a b
 
 data List A
   | Nil
@@ -35,7 +23,7 @@ def reverse {A : VTy} (l : List A) : List A =
 
 -- parser combinators
 -- translated from https://tgdwyer.github.io/parsercombinators/
-def Char = Nat
+def Char = Int
 def String = List Char
 
 data ParseError
@@ -86,29 +74,9 @@ def many {A : VTy} (p : Parser A) : Parser (List A) =
         (\s' hd. go s' (hd :: acc))
     ) s Nil
 
-def n0 = Z
-def n1 = S n0
-def n2 = n1 + n1
-def n4 = n2 + n2
-def n8 = n4 + n4
-def n10 = n2 + n8
-def n16 = n8 + n8
-def n32 = n16 + n16
-def n48 = n16 + n32
-def n49 = S n48
-def n50 = S n49
-def n51 = S n50
-def n52 = S n51
-def n53 = S n52
-def n54 = S n53
-def n55 = S n54
-def n56 = S n55
-def n57 = S n56
+def digit : Parser Char = satisfy \c. c >= 48 && c <= 57
 
-def digit : Parser Char =
-  is n48 <|> is n49 <|> is n50 <|> is n51 <|> is n52 <|> is n53 <|> is n54 <|> is n55 <|> is n56 <|> is n57
-
-def spaces : Parser Unit = (\_. U) <$> many (is n32)
+def spaces : Parser Unit = (\_. U) <$> many (is 32)
 
 def number : Parser (List Char) = many digit
 
@@ -116,5 +84,5 @@ data PR A := E ParseError | R String A
 def parse {A : VTy} (p : Parser A) (s : String) : PR A =
   p s _ (PR A) E R
 
-def input := #[n48, n49, n10]
+def input := #[48, 49, 10]
 def main := parse number input

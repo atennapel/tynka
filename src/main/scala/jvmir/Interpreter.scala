@@ -56,6 +56,7 @@ object Interpreter:
         interpret(b)
 
       case IntLit(_)       => t
+      case BoolLit(_)      => t
       case StringLit(_)    => t
       case Con(dx, cx, as) => Con(dx, cx, as.map(interpret))
 
@@ -66,6 +67,9 @@ object Interpreter:
 
       case Match(_, _, ix, scrut, cs, other) =>
         interpret(scrut) match
+          case v @ BoolLit(b) =>
+            frame.vars(ix) = v
+            interpret(cs.toMap.get(if b then "True" else "False").get)
           case v @ Con(_, dx, as) =>
             frame.vars(ix) = v
             cs.find((dx1, _) => dx1 == dx)
@@ -74,6 +78,8 @@ object Interpreter:
               .map(interpret)
               .getOrElse(impossible())
           case s => impossible()
+
+      case Foreign(rt, cmd, args) => impossible()
 
   private type Stack = mutable.ArrayBuffer[Frame]
 

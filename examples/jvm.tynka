@@ -1,2 +1,42 @@
+def VTy = Ty Val
+data Bool := False | True
+data Option A := None | Some A
+
+-- int
 def Int = Foreign "I"
-def String = Foreign "Ljava/lang/String;"
+
+def binopInt op (a b : Int) = foreign Int (appendLabel "op:" op) a b
+def intAdd = binopInt "96"
+def intSub = binopInt "100"
+def intMul = binopInt "104"
+def intDiv = binopInt "108"
+def intMod = binopInt "112"
+def intNeg = binopInt "116"
+
+def branchInt op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
+def intEq = branchInt "153"
+def intNeq = branchInt "154"
+def intLt = branchInt "155"
+def intGeq = branchInt "156"
+def intGt = branchInt "157"
+def intLeq = branchInt "158"
+
+-- JVM specifics
+def JavaVoid = Foreign "V"
+def JavaArgs = Foreign "[Ljava/lang/String;"
+
+-- String
+def Str = Foreign "Ljava/lang/String;"
+
+def strAppend (a b : Str) : Str =
+  foreign Str "invokeVirtual:java.lang.String.concat" a b
+
+-- exceptions
+def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =
+  foreign A (appendLabel "catch:" exc) try default
+
+def parseInt (s : Str) : Option Int :=
+  catch "java/lang/NumberFormatException" (
+    let n = foreign Int "invokeStatic:java.lang.Integer.parseInt" s;
+    Some n
+  ) None

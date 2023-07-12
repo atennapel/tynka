@@ -60,6 +60,7 @@ object Syntax:
     case Global(name: GName, ty: TDef)
 
     case IntLit(n: Int)
+    case BoolLit(b: Boolean)
     case StringLit(s: String)
 
     case App(fn: Tm, arg: Tm)
@@ -87,11 +88,14 @@ object Syntax:
     case ReturnIO(value: Tm)
     case BindIO(t1: Ty, t2: Ty, x: LName, value: Tm, body: Tm)
 
+    case Foreign(rt: Ty, cmd: String, args: List[(Tm, Ty)])
+
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
       case Global(x, _) => s"$x"
 
       case IntLit(n)    => s"$n"
+      case BoolLit(n)   => s"$n"
       case StringLit(s) => s"\"$s\""
 
       case App(f, a)               => s"($f $a)"
@@ -117,6 +121,10 @@ object Syntax:
 
       case ReturnIO(v)           => s"(returnIO $v)"
       case BindIO(_, _, x, v, b) => s"($x <- $v; $b)"
+
+      case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
+      case Foreign(rt, l, as) =>
+        s"(foreign $rt $l ${as.map(_._1).mkString(" ")})"
 
     def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
       ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -147,6 +155,7 @@ object Syntax:
       case Var(x, t)    => List((x, t))
       case Global(_, _) => Nil
       case IntLit(_)    => Nil
+      case BoolLit(_)   => Nil
       case StringLit(_) => Nil
 
       case App(f, a)       => f.fvs ++ a.fvs
@@ -165,10 +174,13 @@ object Syntax:
       case ReturnIO(v)           => v.fvs
       case BindIO(_, _, x, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
 
+      case Foreign(_, _, as) => as.flatMap(_._1.fvs)
+
     def usedNames: Set[LName] = this match
       case Var(x, _)    => Set(x)
       case Global(_, _) => Set.empty
       case IntLit(_)    => Set.empty
+      case BoolLit(_)   => Set.empty
       case StringLit(_) => Set.empty
 
       case App(f, a)               => f.usedNames ++ a.usedNames
@@ -185,10 +197,13 @@ object Syntax:
       case ReturnIO(v)           => v.usedNames
       case BindIO(_, _, x, v, b) => v.usedNames ++ b.usedNames
 
+      case Foreign(_, _, as) => as.toSet.flatMap(_._1.usedNames)
+
     def maxName: LName = this match
       case Var(x, _)    => x
       case Global(_, _) => -1
       case IntLit(_)    => -1
+      case BoolLit(_)   => -1
       case StringLit(_) => -1
 
       case App(f, a)               => f.maxName max a.maxName
@@ -205,6 +220,8 @@ object Syntax:
 
       case ReturnIO(v)           => v.maxName
       case BindIO(_, _, x, v, b) => v.maxName max b.maxName
+
+      case Foreign(_, _, as) => as.map(_._1.maxName).fold(-1)(_ max _)
 
     def subst(sub: Map[LName, Tm]): Tm =
       subst(
@@ -241,6 +258,7 @@ object Syntax:
         case Var(x, _)    => sub.get(x).getOrElse(this)
         case Global(_, _) => this
         case IntLit(_)    => this
+        case BoolLit(_)   => this
         case StringLit(_) => this
 
         case App(f, a) => App(f.subst(sub, scope), a.subst(sub, scope))
@@ -291,4 +309,7 @@ object Syntax:
         case BindIO(t1, t2, x0, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, TDef(t1))), b0, sub, scope)
           BindIO(t1, t2, x, v.subst(sub, scope), b)
+
+        case Foreign(rt, cmd, args) =>
+          Foreign(rt, cmd, args.map((t, ty) => (t.subst(sub, scope), ty)))
   export Tm.*

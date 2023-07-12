@@ -1,12 +1,12 @@
 def VTy = Ty Val
 
--- natural numbers
-data Nat := Z | S Nat
+data Bool := False | True
 
-def (+) (a b : Nat) : Nat :=
-  fix (rec a. \acc. match a
-  | Z. acc
-  | S n. rec n (S acc)) a b
+def Int = Foreign "I"
+def (+) a b = foreign Int "op:96" a b
+def (-) a b = foreign Int "op:100" a b
+def (*) a b = foreign Int "op:104" a b
+def (<=) a b = foreign Bool "branch:158" a b
 
 -- lists
 data List A
@@ -39,12 +39,10 @@ def Push/foldr {A : VTy} {cv} {B : Ty cv} (b : B) (f : A -> B -> B) (as : Push A
 def Push/foldl {A B : VTy} (b : B) (f : B -> A -> B) (as : Push A) : B =
   as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
 
-def Push/sum = Push/foldl Z (+)
+def Push/sum = Push/foldl 0 (+)
+def Push/product = Push/foldl 1 (*)
 
-def Push/range (n : Nat) : Push Nat =
-  \cv B f b. fix (go c. match c | Z. b | S m. f c (go m)) n
+def Push/range (n : Int) : Push Int =
+  \cv B f b. fix (go c. if c <= 0 then b else f c (go (c - 1))) n
 
-def main :=
-  Push/sum \.
-  Push/map (\x. x + x) \.
-  Push/range (S (S (S Z)))
+def main := Push/product (Push/range 10)

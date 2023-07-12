@@ -163,6 +163,9 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
+    case Foreign(rt, cmd, as) =>
+      VForeign(eval(rt), eval(cmd), as.map((a, t) => (eval(a), eval(t))))
+
     case TCon(x, as)         => VTCon(x, as.map(eval))
     case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
     case Match(dty, rty, scrut, cs, other) =>
@@ -264,6 +267,13 @@ object Evaluation:
           cx,
           tas.map(a => quote(a, unfold)),
           as.map(a => quote(a, unfold))
+        )
+
+      case VForeign(rt, cmd, as) =>
+        Foreign(
+          quote(rt, unfold),
+          quote(cmd, unfold),
+          as.map((a, t) => (quote(a, unfold), quote(t, unfold)))
         )
 
       case VIrrelevant => Irrelevant

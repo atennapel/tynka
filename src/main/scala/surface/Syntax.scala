@@ -78,6 +78,8 @@ object Syntax:
         other: Option[(PosInfo, Tm)]
     )
 
+    case Foreign(rt: Ty, label: Tm, args: List[Tm])
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -113,6 +115,10 @@ object Syntax:
           .foldLeft(List.empty[Name])((acc, xs) => acc ++ xs) ++ other
           .map((_, t) => t.free)
           .getOrElse(Nil)
+      case Foreign(rt, label, args) =>
+        rt.free ++ label.free ++ args
+          .map(_.free)
+          .foldLeft(List.empty[Name])(_ ++ _)
       case Hole(name)   => Nil
       case Pos(pos, tm) => tm.free
       case IntLit(_)    => Nil
@@ -148,6 +154,9 @@ object Syntax:
       case Lift(t)   => s"^$t"
       case Quote(t)  => s"`$t"
       case Splice(t) => s"$$$t"
+
+      case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
+      case Foreign(rt, l, as)  => s"(foreign $rt $l ${as.mkString(" ")})"
 
       case Match(scrut, cs, other) =>
         s"(match $scrut ${cs

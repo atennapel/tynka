@@ -83,6 +83,7 @@ object Syntax:
     )
 
     case IntLit(value: Int)
+    case BoolLit(value: Boolean)
     case StringLit(value: String)
 
     case Con(name: GName, con: GName, args: List[Tm])
@@ -96,6 +97,8 @@ object Syntax:
         other: Option[Tm]
     )
 
+    case Foreign(rt: Ty, cmd: String, args: List[(Tm, Ty)])
+
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"
       case Var(x)          => s"'$x"
@@ -103,6 +106,7 @@ object Syntax:
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
 
       case IntLit(v)    => s"$v"
+      case BoolLit(v)   => s"$v"
       case StringLit(v) => s"\"$v\""
 
       case GlobalApp(x, _, tc, as) =>
@@ -122,4 +126,8 @@ object Syntax:
         s"(match $x = $scrut; ${cs
             .map((c, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
+
+      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
+      case Foreign(rt, cmd, as) =>
+        s"(foreign $rt $cmd ${as.map((v, t) => s"$v").mkString(" ")})"
   export Tm.*

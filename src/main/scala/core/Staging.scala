@@ -52,6 +52,7 @@ object Staging:
     case VCon0(x: Name, con: Name, tas: List[Val1], as: List[Val0])
     case VStringLit0(v: String)
     case VIntLit0(v: Int)
+    case VForeign0(ty: Val1, cmd: String, as: List[(Val0, Val1)])
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -63,8 +64,15 @@ object Staging:
     go(env, ix.expose)
 
   private def vapp1(f: Val1, a: Val1): Val1 = (f, a) match
-    case (VLam1(f), _)               => f(a)
-    case (VPrim1(x, as), _)          => VPrim1(x, as ++ List(a))
+    case (VLam1(f), _) => f(a)
+    case (VPrim1(x, as), _) =>
+      (x, as ++ List(a)) match
+        case (PEqLabel, List(VStringLit1(a), VStringLit1(b))) =>
+          if a == b then VLam1(r => VLam1(a => VLam1(b => a)))
+          else VLam1(r => VLam1(a => VLam1(b => b)))
+        case (PAppendLabel, List(VStringLit1(a), VStringLit1(b))) =>
+          VStringLit1(a + b)
+        case _ => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()
@@ -145,11 +153,20 @@ object Staging:
     case Wk(t)               => eval0(t)(env.tail)
     case StringLit(v)        => VStringLit0(v)
     case IntLit(v)           => VIntLit0(v)
-    case _                   => impossible()
+    case Foreign(rt, cmd, as) =>
+      val l = eval1(cmd) match
+        case VStringLit1(v) => v
+        case _              => impossible()
+      VForeign0(eval1(rt), l, as.map((a, t) => (eval0(a), eval1(t))))
+    case _ => impossible()
 
   // quotation
   private type NS = List[(IR.LName, IR.TDef)]
   private type Fresh = () => IR.LName
+
+  private def escapeTy(t: IR.Ty): String = t match
+    case IR.TCon(x)     => x
+    case IR.TForeign(x) => x
 
   private case class DataMonomorphizer(
       typeCache: mutable.Map[Name, DData] = mutable.Map.empty,
@@ -167,7 +184,7 @@ object Staging:
         case Some(x) => x
         case None =>
           val x =
-            s"${name.expose}${if params.isEmpty then "" else "_"}${params.mkString("_")}"
+            s"${name.expose}${if params.isEmpty then "" else "_"}${params.map(escapeTy).mkString("_")}"
           cache += (name, params) -> x
           implicit val env: Env = cparams.foldLeft(Empty)(Def1.apply)
           defCache += IR.DData(
@@ -291,6 +308,13 @@ object Staging:
 
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)
+
+      case VForeign0(ty, cmd, as) =>
+        IR.Foreign(
+          quoteVTy(ty),
+          cmd,
+          as.map((a, t) => (quote(a), quoteVTy(t)))
+        )
 
       case VPrim0(_)           => impossible()
       case VSplicePrim0(x, as) => impossible()

@@ -52,6 +52,7 @@ object Compilation:
           case ty => J.GlobalApp(x, go(ty), tr && x == defname, List())
 
       case IntLit(n)    => J.IntLit(n)
+      case BoolLit(b)   => J.BoolLit(b)
       case StringLit(v) => J.StringLit(v)
 
       case app @ App(_, _) =>
@@ -88,6 +89,9 @@ object Compilation:
       case BindIO(t1, t2, x0, v, b) =>
         val x = localrename.fresh(x0, false)
         J.Let(x, go(t1), go(v, false), go(b, tr))
+
+      case Foreign(rt, cmd, args) =>
+        J.Foreign(go(rt), cmd, args.map((t, ty) => (go(t, false), go(ty))))
 
       case Lam(_, _, _, _)       => impossible()
       case Fix(_, _, _, _, _, _) => impossible()
@@ -139,6 +143,7 @@ object Compilation:
     case Var(x, t)    => tm
     case Global(x, t) => tm
     case IntLit(n)    => tm
+    case BoolLit(n)   => tm
     case StringLit(v) => tm
 
     case Con(x, cx, as)   => Con(x, cx, as.map(conv))
@@ -214,6 +219,10 @@ object Compilation:
 
     case Match(dty, rty, mx, scrut, cs, other) =>
       conv(scrut) match
+        case v @ BoolLit(b) =>
+          cs.toMap.get(if b then "True" else "False") match
+            case Some(b) => conv(b.subst(Map(mx -> v)))
+            case None    => impossible()
         case v @ Con(_, x, as) =>
           cs.toMap.get(x) match
             case Some(b) => conv(b.subst(Map(mx -> v)))
@@ -237,10 +246,74 @@ object Compilation:
         case ReturnIO(v) => b.subst(Map(x -> v))
         case v           => BindIO(t1, t2, x, v, conv(b))
 
+    case Foreign(rt, l, as) =>
+      (l, as.map((a, _) => conv(a))) match
+        // +
+        case ("op:96", List(IntLit(a), IntLit(b))) => IntLit(a + b)
+        case ("op:96", List(a, IntLit(0)))         => a
+        case ("op:96", List(IntLit(0), b))         => b
+        // -
+        case ("op:100", List(IntLit(a), IntLit(b))) => IntLit(a - b)
+        case ("op:100", List(IntLit(0), b)) =>
+          conv(Foreign(rt, "op:116", List((b, as(1)._2))))
+        case ("op:100", List(a, IntLit(0))) => a
+        // *
+        case ("op:104", List(_, IntLit(0)))         => IntLit(0)
+        case ("op:104", List(IntLit(0), _))         => IntLit(0)
+        case ("op:104", List(a, IntLit(1)))         => a
+        case ("op:104", List(IntLit(1), a))         => a
+        case ("op:104", List(IntLit(a), IntLit(b))) => IntLit(a * b)
+        // /
+        case ("op:108", List(IntLit(a), IntLit(b))) => IntLit(a / b)
+        case ("op:108", List(a, IntLit(1)))         => a
+        // %
+        case ("op:112", List(IntLit(a), IntLit(b))) => IntLit(a % b)
+        case ("op:112", List(a, IntLit(1)))         => IntLit(0)
+        // neg
+        case ("op:116", List(IntLit(a))) => IntLit(-a)
+        // ==
+        case ("branch:153", List(IntLit(a), IntLit(b))) =>
+          BoolLit(a == b)
+        // !=
+        case ("branch:154", List(IntLit(a), IntLit(b))) =>
+          BoolLit(a != b)
+        // <
+        case ("branch:155", List(IntLit(a), IntLit(b))) =>
+          BoolLit(a < b)
+        // >
+        case ("branch:157", List(IntLit(a), IntLit(b))) =>
+          BoolLit(a > b)
+        // <=
+        case ("branch:158", List(IntLit(a), IntLit(b))) =>
+          BoolLit(a <= b)
+        // >=
+        case ("branch:156", List(IntLit(a), IntLit(b))) =>
+          BoolLit(a >= b)
+
+        case (
+              "invokeVirtual:java.lang.String.concat",
+              List(StringLit(""), b)
+            ) =>
+          b
+        case (
+              "invokeVirtual:java.lang.String.concat",
+              List(a, StringLit(""))
+            ) =>
+          a
+        case (
+              "invokeVirtual:java.lang.String.concat",
+              List(StringLit(a), StringLit(b))
+            ) =>
+          StringLit(a + b)
+
+        case (l, gas) => Foreign(rt, l, gas.zip(as.map(_._2)))
+
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)      => true
     case Global(_, _)   => true
     case IntLit(_)      => true
+    case BoolLit(_)     => true
+    case StringLit(_)   => true
     case Con(_, _, Nil) => true
     case _              => false
 

@@ -122,6 +122,8 @@ object JvmGenerator:
 
   private def constantValue(e: Tm): Option[Any] = e match
     case IntLit(n)          => Some(n)
+    case BoolLit(n)         => Some(n)
+    case StringLit(n)       => Some(n)
     case Con(_, _, List(v)) => constantValue(v)
     case _                  => None
 
@@ -442,6 +444,7 @@ object JvmGenerator:
       methodStart: Label
   ): Unit = t match
     case IntLit(v)    => mg.push(v)
+    case BoolLit(v)   => mg.push(v)
     case StringLit(v) => mg.push(v)
     case Arg(ix)      => mg.loadArg(ix)
     case Var(x)       => mg.loadLocal(locals(x)._1)
@@ -465,6 +468,8 @@ object JvmGenerator:
       )
     case GlobalApp(_, _, _, _) => impossible()
 
+    case Let(x, t, InvokeVirtualVoid(arg, as), b) =>
+      invokeVirtualVoid(arg, as); gen(b)
     case Let(x, t, v, b) =>
       val vr = mg.newLocal(gen(t))
       gen(v)
@@ -493,14 +498,16 @@ object JvmGenerator:
             )
           )
         case (_, Nil) =>
-          val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$con;")
+          val conType =
+            Type.getType(s"L${ctx.moduleName}$$$ty$$${escape(con)};")
           mg.getStatic(
             tcons(ty)._1,
-            s"$$$con$$",
+            s"$$${escape(con)}$$",
             conType
           )
         case _ =>
-          val conType = Type.getType(s"L${ctx.moduleName}$$$ty$$$con;")
+          val conType =
+            Type.getType(s"L${ctx.moduleName}$$$ty$$${escape(con)};")
           mg.newInstance(conType)
           mg.dup()
           as.foreach(gen)
@@ -539,7 +546,11 @@ object JvmGenerator:
           mg.invokeVirtual(OBJECT_TYPE, Method.getMethod("String toString()"))
           mg.invokeConstructor(ty, Method.getMethod("void <init> (String)"))
           mg.throwException()
-        case UnitLike => gen(scrut); mg.pop(); gen(cs(0)._2)
+        case UnitLike =>
+          scrut match
+            case InvokeVirtualVoid(arg, as) =>
+              invokeVirtualVoid(arg, as); gen(cs(0)._2)
+            case _ => gen(scrut); mg.pop(); gen(cs(0)._2)
         case BoolLike =>
           val lFalse = new Label
           val lEnd = new Label
@@ -624,3 +635,110 @@ object JvmGenerator:
                 )
             case Some(last) => mg.pop(); gen(last)
           mg.visitLabel(lEnd)
+    case Foreign(_, "cast", List((v, _)))       => gen(v)
+    case Foreign(_, "returnVoid", List((v, _))) => gen(v); mg.pop()
+    case Foreign(_, op, List((p, _), (c, _))) if op.startsWith("catch") =>
+      val exc = op match
+        case "catch"                     => null
+        case s if s.startsWith("catch:") => s.drop(6)
+        case _                           => impossible()
+      val lStart = mg.newLabel()
+      val lStop = mg.newLabel()
+      val lHandler = mg.newLabel()
+      val lEnd = mg.newLabel()
+      mg.visitTryCatchBlock(lStart, lStop, lHandler, exc)
+      mg.visitLabel(lStart)
+      gen(p)
+      mg.visitLabel(lStop)
+      mg.visitJumpInsn(GOTO, lEnd)
+      mg.visitLabel(lHandler)
+      mg.pop()
+      gen(c)
+      mg.visitLabel(lEnd)
+    case Foreign(_, op, as) if op.startsWith("op:") =>
+      op.drop(3).toIntOption match
+        case Some(n) => as.foreach((v, _) => gen(v)); mg.visitInsn(n)
+        case _       => impossible()
+    case Foreign(_, op, as) if op.startsWith("branch:") =>
+      op.drop(7).toIntOption match
+        case Some(n) =>
+          as.foreach((v, _) => gen(v))
+          val skip = mg.newLabel()
+          val end = mg.newLabel()
+          mg.ifICmp(n, skip)
+          mg.push(false)
+          mg.visitJumpInsn(GOTO, end)
+          mg.visitLabel(skip)
+          mg.push(true)
+          mg.visitLabel(end)
+        case _ => impossible()
+    case Foreign(rt @ TForeign(_), "instantiate", as) =>
+      val ty = gen(rt)
+      mg.newInstance(ty)
+      mg.dup()
+      as.foreach((v, _) => gen(v))
+      mg.invokeConstructor(
+        ty,
+        Method("<init>", Type.VOID_TYPE, as.map((_, t) => gen(t)).toArray)
+      )
+    case Foreign(rt, cmd0, as) =>
+      val (cmd, arg) = splitForeign(cmd0)
+      (cmd, arg, as) match
+        case ("getStatic", arg, Nil) =>
+          val ss = arg.split("\\.")
+          val owner = s"L${ss.init.mkString("/")};"
+          val member = ss.last
+          mg.getStatic(Type.getType(owner), member, gen(rt))
+        case ("invokeVirtual", arg, as) =>
+          val ss = arg.split("\\.")
+          val owner = s"L${ss.init.mkString("/")};"
+          val member = ss.last
+          as.foreach((v, _) => gen(v))
+          mg.invokeVirtual(
+            Type.getType(owner),
+            Method(member, gen(rt), as.tail.map((_, t) => gen(t)).toArray)
+          )
+        case ("invokeVirtualVoid", arg, as) =>
+          invokeVirtualVoid(arg, as); mg.push(false)
+        case ("invokeStatic", arg, as) =>
+          val ss = arg.split("\\.")
+          val owner = s"L${ss.init.mkString("/")};"
+          val member = ss.last
+          as.foreach((v, _) => gen(v))
+          mg.invokeStatic(
+            Type.getType(owner),
+            Method(member, gen(rt), as.map((_, t) => gen(t)).toArray)
+          )
+        case _ => impossible()
+
+  private def splitForeign(cmd0: String): (String, String) =
+    val s = cmd0.split("\\:")
+    val cmd = s.head
+    val arg = s.tail.mkString(":")
+    (cmd, arg)
+  private def invokeVirtualVoid(arg: String, as: List[(Tm, Ty)])(implicit
+      mg: GeneratorAdapter,
+      ctx: Ctx,
+      locals: Locals,
+      methodStart: Label
+  ): Unit =
+    val ss = arg.split("\\.")
+    val owner = s"L${ss.init.mkString("/")};"
+    val member = ss.last
+    as.foreach((v, _) => gen(v))
+    mg.invokeVirtual(
+      Type.getType(owner),
+      Method(
+        member,
+        Type.VOID_TYPE,
+        as.tail.map((_, t) => gen(t)).toArray
+      )
+    )
+
+  private object InvokeVirtualVoid:
+    def unapply(t: Tm): Option[(String, List[(Tm, Ty)])] = t match
+      case Foreign(_, cmd0, as) =>
+        val (cmd, arg) = splitForeign(cmd0)
+        if cmd == "invokeVirtualVoid" then Some((arg, as))
+        else None
+      case _ => None
