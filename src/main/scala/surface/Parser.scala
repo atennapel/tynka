@@ -32,7 +32,8 @@ object Parser:
         "then",
         "else",
         "foreign",
-        "foreignIO"
+        "foreignIO",
+        "do"
       ),
       operators = Set(
         "=",
@@ -43,6 +44,7 @@ object Parser:
         ".",
         ",",
         "->",
+        "<-",
         "**",
         "_",
         "^",
@@ -145,7 +147,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
@@ -231,6 +233,77 @@ object Parser:
             )
           }
       )
+
+    private enum DoEntry:
+      case DoBind(pos: PosInfo, x: Bind, t: Option[Ty], v: Tm)
+      case DoLet(pos: PosInfo, x: Name, m: Boolean, t: Option[Ty], v: Tm)
+      case DoTm(t: Tm)
+    import DoEntry.*
+    private val bindVar = Var(Name(">>="))
+    private lazy val doP: Parsley[Tm] =
+      positioned(
+        ("do" *> many(attempt(doEntry)) <~> tm).map((es, b) =>
+          es.foldRight(b) {
+            // (>>=) {_} {t} v (\x. b)
+            case (DoBind(p, x, Some(t), v), b) =>
+              Pos(
+                p,
+                App(
+                  App(
+                    App(
+                      App(bindVar, Hole(None), ArgIcit(Impl)),
+                      t,
+                      ArgIcit(Impl)
+                    ),
+                    v,
+                    ArgIcit(Expl)
+                  ),
+                  Lam(x, ArgIcit(Expl), None, b),
+                  ArgIcit(Expl)
+                )
+              )
+            // (>>=) v (\x. b)
+            case (DoBind(p, x, None, v), b) =>
+              Pos(
+                p,
+                App(
+                  App(
+                    bindVar,
+                    v,
+                    ArgIcit(Expl)
+                  ),
+                  Lam(x, ArgIcit(Expl), None, b),
+                  ArgIcit(Expl)
+                )
+              )
+            case (DoLet(p, x, m, t, v), b) => Pos(p, Let(x, m, t, v, b))
+            // (>>=) v (\_. b)
+            case (DoTm(v), b) =>
+              App(
+                App(
+                  bindVar,
+                  v,
+                  ArgIcit(Expl)
+                ),
+                Lam(DontBind, ArgIcit(Expl), None, b),
+                ArgIcit(Expl)
+              )
+          }
+        )
+      )
+    private lazy val doEntry: Parsley[DoEntry] =
+      attempt(pos <~> bind <~> option(":" *> tm) <~> "<-" *> tm <* ";").map {
+        case (((pos, x), t), v) =>
+          DoBind(pos, x, t, v)
+      } <|>
+        attempt(
+          pos <~> "let" *> identOrOp <~> (":=" #> false <|> "=" #> true) <~> option(
+            ":" *> tm
+          ) <~> tm <* ";"
+        )
+          .map { case ((((pos, x), m), t), v) =>
+            DoLet(pos, x, m, t, v)
+          } <|> (tm <* ";").map(DoTm.apply)
 
     private type LamParam = (List[Bind], ArgInfo, Option[Ty])
     private lazy val lamParam: Parsley[LamParam] =

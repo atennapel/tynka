@@ -51,11 +51,11 @@ def bindI {S A B : VTy} (c : StateI S A) (f : A -> StateI S B) : StateI S B =
   \s. match (c s) | MkPair s' res. f res s'
 
 -- example
-def example : State Int Int =
-  put 1 >>
-  get >>= \x.
-  put (x + 1) >>
-  get >>= \y.
+def example : State Int Int = do
+  put 1;
+  x <- get;
+  put (x + 1);
+  y <- get;
   return y
 
 def handleConstant {S A : VTy} (c : S) (s : State S A) : A =

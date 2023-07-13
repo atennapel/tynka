@@ -19,7 +19,7 @@ TODO:
 - [x] Foreign datatypes
 - [x] Foreign operations
 - [x] Integrate foreign with IO
-- [ ] Do syntax for monads
+- [x] Do syntax for monads
 - [ ] Imports
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines

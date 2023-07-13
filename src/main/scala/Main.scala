@@ -27,6 +27,7 @@ object Main:
         .parse(text)
         .toTry
         .get
+      // println(defs)
       val eds = elaborate(filename, defs)
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")

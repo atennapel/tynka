@@ -68,7 +68,7 @@ def (>>=) = bindIO
 def (>>>) {A B : VTy} (a : IO A) (b : IO B) : IO B = a >>= \_. b
 
 def traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
-  foldr (returnIO Nil) (\hd tl. f hd >>= \fhd. tl >>= \ftl. returnIO (fhd :: ftl)) l
+  foldr (returnIO Nil) (\hd tl. do fhd <- f hd; ftl <- tl; returnIO (fhd :: ftl)) l
 
 def traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
   foldr (returnIO MkUnit) (\hd tl. f hd >>> tl) l
