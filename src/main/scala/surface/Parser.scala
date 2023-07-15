@@ -424,7 +424,7 @@ object Parser:
 
     // definitions
     lazy val defs: Parsley[Defs] =
-      many(defP <|> dataP).map(Defs.apply)
+      many(defP <|> dataP <|> importP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
       (pos <~> "def" *> identOrOp <~> many(defParam) <~> option(
@@ -458,6 +458,11 @@ object Parser:
               .getOrElse(Nil)
           )
         }
+
+    private lazy val importP: Parsley[Def] =
+      (pos <~> "import" *> string).map { case (pos, m) =>
+        DImport(pos, m)
+      }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)
   lazy val defsParser: Parsley[Defs] = LangLexer.fully(TmParser.defs)

@@ -1,0 +1,29 @@
+import "lib/Prelude"
+
+def Push A = (cv : CV) (B : Ty cv) -> (A -> B -> B) -> B -> B
+
+def Push/cons {A : VTy} (hd : A) (tl : Push A) : Push A =
+  \cv B c n. c hd (tl cv B c n)
+
+def Push/fromList {A : VTy} (as : List A) : Push A =
+  \cv B f b. List/foldr b f as
+
+def Push/toList {A : VTy} (as : Push A) : List A = as _ _ (::) Nil
+
+def Push/map {A B : VTy} (f : A -> B) (as : Push A) : Push B =
+  \cv R c n. as cv R (\a bs. c (f a) bs) n
+
+def Push/foldr {A : VTy} {cv} {B : Ty cv} (b : B) (f : A -> B -> B) (as : Push A) : B =
+  as cv B f b
+
+def Push/foldl {A B : VTy} (b : B) (f : B -> A -> B) (as : Push A) : B =
+  as _ (B -> B) (\a rec acc. rec (f acc a)) (\acc. acc) b
+
+def Push/foldIO_ {A : VTy} (f : A -> IO Unit) (as : Push A) : IO Unit =
+  Push/foldr (IO/return U) (\hd tl. IO/seq (f hd) tl) as
+
+def Push/sum = Push/foldl 0 Int/add
+def Push/product = Push/foldl 1 Int/mul
+
+def Push/range (n : Int) : Push Int =
+  \cv B f b. fix (go c. if Int/leq c 0 then b else f c (go (Int/sub c 1))) n

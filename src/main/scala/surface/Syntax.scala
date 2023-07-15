@@ -6,8 +6,16 @@ object Syntax:
   final case class Defs(defs: List[Def]):
     override def toString: String = defs.mkString("\n")
     def toList: List[Def] = defs
+    def imports: List[String] =
+      (
+        defs.flatMap {
+          case DImport(_, uri) => Some(uri)
+          case _               => None
+        }
+      )
 
   enum Def:
+    case DImport(pos: PosInfo, uri: String)
     case DDef(
         pos: PosInfo,
         name: Name,
@@ -23,6 +31,7 @@ object Syntax:
     )
 
     override def toString: String = this match
+      case DImport(pos, uri) => s"import \"$uri\""
       case DDef(_, x, m, Some(t), v) =>
         s"def $x : $t ${if m then "" else ":"}= $v"
       case DDef(_, x, m, None, v) => s"def $x ${if m then "" else ":"}= $v"

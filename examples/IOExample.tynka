@@ -1,0 +1,16 @@
+import "lib/Prelude"
+
+def return = IO/return
+def (>>=) = IO/bind
+def (++) = Str/append
+def (==) = Str/equals
+
+def main : IO Unit :=
+  IO/fix \go. do
+    name <- getLn;
+    if name == "exit" then
+      return U
+    else do
+      putLn ("hi " ++ name);
+      putLn (Str/length name);
+      go

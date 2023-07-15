@@ -5,8 +5,8 @@ We have a language with two layers, one compile-time layer with full dependent t
 
 Try it out:
 ```
-sbt "run examples/io"
-java examples/io
+sbt "run examples/IOExample"
+java examples/IOExample
 ```
 
 TODO:
@@ -20,7 +20,8 @@ TODO:
 - [x] Foreign operations
 - [x] Integrate foreign with IO
 - [x] Do syntax for monads
-- [ ] Imports
+- [x] Imports
+- [ ] Modules
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions

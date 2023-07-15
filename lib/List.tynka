@@ -1,0 +1,42 @@
+import "lib/Base"
+import "lib/IO"
+
+data List A
+  | Nil
+  | (::) A (List A)
+
+def List/isEmpty {A : VTy} (l : List A) : Bool =
+  match l
+  | Nil. True
+  | _. False
+
+def List/head {A : VTy} (l : List A) : Option A =
+  match l
+  | Nil. None
+  | (::) hd _. Some hd
+
+def List/foldr {A : VTy} {cv : CV} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
+  fix (go l. match l
+  | Nil. n
+  | (::) hd tl. c hd (go tl)
+  ) l
+
+def List/foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
+  List/foldr (\acc. acc) (\hd go acc. go (c acc hd)) l n
+
+def List/map {A B : VTy} (f : A -> B) (l : List A) : List B =
+  List/foldr Nil (\hd tl. f hd :: tl) l
+
+def List/append {A : VTy} (a b : List A) : List A = List/foldr b (::) a
+
+def List/reverse {A : VTy} (l : List A) : List A =
+  fix (go l. \acc. match l
+  | Nil. acc
+  | (::) hd tl. go tl (hd :: acc)
+  ) l Nil
+
+def List/traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
+  List/foldr (IO/return Nil) (\hd tl. IO/bind (f hd) \fhd. IO/bind tl \ftl. IO/return (fhd :: ftl)) l
+
+def List/traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
+  List/foldr (IO/return U) (\hd tl. IO/seq (f hd) tl) l

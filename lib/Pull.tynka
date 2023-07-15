@@ -1,17 +1,8 @@
-def VTy = Ty Val
+import "lib/Prelude"
+import "lib/Push"
 
--- lists
-data List A
-  | Nil
-  | (::) A (List A)
-
--- push lists
-def Push A = (cv : CV) (B : Ty cv) -> (A -> B -> B) -> B -> B
-
--- pull lists
-def Step A S = (cv : CV) (R : Ty cv) -> R -> (A -> S -> R) -> R
-
-def Pull A = (S : VTy) ** (step : S -> Step A S) ** (value : S) ** ()
+def Pull/Step A S = (cv : CV) (R : Ty cv) -> R -> (A -> S -> R) -> R
+def Pull A = (S : VTy) ** (step : S -> Pull/Step A S) ** (value : S) ** ()
 
 def Pull/fromList {A : VTy} (as : List A) : Pull A =
   [

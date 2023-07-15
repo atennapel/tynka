@@ -1,39 +1,43 @@
-def VTy = Ty Val
-data Unit := MkUnit
-data Bool := False | True
-data Option A := None | Some A
+import "lib/Base"
 
 -- int
 def Int = Foreign "I"
 
-def binopInt op (a b : Int) = foreign Int (appendLabel "op:" op) a b
-def intAdd = binopInt "96"
-def intSub = binopInt "100"
-def intMul = binopInt "104"
-def intDiv = binopInt "108"
-def intMod = binopInt "112"
-def intNeg = binopInt "116"
+def Int/jvmBinop op (a b : Int) = foreign Int (appendLabel "op:" op) a b
+def Int/add = Int/jvmBinop "96"
+def Int/sub = Int/jvmBinop "100"
+def Int/mul = Int/jvmBinop "104"
+def Int/div = Int/jvmBinop "108"
+def Int/mod = Int/jvmBinop "112"
+def Int/neg = Int/jvmBinop "116"
 
-def branchInt op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
-def intEq = branchInt "153"
-def intNeq = branchInt "154"
-def intLt = branchInt "155"
-def intGeq = branchInt "156"
-def intGt = branchInt "157"
-def intLeq = branchInt "158"
+def Int/jvmBranch op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
+def Int/eq = Int/jvmBranch "153"
+def Int/neq = Int/jvmBranch "154"
+def Int/lt = Int/jvmBranch "155"
+def Int/geq = Int/jvmBranch "156"
+def Int/gt = Int/jvmBranch "157"
+def Int/leq = Int/jvmBranch "158"
 
 -- JVM specifics
 def JavaVoid = Foreign "V"
 def JavaArgs = Foreign "[Ljava/lang/String;"
+def JavaObject = Foreign "Ljava/lang/Object;"
 
 -- String
 def Str = Foreign "Ljava/lang/String;"
 
-def strAppend (a b : Str) : Str =
+def Str/toJavaObject (x : Str) : JavaObject =
+  foreign JavaObject "cast" x
+
+def Str/append (a b : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.concat" a b
 
-def strEquals (x y : Str) : Bool =
-  foreign Bool "invokeVirtual:java.lang.Object.equals" x y
+def Str/equals (x y : Str) : Bool =
+  foreign Bool "invokeVirtual:java.lang.Object.equals" x (Str/toJavaObject y)
+
+def Str/length (x : Str) : Int =
+  foreign Int "invokeVirtual:java.lang.String.length" x
 
 -- exceptions
 def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =

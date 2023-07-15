@@ -334,12 +334,12 @@ object Elaboration:
       ctx: Ctx
   ): (Tm, Ty, VTy) = ty match
     case Some(ty0) =>
-      val ty =
-        if !topLevel || !stage.isMeta then ty0
+      val ty = ty0
+      /*if !topLevel || !stage.isMeta then ty0
         else
           ty0.free.distinct
             .filter(x => getGlobal(x).isEmpty && !primNames.contains(x))
-            .foldRight(ty0)((x, rt) => S.Pi(DoBind(x), Impl, S.Hole(None), rt))
+            .foldRight(ty0)((x, rt) => S.Pi(DoBind(x), Impl, S.Hole(None), rt))*/
       val ety = checkType(ty, stage)
       val vty = ctx.eval(ety)
       val etm = check(tm, vty, stage)
@@ -354,16 +354,10 @@ object Elaboration:
     (tm, force(ty)) match
       case (S.Pos(pos, tm), _) => check(tm, ty, stage)(ctx.enter(pos))
 
-      case (
-            S.StringLit(v),
-            VLift(VVal(), lty)
-          ) =>
-        force(lty) match
-          case VForeignType(VStringLit("Ljava/lang/String;")) =>
-            StringLit(v).quote
-          case _ =>
-            val (etm, ty2) = insert(stage, infer(tm, stage))
-            coe(etm, ty2, stage, ty, stage)
+      case (S.StringLit(v), VLift(cv, ty)) if stage.isMeta =>
+        unify(cv, VVal())
+        unify(ty, VForeignType(VStringLit("Ljava/lang/String;")))
+        StringLit(v).quote
       case (S.StringLit(v), _) =>
         val (etm, ty2) = insert(stage, infer(tm, stage))
         coe(etm, ty2, stage, ty, stage)
@@ -1081,6 +1075,7 @@ object Elaboration:
   private def elaborate(d: S.Def): List[Def] =
     debug(s"elaborate $d")
     d match
+      case S.DImport(pos, uri) => Nil
       case S.DDef(pos, x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty(pos)
         if getGlobal(x).isDefined then error(s"duplicate global $x")
@@ -1191,6 +1186,7 @@ object Elaboration:
         List(DData(dx, ps, ccs.map(_._1)), DDef(dx, tconty, SMeta, tcon)) ++ ccs
           .map(_._2)
 
-  def elaborate(uri: String, ds: S.Defs): Defs =
+  def elaborate(module: String, uri: String, ds: S.Defs): Defs =
+    debug(s"elaborate $module $uri")
     try Defs(ds.toList.flatMap(d => elaborate(d)))
     catch case e: ElaborateError => throw ElaborateError(e.pos, uri, e.msg)

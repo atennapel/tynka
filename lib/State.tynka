@@ -1,0 +1,21 @@
+import "lib/Prelude"
+
+def State (S A : VTy) = S -> Pair S A
+
+def State/run {S A} (c : State S A) (s : S) : Pair S A = c s
+def State/exec {S A} (c : State S A) (s : S) : A = (c s).2
+
+def State/get {S} : State S S = \s. (s, s)
+def State/put {S : VTy} (s : S) : State S Unit = \_. (s, [])
+def State/update {S : VTy} (f : S -> S) : State S Unit = \s. (f s, [])
+
+def State/return {S A : VTy} (a : A) : State S A = \s. (s, a) 
+
+def State/map {S A B : VTy} (f : A -> B) (c : State S A) : State S B =
+  \s. match c s | MkPair s' res. (s', f res)
+
+def State/bind {S A B : VTy} (c : State S A) (f : A -> State S B) : State S B =
+  \s. Pair/case (c s) \s' res. f res s'
+
+def State/seq {S A B : VTy} (c : State S A) (f : State S B) : State S B =
+  \s. f (c s).1

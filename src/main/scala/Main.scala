@@ -4,6 +4,7 @@ import common.Debug.*
 import core.Pretty.pretty
 import core.Globals.getGlobal
 import core.Evaluation.nf
+import elaboration.ModuleLoading.load
 import elaboration.Elaboration.elaborate
 import elaboration.Elaboration.ElaborateError
 import core.Staging.stage
@@ -20,15 +21,8 @@ object Main:
     setDebug(false)
     try
       val etimeStart = System.nanoTime()
-      val uri = transformUri(filename0)
-      val filename = transformFilename(uri)
-      val text = Source.fromURL(filename).mkString
-      val defs = defsParser
-        .parse(text)
-        .toTry
-        .get
-      // println(defs)
-      val eds = elaborate(filename, defs)
+      val (filename, eds) = load(filename0)
+      val moduleName = filename.split("/").last
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
       println(pretty(eds))
@@ -58,7 +52,7 @@ object Main:
        */
 
       println("\ngenerate JVM bytecode")
-      generate(uri, jvmirds)
+      generate(filename, jvmirds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)
@@ -71,13 +65,3 @@ object Main:
           println(s"${" " * (col - 1)}^")
           println(s"in ${err.uri}")
         if isDebug then err.printStackTrace()
-
-  private def hasScheme(uri: String): Boolean = uri.contains(":")
-  private def transformFilename(uri: String): String =
-    if hasScheme(uri) then uri
-    else if uri.endsWith(".tynka") then s"file:$uri"
-    else s"file:$uri.tynka"
-  private def transformUri(uri: String): String =
-    if hasScheme(uri) then uri
-    else if uri.endsWith(".tynka") then uri.take(uri.size - 6)
-    else uri
