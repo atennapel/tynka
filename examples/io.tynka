@@ -5,13 +5,18 @@ data Bool := False | True
 
 def Int = Foreign "I"
 def Str = Foreign "Ljava/lang/String;"
+
 def (>>=) = bindIO
 def (>>) {A B : VTy} (a : IO A) (b : IO B) : IO B = a >>= \_. b
 def return = returnIO
+
+def JObject = Foreign "Ljava/lang/Object;"
+def castToJObject (x : Str) = foreign (Foreign "Ljava/lang/Object;") "cast" x
+
 def (++) (a b : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.concat" a b
 def (==) (x y : Str) : Bool =
-  foreign Bool "invokeVirtual:java.lang.String.equals" x (foreign (Foreign "Ljava/lang/Object;") "cast" y)
+  foreign Bool "invokeVirtual:java.lang.String.equals" x (castToJObject y)
 
 def putLn {A : VTy} (x : A) : IO Unit =
   let out = foreign (Foreign "Ljava/io/PrintStream;") "getStatic:java.lang.System.out";
