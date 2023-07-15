@@ -19,10 +19,36 @@ def Int/geq = Int/jvmBranch "156"
 def Int/gt = Int/jvmBranch "157"
 def Int/leq = Int/jvmBranch "158"
 
+-- Char
+def Char = Foreign "C"
+
+def Char/jvmBinop op (a b : Char) = foreign Char (appendLabel "op:" op) a b
+def Char/add = Char/jvmBinop "96"
+def Char/sub = Char/jvmBinop "100"
+def Char/mul = Char/jvmBinop "104"
+def Char/div = Char/jvmBinop "108"
+def Char/mod = Char/jvmBinop "112"
+def Char/neg = Char/jvmBinop "116"
+
+def Char/jvmBranch op (a b : Char) = foreign Bool (appendLabel "branch:" op) a b
+def Char/eq = Char/jvmBranch "153"
+def Char/neq = Char/jvmBranch "154"
+def Char/lt = Char/jvmBranch "155"
+def Char/geq = Char/jvmBranch "156"
+def Char/gt = Char/jvmBranch "157"
+def Char/leq = Char/jvmBranch "158"
+
+def Char/fromInt (c : Int) : Char =
+  foreign Char "cast" c
+
 -- JVM specifics
 def JavaVoid = Foreign "V"
 def JavaArgs = Foreign "[Ljava/lang/String;"
 def JavaObject = Foreign "Ljava/lang/Object;"
+
+-- exceptions
+def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =
+  foreign A (appendLabel "catch:" exc) try default
 
 -- String
 def Str = Foreign "Ljava/lang/String;"
@@ -39,10 +65,25 @@ def Str/equals (x y : Str) : Bool =
 def Str/length (x : Str) : Int =
   foreign Int "invokeVirtual:java.lang.String.length" x
 
--- exceptions
-def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =
-  foreign A (appendLabel "catch:" exc) try default
+def Str/isEmpty (x : Str) : Bool =
+  Int/eq (Str/length x) 0
 
+def Str/unsafeIndex (i : Int) (x : Str) : Char =
+  foreign Char "invokeVirtual:java.lang.String.charAt" x i
+
+def Str/unsafeSubstringFrom (begin : Int) (x : Str) : Str =
+  foreign Str "invokeVirtual:java.lang.String.substring" x begin
+
+def Str/unsafeSubstring (begin end : Int) (x : Str) : Str =
+  foreign Str "invokeVirtual:java.lang.String.substring" x begin end
+
+def Str/case {cv : CV} {A : Ty cv} (x : Str) (ifEmpty : A) (ifNonEmpty : Char -> Str -> A) : A =
+  if Str/isEmpty x then
+    ifEmpty
+  else
+    ifNonEmpty (Str/unsafeIndex 0 x) (Str/unsafeSubstringFrom 1 x)
+
+-- etc
 def parseInt (s : Str) : Option Int :=
   catch "java/lang/NumberFormatException" (
     let n = foreign Int "invokeStatic:java.lang.Integer.parseInt" s;

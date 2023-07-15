@@ -1,0 +1,20 @@
+import "lib/Prelude"
+
+def StrSlice = Pair Int Str
+
+def StrSlice/fromStr (s : Str) : StrSlice = MkPair 0 s
+
+def StrSlice/length (s : StrSlice) : Int =
+  Int/sub (Str/length s.2) s.1
+
+def StrSlice/isEmpty (s : StrSlice) : Bool =
+  Int/eq 0 (StrSlice/length s)
+
+def StrSlice/unsafeHead (s : StrSlice) : Char = Str/unsafeIndex s.1 s.2
+def StrSlice/unsafeTail (s : StrSlice) : StrSlice = MkPair (Int/add 1 s.1) s.2
+
+def StrSlice/case {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
+  if StrSlice/isEmpty s then
+    ifEmpty
+  else
+    ifNonEmpty (StrSlice/unsafeHead s) (StrSlice/unsafeTail s)

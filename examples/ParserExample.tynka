@@ -1,0 +1,9 @@
+import "lib/Prelude"
+import "lib/Parser"
+
+def input := "12312378127381273812738217381273812738127312837128371283718237a"
+
+def main :=
+  match Parser/parse Parser/number input
+  | Error err. putLn "failed!"
+  | Result acc res. List/traverseIO_ putLn res

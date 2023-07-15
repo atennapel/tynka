@@ -165,8 +165,9 @@ object Staging:
   private type Fresh = () => IR.LName
 
   private def escapeTy(t: IR.Ty): String = t match
-    case IR.TCon(x)     => x
-    case IR.TForeign(x) => x
+    case IR.TCon(x) => x
+    case IR.TForeign(x) =>
+      x.replace(";", "").replace("/", "_").replace("\\", "_")
 
   private case class DataMonomorphizer(
       typeCache: mutable.Map[Name, DData] = mutable.Map.empty,

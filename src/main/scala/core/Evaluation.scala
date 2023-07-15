@@ -30,7 +30,7 @@ object Evaluation:
     case VFlex(hd, sp)    => VFlex(hd, SApp(sp, a, i))
     case VGlobal(x, sp, v) =>
       VGlobal(x, SApp(sp, a, i), () => vapp(v(), a, i))
-    case _ => impossible()
+    case f => impossible()
 
   def vappE(f: Val, a: Val): Val = vapp(f, a, Expl)
   def vappI(f: Val, a: Val): Val = vapp(f, a, Impl)
@@ -88,7 +88,7 @@ object Evaluation:
       o: Option[Val],
       v: Val
   ): Val =
-    force(v) match
+    v match
       case VRigid(hd, sp) => VRigid(hd, SMatch(sp, dty, rty, cs, o))
       case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, dty, rty, cs, o))
       case VGlobal(y, sp, v) =>

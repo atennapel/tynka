@@ -59,6 +59,7 @@ object ModuleLoading:
         .parse(text)
         .toTry
         .get
+      debug(defs)
       val uris = defs.imports
       urimap.put(uri, Entry(uri, filename, defs, uris.toSet))
       uris.filter(!urimap.contains(_)).foreach(loadUris)
