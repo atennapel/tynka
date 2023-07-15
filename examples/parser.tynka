@@ -11,6 +11,10 @@ def (==) a b = foreign Bool "branch:153" a b
 def (>=) a b = foreign Bool "branch:156" a b
 def (<=) a b = foreign Bool "branch:158" a b
 
+def putLn {A : VTy} (x : A) : IO Unit =
+  let out = foreign (Foreign "Ljava/io/PrintStream;") "getStatic:java.lang.System.out";
+  foreignIO Unit "invokeVirtualVoid:java.io.PrintStream.println" out x
+
 data List A
   | Nil
   | (::) A (List A)
@@ -86,4 +90,9 @@ def spaces : Parser Unit = (\_. U) <$> many (is 32)
 def number : Parser (List Char) = many digit
 
 def input := #[48, 49, 10]
-def main := number input
+
+def JavaObject = Foreign "Ljava/lang/Object;"
+def toJavaObject {A : VTy} (x : ParseResult A) : JavaObject =
+  foreign JavaObject "cast" x
+
+def main := putLn (toJavaObject (number input))

@@ -11,6 +11,10 @@ def (==) a b = foreign Bool "branch:153" a b
 def (>=) a b = foreign Bool "branch:156" a b
 def (<=) a b = foreign Bool "branch:158" a b
 
+def putLn {A : VTy} (x : A) : IO Unit =
+  let out = foreign (Foreign "Ljava/io/PrintStream;") "getStatic:java.lang.System.out";
+  foreignIO Unit "invokeVirtualVoid:java.io.PrintStream.println" out x
+
 data List A
   | Nil
   | (::) A (List A)
@@ -85,4 +89,9 @@ def parse {A : VTy} (p : Parser A) (s : String) : PR A =
   p s _ (PR A) E R
 
 def input := #[48, 49, 10]
-def main := parse number input
+
+def JavaObject = Foreign "Ljava/lang/Object;"
+def toJavaObject {A : VTy} (x : PR A) : JavaObject =
+  foreign JavaObject "cast" x
+
+def main := putLn (toJavaObject (parse number input))

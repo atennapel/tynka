@@ -290,7 +290,7 @@ object JvmGenerator:
       if as.isEmpty then
         datacw.visitField(
           ACC_PUBLIC + ACC_FINAL + ACC_STATIC,
-          s"$$$i$$",
+          s"$$$ecx$$",
           s"L$className$$$ecx;",
           null,
           null
@@ -473,14 +473,14 @@ object JvmGenerator:
 
     case Global(x, t) => mg.getStatic(ctx.moduleType, name(x), gen(t))
     case GlobalApp(x, TDef(Some(ps), rt), true, as) if name(x) == mg.getName =>
+      as.foreach(gen)
+      Range.inclusive(as.size - 1, 0, -1).foreach(i => mg.storeArg(i))
       // local clearing to allow gc (taken from Clojure)
       locals.values.foreach { (l, ty) =>
         if isBoxed(ty) then
           mg.visitInsn(Opcodes.ACONST_NULL)
           mg.storeLocal(l)
       }
-      as.foreach(gen)
-      Range.inclusive(as.size - 1, 0, -1).foreach(i => mg.storeArg(i))
       mg.visitJumpInsn(GOTO, methodStart)
     case GlobalApp(x, TDef(Some(ps), rt), _, as) =>
       as.foreach(gen)
