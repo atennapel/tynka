@@ -1,5 +1,5 @@
 import "lib/Prelude"
-import "lib/Parser"
+import "lib/StagedParser"
 
 def input := "12312378127381273812738217381273812738127312837128371283718237a"
 

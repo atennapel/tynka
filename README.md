@@ -21,6 +21,7 @@ TODO:
 - [x] Integrate foreign with IO
 - [x] Do syntax for monads
 - [x] Imports
+- [ ] Fix unused local variables in bytecode in StagedParser
 - [ ] Modules
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines
@@ -28,4 +29,4 @@ TODO:
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Records/variants
-- [ ] Val Rep
+- [ ] Val Rep: Boxed or Unboxed
