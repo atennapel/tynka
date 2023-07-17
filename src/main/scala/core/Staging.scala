@@ -164,36 +164,54 @@ object Staging:
   private type NS = List[(IR.LName, IR.TDef)]
   private type Fresh = () => IR.LName
 
-  private def escapeTy(t: IR.Ty): String = t match
-    case IR.TCon(x) => x
-    case IR.TForeign(x) =>
-      x.replace(";", "").replace("/", "_").replace("\\", "_")
+  private val primitives = "BCDFIJSZ".split("")
+  private def descriptorIsPrimitive(d: String): Boolean = primitives.contains(d)
 
   private case class DataMonomorphizer(
       typeCache: mutable.Map[Name, DData] = mutable.Map.empty,
       typeOrder: mutable.ArrayBuffer[Name] = mutable.ArrayBuffer.empty,
-      cache: mutable.Map[(Name, List[IR.Ty]), IR.GName] = mutable.Map.empty,
+      cache: mutable.Map[(Name, List[String]), IR.GName] = mutable.Map.empty,
       defCache: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty
   ):
     def addDef(ddef: DData): Unit =
       typeCache += ddef.name -> ddef
       typeOrder += ddef.name
 
+    private def rep(t: IR.Ty): String = t match
+      case IR.TCon(x) => repData(defCache.find(d => d.name == x).get.cs)
+      case IR.TForeign(x) if descriptorIsPrimitive(x) => x
+      case IR.TForeign(x)                             => "BOX"
+    private def repData(cs: List[(String, List[IR.Ty])]): String = cs match
+      case Nil                                  => "Z"
+      case List((_, Nil))                       => "Z"
+      case List((_, Nil), (_, Nil))             => "Z"
+      case cs if cs.forall((_, l) => l.isEmpty) => "I"
+      case List((_, List(t)))                   => rep(t)
+      case List(ts)                             => "BOX"
+      case _                                    => "BOX"
+
+    private def escapeTy(t: IR.Ty): String =
+      val r = rep(t)
+      if r == "BOX" then
+        t match
+          case IR.TCon(x) => x
+          case IR.TForeign(x) =>
+            x.replace(";", "").replace("/", "_").replace("\\", "_")
+      else r
+
     def get(name: Name, cparams: List[Val1]): IR.GName =
-      val params = cparams.map(quoteVTy(_)(this))
+      val params = cparams.map(quoteVTy(_)(this)).map(escapeTy)
       cache.get((name, params)) match
         case Some(x) => x
         case None =>
           val x =
-            s"${name.expose}${if params.isEmpty then "" else "_"}${params.map(escapeTy).mkString("_")}"
+            s"${name.expose}${if params.isEmpty then "" else "_"}${params.mkString("_")}"
           cache += (name, params) -> x
           implicit val env: Env = cparams.foldLeft(Empty)(Def1.apply)
-          defCache += IR.DData(
-            x,
-            typeCache(name).cs.map((cx, as) =>
-              (cx.expose, as.map(a => quoteVTy(eval1(a))(this)))
-            )
+          val qcs = typeCache(name).cs.map((cx, as) =>
+            (cx.expose, as.map(a => quoteVTy(eval1(a))(this)))
           )
+          defCache += IR.DData(x, qcs)
           x
 
     def defs: List[IR.Def] =
