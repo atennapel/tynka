@@ -37,7 +37,7 @@ object JvmName:
       case None =>
         val y = x
           .split("")
-          .map(x => chars.get(x).fold(x)(y => s"_$$$y$$_"))
+          .map(x => chars.get(x).fold(x)(y => s"_${y}"))
           .mkString("")
         nameCache += (x -> y)
         y

@@ -45,7 +45,7 @@ object JvmGenerator:
     case ADT
   import DataKind.*
 
-  private type Locals = IntMap[(Int, Ty)]
+  private type Locals = IntMap[Either[Tm, (Int, Ty)]]
 
   private final case class Ctx(moduleName: String, moduleType: Type)
   private val tcons: mutable.Map[GName, (Type, DataKind, List[GName])] =
@@ -469,17 +469,22 @@ object JvmGenerator:
     case BoolLit(v)   => mg.push(v)
     case StringLit(v) => mg.push(v)
     case Arg(ix)      => mg.loadArg(ix)
-    case Var(x)       => mg.loadLocal(locals(x)._1)
+    case Var(x) =>
+      locals(x) match
+        case Left(t)       => gen(t)
+        case Right((l, _)) => mg.loadLocal(l)
 
     case Global(x, t) => mg.getStatic(ctx.moduleType, name(x), gen(t))
     case GlobalApp(x, TDef(Some(ps), rt), true, as) if name(x) == mg.getName =>
       as.foreach(gen)
       Range.inclusive(as.size - 1, 0, -1).foreach(i => mg.storeArg(i))
       // local clearing to allow gc (taken from Clojure)
-      locals.values.foreach { (l, ty) =>
-        if isBoxed(ty) then
-          mg.visitInsn(Opcodes.ACONST_NULL)
-          mg.storeLocal(l)
+      locals.values.foreach {
+        case Right((l, ty)) =>
+          if isBoxed(ty) then
+            mg.visitInsn(Opcodes.ACONST_NULL)
+            mg.storeLocal(l)
+        case _ =>
       }
       mg.visitJumpInsn(GOTO, methodStart)
     case GlobalApp(x, TDef(Some(ps), rt), _, as) =>
@@ -493,10 +498,8 @@ object JvmGenerator:
     case Let(x, t, InvokeVirtualVoid(arg, as), b) =>
       invokeVirtualVoid(arg, as); gen(b)
     case Let(x, t, v, b) =>
-      val vr = mg.newLocal(gen(t))
-      gen(v)
-      mg.storeLocal(vr)
-      gen(b)(mg, ctx, locals + (x -> (vr, t)), methodStart)
+      val entry = genLocal(v, gen(t), t)
+      gen(b)(mg, ctx, locals + (x -> entry), methodStart)
 
     case Con(ty, con, as) =>
       val (jty, kind, cs) = tcons(ty)
@@ -596,15 +599,16 @@ object JvmGenerator:
           }
           mg.visitLabel(lEnd)
         case NewtypeLike(t) =>
-          val local = mg.newLocal(gen(t))
-          gen(scrut)
-          mg.storeLocal(local)
-          gen(cs(0)._2)(mg, ctx, locals + (x -> (local, TCon(ty))), methodStart)
+          val entry = genLocal(scrut, gen(t), t)
+          gen(cs(0)._2)(
+            mg,
+            ctx,
+            locals + (x -> entry),
+            methodStart
+          )
         case ProductLike(_) =>
-          val local = mg.newLocal(jty)
-          gen(scrut)
-          mg.storeLocal(local)
-          gen(cs(0)._2)(mg, ctx, locals + (x -> (local, TCon(ty))), methodStart)
+          val entry = genLocal(scrut, jty, TCon(ty))
+          gen(cs(0)._2)(mg, ctx, locals + (x -> entry), methodStart)
         case _ =>
           gen(scrut)
           val lEnd = new Label
@@ -632,7 +636,12 @@ object JvmGenerator:
               mg.checkCast(contype)
               val local = mg.newLocal(contype)
               mg.storeLocal(local)
-              gen(b)(mg, ctx, locals + (x -> (local, TCon(ty))), methodStart)
+              gen(b)(
+                mg,
+                ctx,
+                locals + (x -> Right((local, TCon(ty)))),
+                methodStart
+              )
             mg.visitJumpInsn(GOTO, lEnd)
           }
           mg.visitLabel(lNextCase)
@@ -652,7 +661,7 @@ object JvmGenerator:
                 gen(last)(
                   mg,
                   ctx,
-                  locals + (x -> (local, TCon(ty))),
+                  locals + (x -> Right((local, TCon(ty)))),
                   methodStart
                 )
             case Some(last) => mg.pop(); gen(last)
@@ -732,6 +741,21 @@ object JvmGenerator:
             Method(member, gen(rt), as.map((_, t) => gen(t)).toArray)
           )
         case _ => impossible()
+
+  private def genLocal(scrut: Tm, jty: Type, t: Ty)(implicit
+      mg: GeneratorAdapter,
+      ctx: Ctx,
+      locals: Locals,
+      methodStart: Label
+  ): Either[Tm, (Int, Ty)] =
+    scrut match
+      case Arg(ix) => Left(scrut)
+      case Var(ix) => Left(scrut)
+      case _ =>
+        val local = mg.newLocal(jty)
+        gen(scrut)
+        mg.storeLocal(local)
+        Right((local, t))
 
   private def splitForeign(cmd0: String): (String, String) =
     val s = cmd0.split("\\:")

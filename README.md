@@ -21,7 +21,7 @@ TODO:
 - [x] Integrate foreign with IO
 - [x] Do syntax for monads
 - [x] Imports
-- [ ] Fix unused local variables in bytecode in StagedParser
+- [ ] Optimize datatype monomorphization to not duplicated boxed types
 - [ ] Modules
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines
