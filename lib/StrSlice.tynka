@@ -1,8 +1,8 @@
 import "lib/Prelude"
 
-def StrSlice = Pair Int Str
+data StrSlice := MkStrSlice Int Str
 
-def StrSlice/fromStr (s : Str) : StrSlice = MkPair 0 s
+def StrSlice/fromStr (s : Str) : StrSlice = MkStrSlice 0 s
 
 def StrSlice/length (s : StrSlice) : Int =
   Int/sub (Str/length s.2) s.1
@@ -11,10 +11,20 @@ def StrSlice/isEmpty (s : StrSlice) : Bool =
   Int/eq 0 (StrSlice/length s)
 
 def StrSlice/unsafeHead (s : StrSlice) : Char = Str/unsafeIndex s.1 s.2
-def StrSlice/unsafeTail (s : StrSlice) : StrSlice = MkPair (Int/add 1 s.1) s.2
+def StrSlice/unsafeTail (s : StrSlice) : StrSlice = MkStrSlice (Int/add 1 s.1) s.2
+def StrSlice/unsafeTailMut (s : StrSlice) : StrSlice =
+  let s1 = foreign StrSlice "mutateData:0" s (Int/add 1 s.1);
+  let s2 = foreign StrSlice "mutateData:1" s1 s.2;
+  s2
 
 def StrSlice/case {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
   if StrSlice/isEmpty s then
     ifEmpty
   else
     ifNonEmpty (StrSlice/unsafeHead s) (StrSlice/unsafeTail s)
+
+def StrSlice/unsafeCaseMut {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
+  if StrSlice/isEmpty s then
+    ifEmpty
+  else
+    ifNonEmpty (StrSlice/unsafeHead s) (StrSlice/unsafeTailMut s)

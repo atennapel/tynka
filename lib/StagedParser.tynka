@@ -38,7 +38,7 @@ def Parser/first {A : VTy} (p1 p2 : Parser A) : Parser A =
 
 -- parser essentials
 def Parser/char : Parser Char =
-  \s. \cv R err res. StrSlice/case s (err UnexpectedEof) (\c s. res s c)
+  \s. \cv R err res. StrSlice/unsafeCaseMut s (err UnexpectedEof) (\c s. res s c)
 
 def Parser/satisfy (f : Char -> Bool) : Parser Char =
   \s. \cv R err res. let err' e := err e; Parser/char s cv R err' (\s' v. if f v then res s' v else err' (UnexpectedChar v))

@@ -350,7 +350,7 @@ object JvmGenerator:
     // fields
     as.zipWithIndex.foreach((ty, i) => {
       cw.visitField(
-        ACC_PUBLIC + ACC_FINAL,
+        ACC_PUBLIC,
         s"a$i",
         gen(ty).getDescriptor,
         null,
@@ -410,7 +410,7 @@ object JvmGenerator:
     // fields
     as.zipWithIndex.foreach((ty, i) => {
       cw.visitField(
-        ACC_PUBLIC + ACC_FINAL,
+        ACC_PUBLIC,
         s"a$i",
         gen(ty).getDescriptor,
         null,
@@ -666,6 +666,7 @@ object JvmGenerator:
                 )
             case Some(last) => mg.pop(); gen(last)
           mg.visitLabel(lEnd)
+
     case Foreign(_, "cast", List((v, _)))       => gen(v)
     case Foreign(_, "returnVoid", List((v, _))) => gen(v); mg.pop()
     case Foreign(_, op, List((p, _), (c, _))) if op.startsWith("catch") =>
@@ -740,6 +741,11 @@ object JvmGenerator:
             Type.getType(owner),
             Method(member, gen(rt), as.map((_, t) => gen(t)).toArray)
           )
+        case ("mutateData", i, List((d, td), (v, tv))) =>
+          gen(d)
+          mg.dup()
+          gen(v)
+          mg.putField(gen(td), s"a$i", gen(tv))
         case _ => impossible()
 
   private def genLocal(scrut: Tm, jty: Type, t: Ty)(implicit
