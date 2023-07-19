@@ -12,10 +12,7 @@ def StrSlice/isEmpty (s : StrSlice) : Bool =
 
 def StrSlice/unsafeHead (s : StrSlice) : Char = Str/unsafeIndex s.1 s.2
 def StrSlice/unsafeTail (s : StrSlice) : StrSlice = MkStrSlice (Int/add 1 s.1) s.2
-def StrSlice/unsafeTailMut (s : StrSlice) : StrSlice =
-  let s1 = foreign StrSlice "mutateData:0" s (Int/add 1 s.1);
-  let s2 = foreign StrSlice "mutateData:1" s1 s.2;
-  s2
+def StrSlice/unsafeTailMut (s : StrSlice) : StrSlice = foreign StrSlice "mutateData:0" s (Int/add 1 s.1)
 
 def StrSlice/case {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
   if StrSlice/isEmpty s then
