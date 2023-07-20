@@ -68,7 +68,7 @@ object Syntax:
     case IntLit(value: Int)
     case StringLit(value: String)
 
-    case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
+    case Pi(usage: Usage, name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
     case Fix(g: Bind, x: Bind, b: Tm, arg: Tm)
@@ -104,7 +104,7 @@ object Syntax:
           _ == name
         )
       case U(stage) => Nil
-      case Pi(name, icit, ty, body) =>
+      case Pi(_, name, icit, ty, body) =>
         ty.free ++ body.free.filterNot(_ == name.toName)
       case Lam(name, info, ty, body) =>
         ty.map(_.free).getOrElse(Nil) ++ body.free.filterNot(_ == name.toName)
@@ -143,8 +143,8 @@ object Syntax:
       case IntLit(v)    => s"$v"
       case StringLit(v) => s"\"$v\""
 
-      case Pi(DontBind, Expl, t, b)        => s"($t -> $b)"
-      case Pi(x, i, t, b)                  => s"(${i.wrap(s"$x : $t")} -> $b)"
+      case Pi(Many, DontBind, Expl, t, b) => s"($t -> $b)"
+      case Pi(u, x, i, t, b) => s"(${i.wrap(s"${u.prefix}$x : $t")} -> $b)"
       case Lam(x, ArgNamed(y), None, b)    => s"(\\{$x = $y}. $b)"
       case Lam(x, ArgNamed(y), Some(t), b) => s"(\\{$x : $t = $y}. $b)"
       case Lam(x, ArgIcit(Expl), None, b)  => s"(\\$x. $b)"

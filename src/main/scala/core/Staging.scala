@@ -101,11 +101,11 @@ object Staging:
     case Wk(t)                 => eval1(t)(env.tail)
     case StringLit(v)          => VStringLit1(v)
 
-    case U(_)           => VType1
-    case Pi(_, _, _, _) => VType1
-    case Sigma(_, _, _) => VType1
-    case Lift(_, _)     => VType1
-    case Irrelevant     => VType1
+    case U(_)              => VType1
+    case Pi(_, _, _, _, _) => VType1
+    case Sigma(_, _, _)    => VType1
+    case Lift(_, _)        => VType1
+    case Irrelevant        => VType1
 
     case _ => impossible()
 

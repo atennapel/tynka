@@ -52,7 +52,7 @@ object Syntax:
     case IntLit(value: Int)
     case StringLit(value: String)
 
-    case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
+    case Pi(usage: Usage, name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, icit: Icit, fnty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
     case Fix(ty: Ty, rty: Ty, g: Bind, x: Bind, b: Tm, arg: Tm)
@@ -109,7 +109,7 @@ object Syntax:
           Set.empty,
           _.metas
         ) ++ bty.metas ++ value.metas ++ body.metas
-      case Pi(name, icit, ty, body)    => ty.metas ++ body.metas
+      case Pi(_, name, icit, ty, body) => ty.metas ++ body.metas
       case Lam(name, icit, fnty, body) => fnty.metas ++ body.metas
       case App(fn, arg, icit)          => fn.metas ++ arg.metas
       case Fix(ty, rty, g, x, b, arg) =>
@@ -151,13 +151,13 @@ object Syntax:
       case IntLit(v)    => s"$v"
       case StringLit(v) => s"\"$v\""
 
-      case Pi(DontBind, Expl, t, b) => s"($t -> $b)"
-      case Pi(x, i, t, b)           => s"(${i.wrap(s"$x : $t")} -> $b)"
-      case Lam(x, Expl, _, b)       => s"(\\$x. $b)"
-      case Lam(x, Impl, _, b)       => s"(\\{$x}. $b)"
-      case App(f, a, Expl)          => s"($f $a)"
-      case App(f, a, Impl)          => s"($f {$a})"
-      case Fix(_, _, g, x, b, arg)  => s"(fix ($g $x. $b) $arg)"
+      case Pi(Many, DontBind, Expl, t, b) => s"($t -> $b)"
+      case Pi(u, x, i, t, b)  => s"(${i.wrap(s"${u.prefix}$x : $t")} -> $b)"
+      case Lam(x, Expl, _, b) => s"(\\$x. $b)"
+      case Lam(x, Impl, _, b) => s"(\\{$x}. $b)"
+      case App(f, a, Expl)    => s"($f $a)"
+      case App(f, a, Impl)    => s"($f {$a})"
+      case Fix(_, _, g, x, b, arg) => s"(fix ($g $x. $b) $arg)"
 
       case Sigma(DontBind, t, b) => s"($t ** $b)"
       case Sigma(x, t, b)        => s"(($x : $t) ** $b)"

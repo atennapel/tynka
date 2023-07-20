@@ -149,9 +149,9 @@ object Evaluation:
     case IntLit(v)    => VIntLit(v)
     case StringLit(v) => VStringLit(v)
 
-    case Pi(x, i, t, b)   => VPi(x, i, eval(t), Clos(b))
-    case Lam(x, i, ty, b) => VLam(x, i, eval(ty), Clos(b))
-    case App(f, a, i)     => vapp(eval(f), eval(a), i)
+    case Pi(u, x, i, t, b) => VPi(u, x, i, eval(t), Clos(b))
+    case Lam(x, i, ty, b)  => VLam(x, i, eval(ty), Clos(b))
+    case App(f, a, i)      => vapp(eval(f), eval(a), i)
     case Fix(ty, rty, g, x, b, arg) =>
       VFix(eval(ty), eval(rty), g, x, CClos2(env, b), eval(arg))
 
@@ -240,8 +240,8 @@ object Evaluation:
 
       case VLam(x, i, ty, b) =>
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
-      case VPi(x, i, t, b) =>
-        Pi(x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
+      case VPi(u, x, i, t, b) =>
+        Pi(u, x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VFix(ty, rty, g, x, b, arg) =>
         Fix(
           quote(ty, unfold),
@@ -327,6 +327,9 @@ object Evaluation:
 
     // Label -> VTy
     case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
+
+    // Label -> VTy
+    case PRW => (vfun(VLabel(), VUMeta()), SMeta)
 
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))

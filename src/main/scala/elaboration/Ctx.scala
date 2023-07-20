@@ -17,9 +17,10 @@ import core.Locals.*
 
 import scala.annotation.tailrec
 
-type Types = Map[Name, (Lvl, VTy, VStage)]
+type Types = Map[Name, (Usage, Lvl, VTy, VStage)]
 
 final case class Ctx(
+    usage: Usage,
     lvl: Lvl,
     env: Env,
     locals: Locals,
@@ -31,16 +32,20 @@ final case class Ctx(
 
   def enter(pos: PosInfo): Ctx = copy(pos = pos)
 
+  def inType: Ctx = copy(usage = Zero)
+
   def bind(
+      u: Usage,
       x: Bind,
       ty: VTy,
       stage: VStage,
       inserted: Boolean = false
   ): Ctx =
     val newtypes = x match
-      case DoBind(x) if !inserted => types + (x -> (lvl, ty, stage))
+      case DoBind(x) if !inserted => types + (x -> (u, lvl, ty, stage))
       case _                      => types
     Ctx(
+      usage,
       lvl + 1,
       VVar(lvl) :: env,
       Bound(locals, x, quote(ty), quote(stage)),
@@ -50,6 +55,7 @@ final case class Ctx(
     )
 
   def define(
+      u: Usage,
       x: Name,
       ty: VTy,
       qty: Ty,
@@ -59,11 +65,12 @@ final case class Ctx(
       qvalue: Tm
   ): Ctx =
     Ctx(
+      usage,
       lvl + 1,
       value :: env,
       Defined(locals, x, qty, qstage, qvalue),
       None :: pruning,
-      types + (x -> (lvl, ty, stage)),
+      types + (x -> (u, lvl, ty, stage)),
       pos
     )
 
@@ -88,8 +95,8 @@ final case class Ctx(
     val t = closeTy(quote(b))
     (eval0(t)(Nil), t)
 
-  def lookup(x: Name): Option[(Ix, VTy, VStage)] =
-    types.get(x).map((k, ty, s) => (k.toIx(lvl), ty, s))
+  def lookup(x: Name): Option[(Usage, Ix, VTy, VStage)] =
+    types.get(x).map((u, k, ty, s) => (u, k.toIx(lvl), ty, s))
 
   def prettyLocals: String =
     def go(p: Locals): List[String] = p match
@@ -101,6 +108,16 @@ final case class Ctx(
         )
     go(locals).mkString("\n")
 
+  def uses: Uses = Uses(lvl.expose)
+  def use(i: Ix): Uses =
+    @tailrec
+    def go(j: Int, acc: List[Usage], c: List[Usage]): List[Usage] =
+      c match
+        case hd :: tl if j == 0 => acc.reverse ++ List(usage) ++ tl
+        case hd :: tl           => go(j - 1, hd :: acc, tl)
+        case Nil                => Nil
+    Uses(go(i.expose, Nil, uses.expose))
+
 object Ctx:
   def empty(pos: PosInfo): Ctx =
-    Ctx(lvl0, Nil, Empty, Nil, Map.empty, pos)
+    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, pos)

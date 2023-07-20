@@ -101,6 +101,67 @@ object Common:
       case _     => false
   export Stage.*
 
+  // usages
+  enum Usage:
+    case Zero
+    case One
+    case Many
+
+    override def toString: String = this match
+      case Zero => "0"
+      case One  => "1"
+      case Many => "*"
+
+    def prefix: String = this match
+      case Zero => "0 "
+      case One  => "1 "
+      case Many => ""
+
+    def +(b: Usage): Usage = (this, b) match
+      case (Many, _)  => Many
+      case (_, Many)  => Many
+      case (One, One) => Many
+      case (One, _)   => One
+      case (_, b)     => b
+
+    def *(b: Usage): Usage = (this, b) match
+      case (Zero, _) => Zero
+      case (_, Zero) => Zero
+      case (One, b)  => b
+      case (a, One)  => a
+      case _         => Many
+
+    def *(b: Uses): Uses = Uses(b.expose.map(this * _))
+
+    def <=(b: Usage): Boolean =
+      (this == b) || ((this == Zero || this == One) && b == Many)
+
+    def lub(b: Usage): Usage = if this == b then this else Many
+  export Usage.*
+
+  final case class Uses(expose: List[Usage]):
+    def size: Int = expose.size
+
+    private def guardUsesZip(b: Uses): Unit =
+      if size != b.size then impossible()
+
+    def +(b: Uses): Uses =
+      guardUsesZip(b)
+      Uses(expose.zip(b.expose).map(_ + _))
+
+    def lub(b: Uses): Uses =
+      guardUsesZip(b)
+      Uses(expose.zip(b.expose).map(_ lub _))
+
+    def uncons: (Usage, Uses) = (expose.head, Uses(expose.tail))
+    def uncons2: (Usage, Usage, Uses) =
+      (expose.tail.head, expose.head, Uses(expose.tail.tail))
+
+  object Uses:
+    def apply(size: Int): Uses = Uses((0 until size).map(_ => Zero).toList)
+
+    def lub(uses: List[Uses]): Uses = uses.reduce(_ lub _)
+
   // primitives
   enum PrimName:
     case PCV
@@ -121,6 +182,8 @@ object Common:
 
     case PForeignType
 
+    case PRW
+
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -139,6 +202,8 @@ object Common:
       case PAppendLabel => "appendLabel"
 
       case PForeignType => "Foreign"
+
+      case PRW => "RW"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -155,7 +220,8 @@ object Common:
         "Label",
         "eqLabel",
         "appendLabel",
-        "Foreign"
+        "Foreign",
+        "RW"
       )
         .map(Name.apply)
 
@@ -176,5 +242,7 @@ object Common:
       case "eqLabel"     => Some(PEqLabel)
       case "appendLabel" => Some(PAppendLabel)
       case "Foreign"     => Some(PForeignType)
+
+      case "RW" => Some(PRW)
 
       case _ => None

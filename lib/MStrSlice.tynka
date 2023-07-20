@@ -1,0 +1,20 @@
+import "lib/Prelude"
+
+data MStrSlice' := MkMStrSlice Int Str
+
+def MStrSlice (l : Label) = (k : Label) ** Id k l ** MStrSlice'
+
+def MStrSlice/new {R} (s : Str) (k : {l : Label} (1 rw : RW l) -> MStrSlice l -> Ur R) -> Ur R =
+  newRW \rw. k rw (MkMStrSlice 0 s)
+
+def newRW : {R : Meta} -> ({l : Label} (1 rw : RW l) -> Ur R) -> Ur R
+
+
+MStrSlice/advance : {l} (1 rw : RW l) (slice : MStrSlice l) : RW l =
+  foreign StrSlice "mutateDataRW:0" rw s (Int/add 1 s.1)
+
+newRW \{l} rw. MkUr rw
+
+data mutable MStrSlice := MkMStrSlice Int Str
+
+MkMStrSlice : {R : Meta} -> Int -> Str -> ({l : Label} (1 _ : RW l) -> MStrSlice l -> Ur R) -> R

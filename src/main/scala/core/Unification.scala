@@ -65,10 +65,11 @@ object Unification:
   private def pruneTy(p: RevPruning, a: VTy): Ty =
     def go(p: Pruning, a: VTy)(implicit psub: PSub): Ty = (p, force(a)) match
       case (Nil, a) => psubst(a)
-      case (Some(_) :: p, VPi(x, i, a, b)) =>
-        Pi(x, i, psubst(a), go(p, b(VVar(psub.cod)))(psub.lift))
-      case (None :: p, VPi(_, _, _, b)) => go(p, b(VVar(psub.cod)))(psub.skip)
-      case _                            => impossible()
+      case (Some(_) :: p, VPi(u, x, i, a, b)) =>
+        Pi(u, x, i, psubst(a), go(p, b(VVar(psub.cod)))(psub.lift))
+      case (None :: p, VPi(_, _, _, _, b)) =>
+        go(p, b(VVar(psub.cod)))(psub.skip)
+      case _ => impossible()
     go(p.expose, a)(PSub(None, lvl0, lvl0, IntMap.empty))
 
   private def pruneMeta(p: Pruning, m: MetaId): Val =
@@ -87,7 +88,7 @@ object Unification:
     val a = uns.ty
     def go(a: VTy, s: VStage, lvl: Lvl, p: Pruning, locals: Locals): Tm =
       force(a) match
-        case VPi(x, i, a, b) =>
+        case VPi(_, x, i, a, b) =>
           Lam(
             x,
             i,
@@ -203,7 +204,8 @@ object Unification:
 
       case VGlobal(x, sp, _) => goSp(Global(x), sp)
 
-      case VPi(x, i, t, b) => Pi(x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
+      case VPi(u, x, i, t, b) =>
+        Pi(u, x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
       case VFix(ty, rty, g, x, b, arg) =>
@@ -242,7 +244,7 @@ object Unification:
       if l2 == l then t
       else
         force(a) match
-          case VPi(x, i, _, b) =>
+          case VPi(_, x, i, _, b) =>
             val y = x match
               case DontBind => DoBind(Name(s"x$l2"))
               case _        => x
@@ -385,7 +387,8 @@ object Unification:
       case (VU(s1), VU(s2))                         => unify(s1, s2)
       case (VIntLit(a), VIntLit(b)) if a == b       => ()
       case (VStringLit(a), VStringLit(b)) if a == b => ()
-      case (VPi(_, i1, a1, b1), VPi(_, i2, a2, b2)) if i1 == i2 =>
+      case (VPi(u1, _, i1, a1, b1), VPi(u2, _, i2, a2, b2))
+          if u1 == u2 && i1 == i2 =>
         unify(a1, a2); unify(b1, b2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
         unify(a1, a2); unify(b1, b2)

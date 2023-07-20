@@ -20,12 +20,12 @@ object Pretty:
 
   private def prettyPi(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Fun(a, _, b) => s"${prettyParen(a, true)} -> ${prettyPi(b)}"
-    case Pi(DontBind, Expl, t, b) =>
+    case Pi(Many, DontBind, Expl, t, b) =>
       s"${prettyParen(t, true)} -> ${prettyPi(b)(DontBind.toName :: ns)}"
-    case Pi(DoBind(x), Expl, t, b) =>
-      s"($x : ${pretty(t)}) -> ${prettyPi(b)(x :: ns)}"
-    case Pi(x, Impl, t, b) =>
-      s"{$x : ${pretty(t)}} -> ${prettyPi(b)(x.toName :: ns)}"
+    case Pi(u, DoBind(x), Expl, t, b) =>
+      s"(${u.prefix}$x : ${pretty(t)}) -> ${prettyPi(b)(x :: ns)}"
+    case Pi(u, x, Impl, t, b) =>
+      s"{${u.prefix}$x : ${pretty(t)}} -> ${prettyPi(b)(x.toName :: ns)}"
     case rest => pretty(rest)
 
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =
@@ -89,10 +89,10 @@ object Pretty:
       s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
     case U(s) => pretty(s)
 
-    case Pi(_, _, _, _)  => prettyPi(tm)
-    case Fun(_, _, _)    => prettyPi(tm)
-    case Lam(_, _, _, _) => prettyLam(tm)
-    case App(_, _, _)    => prettyApp(tm)
+    case Pi(_, _, _, _, _) => prettyPi(tm)
+    case Fun(_, _, _)      => prettyPi(tm)
+    case Lam(_, _, _, _)   => prettyLam(tm)
+    case App(_, _, _)      => prettyApp(tm)
 
     case Fix(_, _, g, x, b, arg) =>
       s"fix ($g $x. ${prettyParen(b)(x.toName :: g.toName :: ns)}) ${prettyParen(arg)}"

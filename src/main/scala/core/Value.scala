@@ -61,7 +61,7 @@ object Value:
     case VIntLit(value: Int)
     case VStringLit(value: String)
 
-    case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos)
+    case VPi(usage: Usage, name: Bind, icit: Icit, ty: VTy, body: Clos)
     case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
     case VFix(ty: VTy, rty: VTy, g: Bind, x: Bind, b: Clos2, arg: Val)
 
@@ -86,10 +86,10 @@ object Value:
   def vlamI(x: String, ty: VTy, f: Val => Val): Val =
     VLam(name(x), Impl, ty, CFun(f))
   def vpi(x: String, t: Val, f: Val => Val): Val =
-    VPi(name(x), Expl, t, CFun(f))
+    VPi(Many, name(x), Expl, t, CFun(f))
   def vpiI(x: String, t: Val, f: Val => Val): Val =
-    VPi(name(x), Impl, t, CFun(f))
-  def vfun(a: Val, b: Val): Val = VPi(DontBind, Expl, a, CFun(_ => b))
+    VPi(Many, name(x), Impl, t, CFun(f))
+  def vfun(a: Val, b: Val): Val = VPi(Many, DontBind, Expl, a, CFun(_ => b))
   def vsigma(x: String, t: Val, f: Val => Val): Val =
     VSigma(name(x), t, CFun(f))
 

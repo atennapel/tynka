@@ -78,7 +78,7 @@ object Elaboration:
     @tailrec
     def go(tm: Tm, ty: VTy, st: VStage): (Tm, VTy, VStage) =
       force(ty) match
-        case VPi(y, Impl, a, b) =>
+        case VPi(_, y, Impl, a, b) =>
           mode match
             case Until(x) if DoBind(x) == y => (tm, ty, st)
             case _ =>
@@ -91,18 +91,20 @@ object Elaboration:
             case _        => (tm, ty, st)
     go(inp._1, inp._2, inp._3)
 
-  private def insert(inp: (Tm, VTy, VStage))(implicit
+  private def insert(inp: (Tm, VTy, VStage, Uses))(implicit
       ctx: Ctx
-  ): (Tm, VTy, VStage) =
+  ): (Tm, VTy, VStage, Uses) =
     inp._1 match
       case Lam(_, Impl, _, _) => inp
-      case _                  => insertPi(inp)
+      case _ =>
+        val (a, b, c) = insertPi((inp._1, inp._2, inp._3))
+        (a, b, c, inp._4)
 
-  private def insert(s: VStage, inp: (Tm, VTy))(implicit
+  private def insert(s: VStage, inp: (Tm, VTy, Uses))(implicit
       ctx: Ctx
-  ): (Tm, VTy) =
-    val res = insert((inp._1, inp._2, s))
-    (res._1, res._2)
+  ): (Tm, VTy, Uses) =
+    val res = insert((inp._1, inp._2, s, inp._3))
+    (res._1, res._2, inp._3)
 
   // coercion
   private def tryAdjustStage(t: Tm, a: VTy, s1: VStage, s2: VStage)(implicit
@@ -163,12 +165,16 @@ object Elaboration:
             .pretty(b)} : ${ctx.pretty(st2)}"
       )
       (force(a), force(b)) match
-        case (VPi(x, i, p1, r1), VPi(x2, i2, p2, r2)) =>
+        case (VPi(u1, x, i, p1, r1), VPi(u2, x2, i2, p2, r2)) =>
+          if u1 != u2 then
+            error(
+              s"usage mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
+            )
           if i != i2 then
             error(
               s"plicity mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
             )
-          val ctx2 = ctx.bind(x, p2, SMeta)
+          val ctx2 = ctx.bind(u1, x, p2, SMeta)
           go(Var(ix0), p2, SMeta, p1, SMeta)(ctx2) match
             case None =>
               val v = VVar(ctx.lvl)
@@ -223,7 +229,7 @@ object Elaboration:
         case (VFun(p1, cv, r1), VFun(p2, cv2, r2)) =>
           unify(cv, cv2)
           val x = DoBind(Name("x"))
-          val ctx2 = ctx.bind(x, p2, SVTy())
+          val ctx2 = ctx.bind(Many, x, p2, SVTy())
           go(Var(ix0), p2, SVTy(), p1, SVTy())(ctx2) match
             case None =>
               val body =
@@ -235,10 +241,10 @@ object Elaboration:
                   Some(Lam(x, Expl, ctx.quote(b), App(Wk(t), coev0, Expl)))
                 case Some(body) => Some(Lam(x, Expl, ctx.quote(b), body))
 
-        case (VFun(p1, cv, r1), VPi(x, i, p2, r2)) =>
+        case (VFun(p1, cv, r1), VPi(u, x, i, p2, r2)) =>
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
-          val ctx2 = ctx.bind(x, p2, SMeta)
+          val ctx2 = ctx.bind(u, x, p2, SMeta)
           val y = DoBind(Name("x"))
           go(Var(ix0), p2, SMeta, p1, SVTy())(ctx2) match
             case None =>
@@ -264,10 +270,10 @@ object Elaboration:
                 case None =>
                   Some(Lam(pick(y, x), i, ctx.quote(b), App(Wk(t), coev0, i)))
                 case Some(body) => Some(Lam(pick(y, x), i, ctx.quote(b), body))
-        case (VPi(x, i, p1, r1), VFun(p2, cv, r2)) =>
+        case (VPi(_, x, i, p1, r1), VFun(p2, cv, r2)) =>
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
-          val ctx2 = ctx.bind(x, p2, SVTy())
+          val ctx2 = ctx.bind(Many, x, p2, SVTy())
           val y = DoBind(Name("x"))
           go(Var(ix0), p2, SVTy(), p1, SMeta)(ctx2) match
             case None =>
@@ -314,16 +320,16 @@ object Elaboration:
 
   private def hasMetaType(x: Name)(implicit ctx: Ctx): Boolean =
     ctx.lookup(x) match
-      case Some((_, vty, SMeta)) =>
+      case Some((_, _, vty, SMeta)) =>
         force(vty) match
           case VFlex(_, _) => true
           case _           => false
       case _ => false
 
-  private def checkType(ty: S.Ty, s: VStage)(implicit ctx: Ctx): Tm =
-    check(ty, VU(s), SMeta)
-  private def checkVTy(ty: S.Ty)(implicit ctx: Ctx): Tm =
-    check(ty, VVTy(), SMeta)
+  private def checkType(ty: S.Ty, s: VStage)(implicit ctx: Ctx): (Tm, Uses) =
+    check(ty, VU(s), SMeta)(ctx.inType)
+  private def checkVTy(ty: S.Ty)(implicit ctx: Ctx): (Tm, Uses) =
+    check(ty, VVTy(), SMeta)(ctx.inType)
 
   private def check(
       tm: S.Tm,
@@ -332,7 +338,7 @@ object Elaboration:
       topLevel: Boolean = false
   )(implicit
       ctx: Ctx
-  ): (Tm, Ty, VTy) = ty match
+  ): (Tm, Ty, VTy, Uses) = ty match
     case Some(ty0) =>
       val ty = ty0
       /*if !topLevel || !stage.isMeta then ty0
@@ -340,15 +346,17 @@ object Elaboration:
           ty0.free.distinct
             .filter(x => getGlobal(x).isEmpty && !primNames.contains(x))
             .foldRight(ty0)((x, rt) => S.Pi(DoBind(x), Impl, S.Hole(None), rt))*/
-      val ety = checkType(ty, stage)
+      val (ety, u1) = checkType(ty, stage)
       val vty = ctx.eval(ety)
-      val etm = check(tm, vty, stage)
-      (etm, ety, vty)
+      val (etm, u2) = check(tm, vty, stage)
+      (etm, ety, vty, u1 + u2)
     case None =>
-      val (etm, vty) = infer(tm, stage)
-      (etm, ctx.quote(vty), vty)
+      val (etm, vty, u) = infer(tm, stage)
+      (etm, ctx.quote(vty), vty, u)
 
-  private def check(tm: S.Tm, ty: VTy, stage: VStage)(implicit ctx: Ctx): Tm =
+  private def check(tm: S.Tm, ty: VTy, stage: VStage)(implicit
+      ctx: Ctx
+  ): (Tm, Uses) =
     if !tm.isPos then
       debug(s"check $tm : ${ctx.pretty(ty)} : ${ctx.pretty(stage)}")
     (tm, force(ty)) match
@@ -357,72 +365,89 @@ object Elaboration:
       case (S.StringLit(v), VLift(cv, ty)) if stage.isMeta =>
         unify(cv, VVal())
         unify(ty, VForeignType(VStringLit("Ljava/lang/String;")))
-        StringLit(v).quote
+        (StringLit(v).quote, ctx.uses)
       case (S.StringLit(v), _) =>
-        val (etm, ty2) = insert(stage, infer(tm, stage))
-        coe(etm, ty2, stage, ty, stage)
+        val (etm, ty2, u) = insert(stage, infer(tm, stage))
+        (coe(etm, ty2, stage, ty, stage), u)
 
-      case (S.Lam(x, i, ot, b), VPi(y, i2, a, rt)) if icitMatch(i, y, i2) =>
-        ot.foreach(t0 => {
-          val ety = checkType(t0, SMeta)
-          unify(ctx.eval(ety), a)
-        })
-        val eb = check(b, ctx.inst(rt), SMeta)(ctx.bind(x, a, SMeta))
-        Lam(x, i2, ctx.quote(ty), eb)
+      case (S.Lam(x, i, ot, b), VPi(u, y, i2, a, rt)) if icitMatch(i, y, i2) =>
+        val us1 = ot
+          .map(t0 => {
+            val (ety, u) = checkType(t0, SMeta)
+            unify(ctx.eval(ety), a)
+            u
+          })
+          .getOrElse(ctx.uses)
+        val (eb, us2) = check(b, ctx.inst(rt), SMeta)(ctx.bind(u, x, a, SMeta))
+        val (uhd, utl) = us2.uncons
+        if !(uhd <= u) then error(s"usage error: expected ${u} but was ${uhd}")
+        (Lam(x, i2, ctx.quote(ty), eb), us1 + utl)
       case (S.Lam(x, S.ArgIcit(Expl), ot, b), VFun(a, cv, rt)) =>
-        ot.foreach(t0 => {
-          val ety = checkVTy(t0)
-          unify(ctx.eval(ety), a)
-        })
-        val eb = check(b, rt, STy(cv))(ctx.bind(x, a, SVTy()))
-        Lam(x, Expl, ctx.quote(ty), eb)
-      case (S.Var(x), VPi(_, Impl, _, _)) if hasMetaType(x) =>
-        val Some((ix, varty, SMeta)) = ctx.lookup(x): @unchecked
+        val u1 = ot
+          .map(t0 => {
+            val (ety, u1) = checkVTy(t0)
+            unify(ctx.eval(ety), a)
+            u1
+          })
+          .getOrElse(ctx.uses)
+        val (eb, us) = check(b, rt, STy(cv))(ctx.bind(Many, x, a, SVTy()))
+        val (_, u2) = us.uncons
+        (Lam(x, Expl, ctx.quote(ty), eb), u1 + u2)
+      case (S.Var(x), VPi(_, _, Impl, _, _)) if hasMetaType(x) =>
+        val Some((_, ix, varty, SMeta)) = ctx.lookup(x): @unchecked
         unify(varty, ty)
-        Var(ix)
-      case (tm, VPi(x, Impl, a, b)) =>
-        val etm = check(tm, ctx.inst(b), SMeta)(ctx.bind(x, a, SMeta, true))
-        Lam(x, Impl, ctx.quote(ty), etm)
+        (Var(ix), ctx.use(ix))
+      case (tm, VPi(u, x, Impl, a, b)) =>
+        val (etm, us) =
+          check(tm, ctx.inst(b), SMeta)(ctx.bind(u, x, a, SMeta, true))
+        val (uhd, utl) = us.uncons
+        if !(uhd <= u) then error(s"usage error: expected ${u} but was ${uhd}")
+        (Lam(x, Impl, ctx.quote(ty), etm), utl)
 
       case (S.Pair(fst, snd), VSigma(_, a, b)) =>
-        val efst = check(fst, a, SMeta)
-        val esnd = check(snd, b(ctx.eval(efst)), SMeta)
-        Pair(efst, esnd, ctx.quote(ty))
+        val (efst, u1) = check(fst, a, SMeta)
+        val (esnd, u2) = check(snd, b(ctx.eval(efst)), SMeta)
+        (Pair(efst, esnd, ctx.quote(ty)), u1 + u2)
 
       case (S.Lift(a), VU(SMeta)) =>
         val cv = ctx.eval(newCV())
-        Lift(ctx.quote(cv), checkType(a, STy(cv)))
+        val (eb, u) = checkType(a, STy(cv))
+        (Lift(ctx.quote(cv), eb), u)
 
-      case (S.Pi(x, i, a, b), VU(SMeta)) =>
-        val ea = checkType(a, SMeta)
+      case (S.Pi(u, x, i, a, b), VU(SMeta)) =>
+        val (ea, u1) = checkType(a, SMeta)
         val va = ctx.eval(ea)
-        val eb = checkType(b, SMeta)(ctx.bind(x, va, SMeta))
-        Pi(x, i, ea, eb)
-      case (S.Pi(x, Expl, a, b), VUTy(cv)) =>
+        val (eb, us) = checkType(b, SMeta)(ctx.bind(Many, x, va, SMeta))
+        val (_, u2) = us.uncons
+        (Pi(u, x, i, ea, eb), u1 + u2)
+      case (S.Pi(u, x, Expl, a, b), VUTy(cv)) =>
         unify(cv, VComp())
-        val ea = checkType(a, SVTy())
+        val (ea, u1) = checkType(a, SVTy())
         val cv2 = newCV()
-        val eb = checkType(b, STy(ctx.eval(cv2)))
-        Fun(ea, cv2, eb)
+        val (eb, u2) = checkType(b, STy(ctx.eval(cv2)))
+        (Fun(ea, cv2, eb), u1 + u2)
       case (S.Sigma(x, a, b), VU(SMeta)) =>
-        val ea = checkType(a, SMeta)
+        val (ea, u1) = checkType(a, SMeta)
         val va = ctx.eval(ea)
-        val eb = checkType(b, SMeta)(ctx.bind(x, va, SMeta))
-        Sigma(x, ea, eb)
+        val (eb, us) = checkType(b, SMeta)(ctx.bind(Many, x, va, SMeta))
+        val (_, u2) = us.uncons
+        (Sigma(x, ea, eb), u1 + u2)
 
       case (S.Fix(g, x, b, arg), _) if !stage.isMeta =>
         val STy(cv) = stage: @unchecked
-        val (earg, pty) = infer(arg, SVTy())
-        val eb =
+        val (earg, pty, uarg) = infer(arg, SVTy())
+        val (eb, us) =
           check(b, ty, STy(cv))(
-            ctx.bind(g, VFun(pty, cv, ty), SCTy()).bind(x, pty, SVTy())
+            ctx
+              .bind(Many, g, VFun(pty, cv, ty), SCTy())
+              .bind(Many, x, pty, SVTy())
           )
-        Fix(ctx.quote(pty), ctx.quote(ty), g, x, eb, earg)
+        val (_, _, ub) = us.uncons2
+        (Fix(ctx.quote(pty), ctx.quote(ty), g, x, eb, earg), uarg + ub)
 
       case (S.Match(scrut, cs, other), _) if !stage.isMeta =>
         val STy(vrcv) = stage: @unchecked
-        val etm = checkMatch(tm, scrut, cs, other, ctx.quote(ty), ty, vrcv)
-        etm
+        checkMatch(tm, scrut, cs, other, ctx.quote(ty), ty, vrcv)
 
       case (S.Var(Name("[]")), VTCon(dx, as)) if !stage.isMeta =>
         val nilary = getGlobalData(dx).get._2.filter((_, as) => as.isEmpty)
@@ -453,34 +478,39 @@ object Elaboration:
         val cx = cinfo._1
         val cas = cinfo._2
         val ctxConsTypes = datatypeCtx(datainfo._1, as)
-        val efst = check(fst, ctxConsTypes.eval(cas(0)), SVTy())
-        val esnd = check(snd, ctxConsTypes.eval(cas(1)), SVTy())
-        Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd))
+        val (efst, u1) = check(fst, ctxConsTypes.eval(cas(0)), SVTy())
+        val (esnd, u2) = check(snd, ctxConsTypes.eval(cas(1)), SVTy())
+        (Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd)), u1 + u2)
 
-      case (S.Quote(t), VLift(cv, a)) => check(t, a, STy(cv)).quote
-      case (t, VLift(cv, a))          => check(t, a, STy(cv)).quote
+      case (S.Quote(t), VLift(cv, a)) =>
+        val (et, u) = check(t, a, STy(cv))
+        (et.quote, u)
+      case (t, VLift(cv, a)) =>
+        val (et, u) = check(t, a, STy(cv))
+        (et.quote, u)
 
       case (S.Let(x, m, t, v, b), _) if stage.isMeta == m =>
         val valstage = if m then SMeta else STy(newCV())
         val vvalstage = ctx.eval(valstage)
-        val (ev, et, vt) = check(v, t, vvalstage)
+        val (ev, et, vt, uv) = check(v, t, vvalstage)
         val qstage = ctx.quote(stage)
-        val eb = check(b, ty, stage)(
-          ctx.define(x, vt, et, vvalstage, valstage, ctx.eval(ev), ev)
+        val (eb, us) = check(b, ty, stage)(
+          ctx.define(Many, x, vt, et, vvalstage, valstage, ctx.eval(ev), ev)
         )
-        Let(x, et, valstage, ctx.quote(ty), ev, eb)
+        val (_, ub) = us.uncons
+        (Let(x, et, valstage, ctx.quote(ty), ev, eb), uv + ub)
 
       case (S.Hole(ox), _) =>
         val t = newMeta(ty, stage)
         ox.foreach(x => addHole(x, HoleEntry(ctx, t, ty, stage)))
-        t
+        (t, ctx.uses)
 
       case (t, VFlex(_, _)) =>
-        val (etm, vt) = insert(stage, infer(t, stage))
-        coe(etm, vt, stage, ty, stage)
+        val (etm, vt, u) = insert(stage, infer(t, stage))
+        (coe(etm, vt, stage, ty, stage), u)
       case _ =>
-        val (etm, ty2, stage2) = insert(infer(tm))
-        coe(etm, ty2, stage2, ty, stage)
+        val (etm, ty2, stage2, u) = insert(infer(tm))
+        (coe(etm, ty2, stage2, ty, stage), u)
 
   // inference
   private def projIndex(tm: Val, x: Bind, ix: Int, clash: Boolean): Val =
@@ -516,6 +546,7 @@ object Elaboration:
   ): Ctx =
     ps.zipWithIndex.foldLeft(ctx) { case (ctx, (x, i)) =>
       ctx.define(
+        Many,
         x,
         VVTy(),
         ctx.quote(VVTy()),
@@ -533,8 +564,8 @@ object Elaboration:
       rty: Tm,
       vrty: VTy,
       vrcv: VTy
-  )(implicit ctx: Ctx): Tm =
-    val (escrut, vscrutty) = infer(scrut, SVTy())
+  )(implicit ctx: Ctx): (Tm, Uses) =
+    val (escrut, vscrutty, uscrut) = infer(scrut, SVTy())
     force(vscrutty) match
       case VFlex(_, _) =>
         // try to figure out datatype from constructors
@@ -569,8 +600,8 @@ object Elaboration:
             }
           val lam =
             ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
-          val eb = check(lam, fnty, STy(ecv))
-          (cx, tas.size, eb)
+          val (eb, u) = check(lam, fnty, STy(ecv))
+          (cx, tas.size, eb, u)
         }
         val left = cons.keySet -- used
         if other.isEmpty && left.nonEmpty then
@@ -582,19 +613,32 @@ object Elaboration:
           if left.isEmpty then error(s"other case does not match anything")
           check(b, vrty, STy(vrcv))
         }
-        Match(ctx.quote(vscrutty), rty, escrut, ecs, eother)
+        val uses = (eother, ecs.map(_._4)) match
+          case (None, Nil)       => uscrut
+          case (None, l)         => uscrut + Uses.lub(l)
+          case (Some((_, u)), l) => uscrut + Uses.lub(u :: l)
+        (
+          Match(
+            ctx.quote(vscrutty),
+            rty,
+            escrut,
+            ecs.map((a, b, c, d) => (a, b, c)),
+            eother.map(_._1)
+          ),
+          uses
+        )
       case _ =>
         error(
           s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"
         )
 
-  private def inferType(ty: S.Ty)(implicit ctx: Ctx): (Tm, VStage) =
-    val (t, a) = infer(ty, SMeta)
+  private def inferType(ty: S.Ty)(implicit ctx: Ctx): (Tm, VStage, Uses) =
+    val (t, a, u) = infer(ty, SMeta)
     force(a) match
-      case VU(s) => (t, s)
+      case VU(s) => (t, s, u)
       case ty    => error(s"expected type got ${ctx.pretty(ty)}")
 
-  private def infer(tm: S.Tm, s: VStage)(implicit ctx: Ctx): (Tm, VTy) =
+  private def infer(tm: S.Tm, s: VStage)(implicit ctx: Ctx): (Tm, VTy, Uses) =
     if !tm.isPos then debug(s"infer $tm : ${ctx.pretty(s)}")
     tm match
       case S.Pos(pos, tm) => infer(tm, s)(ctx.enter(pos))
@@ -602,97 +646,112 @@ object Elaboration:
       case S.StringLit(v) =>
         s match
           case SMeta =>
-            (StringLit(v), VLabel())
+            (StringLit(v), VLabel(), ctx.uses)
           case STy(cv) =>
             unify(cv, VVal())
-            (StringLit(v), VForeignType(VStringLit("Ljava/lang/String;")))
+            (
+              StringLit(v),
+              VForeignType(VStringLit("Ljava/lang/String;")),
+              ctx.uses
+            )
 
       case S.Lam(x, S.ArgIcit(i), ot, b) =>
         s match
           case SMeta =>
-            val a = ot match
-              case None     => newMeta(VU(SMeta), SMeta)
+            val (a, ut) = ot match
+              case None     => (newMeta(VU(SMeta), SMeta), ctx.uses)
               case Some(ty) => checkType(ty, SMeta)
             val va = ctx.eval(a)
-            val (eb, rt) = infer(b, SMeta)(ctx.bind(x, va, SMeta))
-            (Lam(x, i, Irrelevant, eb), VPi(x, i, va, ctx.close(rt)))
+            val (eb, rt, u) = infer(b, SMeta)(ctx.bind(Many, x, va, SMeta))
+            val (_, ub) = u.uncons
+            (
+              Lam(x, i, Irrelevant, eb),
+              VPi(Many, x, i, va, ctx.close(rt)),
+              ut + ub
+            )
           case STy(cvr) =>
             if i == Impl then error(s"implicit lambda cannot be in Ty: $tm")
             unify(cvr, VComp())
-            val a = ot match
-              case None     => newMeta(VVTy(), SMeta)
+            val (a, ut) = ot match
+              case None     => (newMeta(VVTy(), SMeta), ctx.uses)
               case Some(ty) => checkVTy(ty)
             val va = ctx.eval(a)
             val cv = ctx.eval(newCV())
             val rty0 = ctx.eval(newMeta(VUTy(cv), SMeta))
-            val ctx2 = ctx.bind(x, va, SVTy())
-            val eb0 = check(b, rty0, STy(cv))(ctx2)
-            val (eb, rty) = insert(STy(cv), (eb0, rty0))(ctx2)
+            val ctx2 = ctx.bind(Many, x, va, SVTy())
+            val (eb0, ub) = check(b, rty0, STy(cv))(ctx2)
+            val (eb, rty, ub2) = insert(STy(cv), (eb0, rty0, ub))(ctx2)
+            val (_, ub3) = ub2.uncons
             val fty = VFun(va, cv, rty)
-            (Lam(x, Expl, ctx.quote(fty), eb), fty)
+            (Lam(x, Expl, ctx.quote(fty), eb), fty, ut + ub3)
       case S.Lam(x, S.ArgNamed(_), _, _) => error(s"cannot infer $tm")
 
       case S.Pair(fst, snd) =>
         s match
           case STy(_) => error(s"pair can only appear in meta stage: $tm")
           case SMeta =>
-            val (efst, fty) = infer(fst, SMeta)
-            val (esnd, sty) = infer(snd, SMeta)
+            val (efst, fty, u1) = infer(fst, SMeta)
+            val (esnd, sty, u2) = infer(snd, SMeta)
             val ty = vsigma("_", fty, _ => sty)
-            (Pair(efst, esnd, ctx.quote(ty)), ty)
+            (Pair(efst, esnd, ctx.quote(ty)), ty, u1 + u2)
 
       case S.Hole(ox) =>
         val ty = ctx.eval(newMeta(VU(s), SMeta))
         val t = newMeta(ty, s)
         ox.foreach(x => holes += x -> HoleEntry(ctx, t, ty, s))
-        (t, ty)
+        (t, ty, ctx.uses)
 
       case S.Fix(g, x, b, arg) if !s.isMeta =>
         val STy(cv) = s: @unchecked
-        val (earg, vty) = infer(arg, SVTy())
+        val (earg, vty, uarg) = infer(arg, SVTy())
         val rty = newMeta(VUTy(cv), SMeta)
         val vrty = ctx.eval(rty)
         val ft = VFun(vty, cv, vrty)
-        val eb =
-          check(b, vrty, STy(cv))(ctx.bind(g, ft, SCTy()).bind(x, vty, SVTy()))
-        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty)
+        val (eb, ub) =
+          check(b, vrty, STy(cv))(
+            ctx.bind(Many, g, ft, SCTy()).bind(Many, x, vty, SVTy())
+          )
+        val (_, _, ub2) = ub.uncons2
+        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, uarg + ub2)
 
       case S.Match(scrut, cs, other) if !s.isMeta =>
         val STy(vrcv) = s: @unchecked
         val rty = newMeta(VUTy(vrcv), SMeta)
         val vrty = ctx.eval(rty)
-        val etm = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
-        (etm, vrty)
+        val (etm, u) = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        (etm, vrty, u)
 
       case _ =>
-        val (t, a, si) = insert(infer(tm))
+        val (t, a, si, u) = insert(infer(tm))
         debug(
           s"inferred $t : ${ctx.pretty(a)} : ${ctx.pretty(si)} to ${ctx.pretty(s)}"
         )
-        adjustStage(t, a, si, s)
+        val (et, ty) = adjustStage(t, a, si, s)
+        (et, ty, u)
 
-  private def infer(tm: S.Tm)(implicit ctx: Ctx): (Tm, VTy, VStage) =
+  private def infer(tm: S.Tm)(implicit ctx: Ctx): (Tm, VTy, VStage, Uses) =
     if !tm.isPos then debug(s"infer $tm")
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
-      case S.IntLit(v)    => (IntLit(v), VForeignType(VStringLit("I")), SVTy())
-      case S.StringLit(v) => (StringLit(v), VLabel(), SMeta)
+      case S.IntLit(v) =>
+        (IntLit(v), VForeignType(VStringLit("I")), SVTy(), ctx.uses)
+      case S.StringLit(v) => (StringLit(v), VLabel(), SMeta, ctx.uses)
       case S.Hole(ox)     => error(s"cannot infer hole $tm")
-      case S.U(SMeta)     => (U(SMeta), VUMeta(), SMeta)
+      case S.U(SMeta)     => (U(SMeta), VUMeta(), SMeta, ctx.uses)
       case S.U(STy(cv)) =>
-        val evf = check(cv, VCV(), SMeta)
-        (U(STy(evf)), VU(SMeta), SMeta)
+        val (evf, u) = check(cv, VCV(), SMeta)
+        (U(STy(evf)), VU(SMeta), SMeta, u)
       case S.Var(x) =>
         PrimName(x) match
           case Some(p) =>
             val (t, u) = primType(p)
-            (Prim(p), t, u)
+            (Prim(p), t, u, ctx.uses)
           case None =>
             ctx.lookup(x) match
-              case Some((ix, ty, u)) => (Var(ix), ty, u)
+              case Some((vu, ix, ty, u)) => (Var(ix), ty, u, ctx.use(ix))
               case None =>
                 getGlobal(x) match
-                  case Some(e) => (Global(x), e.vty, e.vstage)
+                  case Some(e) => (Global(x), e.vty, e.vstage, ctx.uses)
                   case None    => error(s"undefined variable $x")
 
       case S.Let(x, m, t, v, b) =>
@@ -700,99 +759,112 @@ object Elaboration:
         val vstage1 = ctx.eval(stage1)
         val stage2 = if m then SMeta else STy(newCV())
         val vstage2 = ctx.eval(stage2)
-        val (ev, et, vt) = check(v, t, vstage1)
-        val (eb, rt) =
+        val (ev, et, vt, uv) = check(v, t, vstage1)
+        val (eb, rt, ub) =
           infer(b, vstage2)(
-            ctx.define(x, vt, et, vstage1, stage1, ctx.eval(ev), ev)
+            ctx.define(Many, x, vt, et, vstage1, stage1, ctx.eval(ev), ev)
           )
-        (Let(x, et, stage1, ctx.quote(rt), ev, eb), rt, vstage2)
+        val (_, ub2) = ub.uncons
+        (Let(x, et, stage1, ctx.quote(rt), ev, eb), rt, vstage2, uv + ub2)
 
-      case S.Pi(x, Impl, a, b) =>
-        val ea = checkType(a, SMeta)
-        val eb = checkType(b, SMeta)(ctx.bind(x, ctx.eval(ea), SMeta))
-        (Pi(x, Impl, ea, eb), VU(SMeta), SMeta)
-      case S.Pi(x, _, a, b) =>
-        val (ea, s) = inferType(a)
+      case S.Pi(u, x, Impl, a, b) =>
+        val (ea, u1) = checkType(a, SMeta)
+        val (eb, us) =
+          checkType(b, SMeta)(ctx.bind(Many, x, ctx.eval(ea), SMeta))
+        val (_, u2) = us.uncons
+        (Pi(u, x, Impl, ea, eb), VU(SMeta), SMeta, u1 + u2)
+      case S.Pi(u, x, _, a, b) =>
+        val (ea, s, u1) = inferType(a)
         s match
           case SMeta =>
-            val eb = checkType(b, SMeta)(ctx.bind(x, ctx.eval(ea), SMeta))
-            (Pi(x, Expl, ea, eb), VU(SMeta), SMeta)
+            val (eb, us) =
+              checkType(b, SMeta)(ctx.bind(Many, x, ctx.eval(ea), SMeta))
+            val (_, u2) = us.uncons
+            (Pi(u, x, Expl, ea, eb), VU(SMeta), SMeta, u1 + u2)
           case STy(rcv) =>
             unify(rcv, VVal())
             val cv = newCV()
-            val eb = checkType(b, STy(ctx.eval(cv)))
-            (Fun(ea, cv, eb), VCTy(), SMeta)
+            val (eb, u2) = checkType(b, STy(ctx.eval(cv)))
+            (Fun(ea, cv, eb), VCTy(), SMeta, u1 + u2)
 
       case S.Sigma(x, a, b) =>
-        val ea = check(a, VUMeta(), SMeta)
-        val eb = checkType(b, SMeta)(ctx.bind(x, ctx.eval(ea), SMeta))
-        (Sigma(x, ea, eb), VU(SMeta), SMeta)
+        val (ea, u1) = check(a, VUMeta(), SMeta)
+        val (eb, us) =
+          checkType(b, SMeta)(ctx.bind(Many, x, ctx.eval(ea), SMeta))
+        val (_, u2) = us.uncons
+        (Sigma(x, ea, eb), VU(SMeta), SMeta, u1 + u2)
 
       case S.Pair(fst, snd) =>
-        val (efst, fstty) = infer(fst, SMeta)
-        val (esnd, sndty) = infer(snd, SMeta)
+        val (efst, fstty, u1) = infer(fst, SMeta)
+        val (esnd, sndty, u2) = infer(snd, SMeta)
         val ty = VSigma(DontBind, fstty, CFun(_ => sndty))
         (
           Pair(efst, esnd, ctx.quote(ty)),
           ty,
-          SMeta
+          SMeta,
+          u1 + u2
         )
 
       case S.Lam(x, S.ArgIcit(Impl), mty, b) =>
-        val pty = mty match
+        val (pty, ut) = mty match
           case Some(ty) =>
-            val ety = checkType(ty, SMeta)
-            ctx.eval(ety)
+            val (ety, u) = checkType(ty, SMeta)
+            (ctx.eval(ety), u)
           case None =>
             val m = newMeta(VU(SMeta), SMeta)
-            ctx.eval(m)
-        val ctx2 = ctx.bind(x, pty, SMeta)
-        val (eb, rty) = insert(SMeta, infer(b, SMeta)(ctx2))(ctx2)
-        val fty = VPi(x, Impl, pty, ctx.close(rty))
-        (Lam(x, Impl, ctx.quote(fty), eb), fty, SMeta)
+            (ctx.eval(m), ctx.uses)
+        val ctx2 = ctx.bind(Many, x, pty, SMeta)
+        val (eb, rty, ub) = insert(SMeta, infer(b, SMeta)(ctx2))(ctx2)
+        val (_, ub2) = ub.uncons
+        val fty = VPi(Many, x, Impl, pty, ctx.close(rty))
+        (Lam(x, Impl, ctx.quote(fty), eb), fty, SMeta, ut + ub2)
       case S.Lam(x, S.ArgIcit(Expl), mty, b) =>
-        val (pty, s) = mty match
+        val (pty, s, ut) = mty match
           case Some(ty) =>
-            val (ety, s) = inferType(ty)
-            (ctx.eval(ety), s)
+            val (ety, s, u) = inferType(ty)
+            (ctx.eval(ety), s, u)
           case None => error(s"cannot infer unannotated lambda: $tm")
         s match
           case SMeta =>
-            val ctx2 = ctx.bind(x, pty, SMeta)
-            val (eb, rty) = insert(SMeta, infer(b, SMeta)(ctx2))(ctx2)
-            val fty = VPi(x, Expl, pty, ctx.close(rty))
-            (Lam(x, Expl, ctx.quote(fty), eb), fty, SMeta)
+            val ctx2 = ctx.bind(Many, x, pty, SMeta)
+            val (eb, rty, ub) = insert(SMeta, infer(b, SMeta)(ctx2))(ctx2)
+            val (_, ub2) = ub.uncons
+            val fty = VPi(Many, x, Expl, pty, ctx.close(rty))
+            (Lam(x, Expl, ctx.quote(fty), eb), fty, SMeta, ut + ub2)
           case STy(rcv) =>
             unify(rcv, VVal())
-            val ctx2 = ctx.bind(x, pty, s)
+            val ctx2 = ctx.bind(Many, x, pty, s)
             val cv = ctx.eval(newCV())
             val rty0 = ctx.eval(newMeta(VUTy(cv), SMeta))
-            val eb0 = check(b, rty0, STy(cv))(ctx2)
-            val (eb, rty) = insert(STy(cv), (eb0, rty0))(ctx2)
+            val (eb0, ub) = check(b, rty0, STy(cv))(ctx2)
+            val (eb, rty, ub2) = insert(STy(cv), (eb0, rty0, ub))(ctx2)
+            val (_, ub3) = ub2.uncons
             val fty = VFun(pty, cv, rty)
-            (Lam(x, Expl, ctx.quote(fty), eb), fty, STy(cv))
+            (Lam(x, Expl, ctx.quote(fty), eb), fty, STy(cv), ut + ub3)
       case S.Lam(_, S.ArgNamed(_), _, _) => error(s"cannot infer: $tm")
 
       case S.App(f, a, i) =>
-        val (icit, ef, fty, st) = i match
+        val (icit, ef, fty, st, uf) = i match
           case S.ArgNamed(x) =>
-            val (ef, fty, st) = insertPi(infer(f), Until(x))
-            (Impl, ef, fty, st)
+            val (a, b, c, u) = infer(f)
+            val (ef, fty, st) = insertPi((a, b, c), Until(x))
+            (Impl, ef, fty, st, u)
           case S.ArgIcit(Impl) =>
-            val (ef, fty, st) = infer(f)
-            (Impl, ef, fty, st)
+            val (ef, fty, st, u) = infer(f)
+            (Impl, ef, fty, st, u)
           case S.ArgIcit(Expl) =>
-            val (ef, fty, st) = insertPi(infer(f))
-            (Expl, ef, fty, st)
+            val (a, b, c, u) = infer(f)
+            val (ef, fty, st) = insertPi((a, b, c))
+            (Expl, ef, fty, st, u)
         force(fty) match
-          case VPi(x, icit2, pty, rty) =>
+          case VPi(up, x, icit2, pty, rty) =>
             if icit != icit2 then error(s"icit mismatch: $tm")
-            val ea = check(a, pty, SMeta)
-            (App(ef, ea, icit), rty(ctx.eval(ea)), SMeta)
+            val (ea, ua) = check(a, pty, SMeta)
+            (App(ef, ea, icit), rty(ctx.eval(ea)), SMeta, uf + up * ua)
           case VFun(pty, rcv, rty) =>
             if icit == Impl then error(s"implicit app in Ty: $tm")
-            val ea = check(a, pty, SVTy())
-            (App(ef, ea, icit), rty, STy(rcv))
+            val (ea, ua) = check(a, pty, SVTy())
+            (App(ef, ea, icit), rty, STy(rcv), uf + Many * ua)
           case _ =>
             st match
               case SMeta =>
@@ -801,11 +873,12 @@ object Elaboration:
                 val rty =
                   CClos(
                     ctx.env,
-                    newMeta(VU(SMeta), SMeta)(ctx.bind(x, pty, SMeta))
+                    newMeta(VU(SMeta), SMeta)(ctx.bind(Many, x, pty, SMeta))
                   )
-                val ef2 = coe(ef, fty, SMeta, VPi(x, icit, pty, rty), SMeta)
-                val ea = check(a, pty, SMeta)
-                (App(ef2, ea, icit), rty(ctx.eval(ea)), SMeta)
+                val ef2 =
+                  coe(ef, fty, SMeta, VPi(Many, x, icit, pty, rty), SMeta)
+                val (ea, ua) = check(a, pty, SMeta)
+                (App(ef2, ea, icit), rty(ctx.eval(ea)), SMeta, uf + Many * ua)
               case STy(scv) =>
                 if icit == Impl then error(s"implicit app in Ty: $tm")
                 unify(scv, VComp())
@@ -813,21 +886,22 @@ object Elaboration:
                 val rcv = ctx.eval(newCV())
                 val rty = ctx.eval(newMeta(VUTy(rcv), SMeta))
                 val ef2 = coe(ef, fty, st, VFun(pty, rcv, rty), st)
-                val ea = check(a, pty, SVTy())
-                (App(ef2, ea, Expl), rty, STy(rcv))
+                val (ea, ua) = check(a, pty, SVTy())
+                (App(ef2, ea, Expl), rty, STy(rcv), uf + Many * ua)
 
       case S.Proj(t, p) =>
-        val (et, ty, st) = insertPi(infer(t))
+        val (tmpa, tmpb, tmpc, ut) = infer(t)
+        val (et, ty, st) = insertPi((tmpa, tmpb, tmpc))
         (force(ty), p) match
           case (_, S.Named(x)) =>
             if st != SMeta then error(s"can only do named projection in Meta")
             val (p, pty) = projNamed(ctx.eval(et), ty, x)
-            (Proj(et, p, Irrelevant, Irrelevant), pty, SMeta)
+            (Proj(et, p, Irrelevant, Irrelevant), pty, SMeta, ut)
           case (VSigma(_, fstty, _), S.Fst) =>
-            (Proj(et, Fst, Irrelevant, Irrelevant), fstty, SMeta)
+            (Proj(et, Fst, Irrelevant, Irrelevant), fstty, SMeta, ut)
           case (VSigma(_, _, sndty), S.Snd) =>
             val rt = sndty(vfst(ctx.eval(et)))
-            (Proj(et, Snd, Irrelevant, Irrelevant), rt, SMeta)
+            (Proj(et, Snd, Irrelevant, Irrelevant), rt, SMeta, ut)
           case (VLift(_, inner), _) =>
             force(inner) match
               case VTCon(_, _) => infer(S.Proj(S.Splice(t), p))
@@ -852,7 +926,7 @@ object Elaboration:
             p match
               case S.Fst =>
                 val pty = datactx.eval(cas(0))
-                val em = check(
+                val (em, ut) = check(
                   S.Match(
                     t,
                     List((ctx.pos, cx, List(DoBind(x), DontBind), S.Var(x))),
@@ -861,10 +935,10 @@ object Elaboration:
                   pty,
                   SVTy()
                 )
-                (em, pty, SVTy())
+                (em, pty, SVTy(), ut)
               case S.Snd =>
                 val pty = datactx.eval(cas(1))
-                val em = check(
+                val (em, ut) = check(
                   S.Match(
                     t,
                     List((ctx.pos, cx, List(DontBind, DoBind(x)), S.Var(x))),
@@ -873,7 +947,7 @@ object Elaboration:
                   pty,
                   SVTy()
                 )
-                (em, pty, SVTy())
+                (em, pty, SVTy(), ut)
               case _ => impossible()
           case (tty, _) =>
             st match
@@ -883,56 +957,62 @@ object Elaboration:
                 val rty =
                   CClos(
                     ctx.env,
-                    newMeta(VU(SMeta), SMeta)(ctx.bind(x, pty, SMeta))
+                    newMeta(VU(SMeta), SMeta)(ctx.bind(Many, x, pty, SMeta))
                   )
                 val et2 = coe(et, tty, SMeta, VSigma(x, pty, rty), SMeta)
                 p match
                   case S.Fst =>
-                    (Proj(et2, Fst, Irrelevant, Irrelevant), pty, SMeta)
+                    (Proj(et2, Fst, Irrelevant, Irrelevant), pty, SMeta, ut)
                   case S.Snd =>
                     val ty = rty(vfst(ctx.eval(et2)))
-                    (Proj(et2, Snd, Irrelevant, Irrelevant), ty, SMeta)
+                    (Proj(et2, Snd, Irrelevant, Irrelevant), ty, SMeta, ut)
                   case _ => error(s"named projection with ambigious type: $tm")
               case STy(_) => error(s"projection in Ty: $tm")
 
       case S.Fix(g, x, b, arg) =>
-        val (earg, vty) = infer(arg, SVTy())
+        val (earg, vty, uarg) = infer(arg, SVTy())
         val cv = ctx.eval(newCV())
         val rty = newMeta(VUTy(cv), SMeta)
         val vrty = ctx.eval(rty)
         val ft = VFun(vty, cv, vrty)
-        val eb =
-          check(b, vrty, STy(cv))(ctx.bind(g, ft, SCTy()).bind(x, vty, SVTy()))
-        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, STy(cv))
+        val (eb, ub1) =
+          check(b, vrty, STy(cv))(
+            ctx.bind(Many, g, ft, SCTy()).bind(Many, x, vty, SVTy())
+          )
+        val (_, _, ub) = ub1.uncons2
+        (Fix(ctx.quote(vty), rty, g, x, eb, earg), vrty, STy(cv), uarg + ub)
 
       case S.Match(scrut, cs, other) =>
         val vrcv = ctx.eval(newCV())
         val rty = newMeta(VUTy(vrcv), SMeta)
         val vrty = ctx.eval(rty)
-        val etm = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
-        (etm, vrty, STy(vrcv))
+        val (etm, u) = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        (etm, vrty, STy(vrcv), u)
 
       case S.Lift(a) =>
         val cv = newCV()
         val vcv = ctx.eval(cv)
-        val ea = checkType(a, STy(vcv))
-        (Lift(cv, ea), VU(SMeta), SMeta)
+        val (ea, u) = checkType(a, STy(vcv))
+        (Lift(cv, ea), VU(SMeta), SMeta, u)
       case S.Quote(t) =>
         val cv = ctx.eval(newCV())
-        val (et, a) = infer(t, STy(cv))
-        (et.quote, VLift(cv, a), SMeta)
+        val (et, a, u) = infer(t, STy(cv))
+        (et.quote, VLift(cv, a), SMeta, u)
       case S.Splice(t) =>
-        val (et, a) = infer(t, SMeta)
+        val (et, a, u) = infer(t, SMeta)
         val cv = ctx.eval(newCV())
         val (et2, a2) = adjustStage(et, a, SMeta, STy(cv))
-        (et2, a2, STy(cv))
+        (et2, a2, STy(cv), u)
 
       case S.Foreign(io, rt, l, as) =>
-        val ert = checkVTy(rt)
-        val el = check(l, VLabel(), SMeta)
-        val eas = as.map(a => infer(a, SVTy())).map((a, t) => (a, ctx.quote(t)))
-        if io then (Foreign(ert, el, eas), VIO(ctx.eval(ert)), SCTy())
-        else (Foreign(ert, el, eas), ctx.eval(ert), SVTy())
+        val (ert, u1) = checkVTy(rt)
+        val (el, u2) = check(l, VLabel(), SMeta)
+        val eas1 =
+          as.map(a => infer(a, SVTy())).map((a, t, u) => (a, ctx.quote(t), u))
+        val eas = eas1.map((a, b, c) => (a, b))
+        val us = eas1.map(_._3).foldLeft(u1 + u2)(_ + _)
+        if io then (Foreign(ert, el, eas), VIO(ctx.eval(ert)), SCTy(), us)
+        else (Foreign(ert, el, eas), ctx.eval(ert), SVTy(), us)
 
   // elaboration
   private def prettyHoles(implicit ctx0: Ctx): String =
@@ -952,7 +1032,7 @@ object Elaboration:
     holes.clear()
 
     val vstage = if meta then SMeta else STy(ctx.eval(newCV()))
-    val (etm_, ety_, _) = check(tm, ty, vstage, true)
+    val (etm_, ety_, _, _) = check(tm, ty, vstage, true)
     val etm = ctx.zonk(etm_)
     val ety = ctx.zonk(ety_)
     val estage = ctx.zonk(vstage)
@@ -985,7 +1065,7 @@ object Elaboration:
             case U(STy(_)) => "T"
             case _         => s"x$id"
           ))
-          val nty = Pi(x, Impl, mty, replaceMeta(id, ty, ix0))
+          val nty = Pi(Many, x, Impl, mty, replaceMeta(id, ty, ix0))
           val ntm = Lam(x, Impl, nty, replaceMeta(id, tm, ix0))
           (ntm, nty)
         }
@@ -1039,8 +1119,8 @@ object Elaboration:
         replaceMeta(id, value, ix),
         replaceMeta(id, body, ix + 1)
       )
-    case Pi(name, icit, ty, body) =>
-      Pi(name, icit, replaceMeta(id, ty, ix), replaceMeta(id, body, ix + 1))
+    case Pi(u, name, icit, ty, body) =>
+      Pi(u, name, icit, replaceMeta(id, ty, ix), replaceMeta(id, body, ix + 1))
     case Lam(name, icit, fnty, body) =>
       Lam(name, icit, replaceMeta(id, fnty, ix), replaceMeta(id, body, ix + 1))
     case App(fn, arg, icit) =>
@@ -1101,7 +1181,8 @@ object Elaboration:
         // generate tcon
         if getGlobal(dx).isDefined then error(s"duplicate datatype $dx")
         val vty = U(STy(Prim(PVal)))
-        val tconty = ps.foldRight(vty)((_, t) => Pi(DontBind, Expl, vty, t))
+        val tconty =
+          ps.foldRight(vty)((_, t) => Pi(Many, DontBind, Expl, vty, t))
         val tcon =
           ps.foldRight[(Tm, Ty)](
             (
@@ -1109,7 +1190,7 @@ object Elaboration:
               vty
             )
           ) { case (x, (b, t)) =>
-            val ty = Pi(DontBind, Expl, vty, t)
+            val ty = Pi(Many, DontBind, Expl, vty, t)
             (Lam(DoBind(x), Expl, ty, b), ty)
           }._1
         setGlobal(
@@ -1127,14 +1208,16 @@ object Elaboration:
         // check cases
         val ccs = {
           implicit val casectx1: Ctx =
-            ps.foldLeft(ctx)((ctx, x) => ctx.bind(DoBind(x), VVTy(), SMeta))
+            ps.foldLeft(ctx)((ctx, x) =>
+              ctx.bind(Many, DoBind(x), VVTy(), SMeta)
+            )
           val ccs = cs.map { (pos, cx, as) =>
             implicit val casectx2: Ctx = casectx1.enter(pos)
             if getGlobal(cx).isDefined then
               error(s"duplicate datatype constructor $cx")
             val cas = as.map { ta =>
               // TODO: check recursion
-              val cta = check(ta, VVTy(), SMeta)
+              val (cta, _) = check(ta, VVTy(), SMeta)
               cta
             }
 
@@ -1156,11 +1239,12 @@ object Elaboration:
               ps.foldRight[(Tm, Ty)](
                 cas.zipWithIndex.foldRight[(Tm, Ty)]((body, rty)) {
                   case ((ty, i), (b, rt)) =>
-                    val nty = Pi(DontBind, Expl, Lift(Prim(PVal), ty), Wk(rt))
+                    val nty =
+                      Pi(Many, DontBind, Expl, Lift(Prim(PVal), ty), Wk(rt))
                     (Lam(DoBind(Name(s"a$i")), Expl, nty, b), nty)
                 }
               ) { case (p, (b, rt)) =>
-                val nty = Pi(DoBind(p), Impl, vty, rt)
+                val nty = Pi(Many, DoBind(p), Impl, vty, rt)
                 (Lam(DoBind(p), Impl, nty, b), nty)
               }
 
