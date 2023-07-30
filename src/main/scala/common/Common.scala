@@ -182,6 +182,10 @@ object Common:
 
     case PForeignType
 
+    case PNew
+    case PNewDrop
+    case PNewScope
+
     case PRW
 
     override def toString: String = this match
@@ -203,6 +207,10 @@ object Common:
 
       case PForeignType => "Foreign"
 
+      case PNew      => "New"
+      case PNewDrop  => "dropNew"
+      case PNewScope => "scopeNew"
+
       case PRW => "RW"
   export PrimName.*
   object PrimName:
@@ -221,6 +229,9 @@ object Common:
         "eqLabel",
         "appendLabel",
         "Foreign",
+        "New",
+        "dropNew",
+        "scopeNew",
         "RW"
       )
         .map(Name.apply)
@@ -242,6 +253,10 @@ object Common:
       case "eqLabel"     => Some(PEqLabel)
       case "appendLabel" => Some(PAppendLabel)
       case "Foreign"     => Some(PForeignType)
+
+      case "New"      => Some(PNew)
+      case "dropNew"  => Some(PNewDrop)
+      case "scopeNew" => Some(PNewScope)
 
       case "RW" => Some(PRW)
 

@@ -87,9 +87,12 @@ object Value:
     VLam(name(x), Impl, ty, CFun(f))
   def vpi(x: String, t: Val, f: Val => Val): Val =
     VPi(Many, name(x), Expl, t, CFun(f))
+  def vpi1(x: String, t: Val, f: Val => Val): Val =
+    VPi(One, name(x), Expl, t, CFun(f))
   def vpiI(x: String, t: Val, f: Val => Val): Val =
     VPi(Many, name(x), Impl, t, CFun(f))
   def vfun(a: Val, b: Val): Val = VPi(Many, DontBind, Expl, a, CFun(_ => b))
+  def vfun1(a: Val, b: Val): Val = VPi(One, DontBind, Expl, a, CFun(_ => b))
   def vsigma(x: String, t: Val, f: Val => Val): Val =
     VSigma(name(x), t, CFun(f))
 
@@ -205,3 +208,9 @@ object Value:
     def unapply(value: Val): Option[Val] = value match
       case VRigid(HPrim(PForeignType), SApp(SId, t, Expl)) => Some(t)
       case _                                               => None
+
+  object VNew:
+    def apply(): Val = VRigid(HPrim(PNew), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PNew), SId) => true
+      case _                        => false

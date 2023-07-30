@@ -328,6 +328,33 @@ object Evaluation:
     // Label -> VTy
     case PForeignType => (vfun(VLabel(), VVTy()), SMeta)
 
+    case PNew => (VUMeta(), SMeta)
+    // (1 _ : New) -> ()
+    case PNewDrop => (vfun1(VNew(), VUnitType()), SMeta)
+    // {cv : CV} {A : Ty cv} (1 _ : {R : Meta} -> (^A -> R) -> (1 _ : New) -> R) -> ^A
+    case PNewScope =>
+      (
+        vpiI(
+          "cv",
+          VCV(),
+          cv =>
+            vpiI(
+              "A",
+              VUTy(cv),
+              a =>
+                vfun1(
+                  vpiI(
+                    "R",
+                    VUMeta(),
+                    r => vfun(vfun(VLift(cv, a), r), vfun1(VNew(), r))
+                  ),
+                  VLift(cv, a)
+                )
+            )
+        ),
+        SMeta
+      )
+
     // Label -> VTy
     case PRW => (vfun(VLabel(), VUMeta()), SMeta)
 
