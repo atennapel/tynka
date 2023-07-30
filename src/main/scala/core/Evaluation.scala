@@ -292,6 +292,9 @@ object Evaluation:
 
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)
+    // {R : Meta} (1 _ : ()) (1 _ : R) -> R
+    case PConsumeLinearUnit =>
+      (vpiI("R", VUMeta(), r => vfun1(VUnitType(), vfun1(r, r))), SMeta)
 
     case PIO => (vfun(VVTy(), VCTy()), SMeta)
     // returnIO : {A : VTy} -> ^A -> ^(IO A)
@@ -331,7 +334,24 @@ object Evaluation:
     case PNew => (VUMeta(), SMeta)
     // (1 _ : New) -> ()
     case PNewDrop => (vfun1(VNew(), VUnitType()), SMeta)
-    // {cv : CV} {A : Ty cv} (1 _ : {R : Meta} -> (^A -> R) -> (1 _ : New) -> R) -> ^A
+    // {cv : CV} {R : Ty cv} (1 _ : New) (1 _ : (1 _ : New) -> (1 _ : New) -> ^R) -> ^R
+    case PNewDup =>
+      (
+        vpiI(
+          "cv",
+          VCV(),
+          cv =>
+            vpiI(
+              "R",
+              VUTy(cv),
+              r =>
+                val lr = VLift(cv, r)
+                vfun1(VNew(), vfun1(vfun1(VNew(), vfun1(VNew(), lr)), lr))
+            )
+        ),
+        SMeta
+      )
+    // {cv : CV} {A : Ty cv} (1 _ : (1 _ : New) -> ^A) -> ^A
     case PNewScope =>
       (
         vpiI(
@@ -342,18 +362,18 @@ object Evaluation:
               "A",
               VUTy(cv),
               a =>
+                val la = VLift(cv, a)
                 vfun1(
-                  vpiI(
-                    "R",
-                    VUMeta(),
-                    r => vfun(vfun(VLift(cv, a), r), vfun1(VNew(), r))
-                  ),
-                  VLift(cv, a)
+                  vfun1(VNew(), la),
+                  la
                 )
             )
         ),
         SMeta
       )
+
+    // Label -> VTy -> VTy
+    case PMutable => (vfun(VLabel(), vfun(VVTy(), VVTy())), SMeta)
 
     // Label -> VTy
     case PRW => (vfun(VLabel(), VUMeta()), SMeta)

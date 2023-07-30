@@ -24,8 +24,8 @@ object Pretty:
       s"${prettyParen(t, true)} -> ${prettyPi(b)(DontBind.toName :: ns)}"
     case Pi(u, DoBind(x), Expl, t, b) =>
       s"(${u.prefix}$x : ${pretty(t)}) -> ${prettyPi(b)(x :: ns)}"
-    case Pi(u, x, Impl, t, b) =>
-      s"{${u.prefix}$x : ${pretty(t)}} -> ${prettyPi(b)(x.toName :: ns)}"
+    case Pi(u, x, i, t, b) =>
+      s"${i.wrap(s"${u.prefix}$x : ${pretty(t)}")} -> ${prettyPi(b)(x.toName :: ns)}"
     case rest => pretty(rest)
 
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =
@@ -69,8 +69,6 @@ object Pretty:
     pretty(tm)(x :: ns)
 
   def pretty(s: CStage)(implicit ns: List[Name]): String = s"${s.map(pretty)}"
-
-  private def nameOverlaps(ix: Ix)(implicit ns: List[Name]): Boolean = ???
 
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Var(ix) =>

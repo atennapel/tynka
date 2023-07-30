@@ -21,6 +21,7 @@ TODO:
 - [x] Integrate foreign with IO
 - [x] Do syntax for monads
 - [x] Imports
+- [ ] Add mutable and mutate
 - [ ] Modules
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines

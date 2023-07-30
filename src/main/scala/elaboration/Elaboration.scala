@@ -501,7 +501,7 @@ object Elaboration:
         )
         val (ux, ub) = us.uncons
         if !(ux <= u) then error(s"usage error: expected ${u} but was ${ux}")
-        (Let(u, x, et, valstage, ctx.quote(ty), ev, eb), (ux * uv) + ub)
+        (Let(u, x, et, valstage, ctx.quote(ty), ev, eb), (u * uv) + ub)
 
       case (S.Hole(ox), _) =>
         val t = newMeta(ty, stage)
@@ -775,7 +775,7 @@ object Elaboration:
           Let(u, x, et, stage1, ctx.quote(rt), ev, eb),
           rt,
           vstage2,
-          (ux * uv) + ub2
+          (u * uv) + ub2
         )
 
       case S.Pi(u, x, Impl, a, b) =>

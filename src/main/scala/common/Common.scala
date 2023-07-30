@@ -171,6 +171,7 @@ object Common:
 
     case PUnitType
     case PUnit
+    case PConsumeLinearUnit
 
     case PIO
     case PReturnIO
@@ -184,7 +185,10 @@ object Common:
 
     case PNew
     case PNewDrop
+    case PNewDup
     case PNewScope
+
+    case PMutable
 
     case PRW
 
@@ -194,8 +198,9 @@ object Common:
       case PComp => "Comp"
       case PFun  => "Fun"
 
-      case PUnitType => "()"
-      case PUnit     => "[]"
+      case PUnitType          => "()"
+      case PUnit              => "[]"
+      case PConsumeLinearUnit => "consumeLinearUnit"
 
       case PIO       => "IO"
       case PReturnIO => "returnIO"
@@ -209,7 +214,10 @@ object Common:
 
       case PNew      => "New"
       case PNewDrop  => "dropNew"
+      case PNewDup   => "dupNew"
       case PNewScope => "scopeNew"
+
+      case PMutable => "Mutable"
 
       case PRW => "RW"
   export PrimName.*
@@ -222,6 +230,7 @@ object Common:
         "Fun",
         "()",
         "[]",
+        "consumeLinearUnit",
         "IO",
         "returnIO",
         "bindIO",
@@ -231,7 +240,9 @@ object Common:
         "Foreign",
         "New",
         "dropNew",
+        "dupNew",
         "scopeNew",
+        "Mutable",
         "RW"
       )
         .map(Name.apply)
@@ -242,8 +253,9 @@ object Common:
       case "Comp" => Some(PComp)
       case "Fun"  => Some(PFun)
 
-      case "()" => Some(PUnitType)
-      case "[]" => Some(PUnit)
+      case "()"                => Some(PUnitType)
+      case "[]"                => Some(PUnit)
+      case "consumeLinearUnit" => Some(PConsumeLinearUnit)
 
       case "IO"       => Some(PIO)
       case "returnIO" => Some(PReturnIO)
@@ -256,7 +268,10 @@ object Common:
 
       case "New"      => Some(PNew)
       case "dropNew"  => Some(PNewDrop)
+      case "dupNew"   => Some(PNewDup)
       case "scopeNew" => Some(PNewScope)
+
+      case "Mutable" => Some(PMutable)
 
       case "RW" => Some(PRW)
 

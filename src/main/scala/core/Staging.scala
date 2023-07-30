@@ -33,6 +33,12 @@ object Staging:
     case VStringLit1(v: String)
   import Val1.*
 
+  private var gensymId = 0
+  private def gensym(): Val1 =
+    val v = VStringLit1(s"$$$gensymId$$")
+    gensymId += 1
+    v
+
   private enum Val0:
     case VVar0(lvl: Lvl)
     case VGlobal0(x: Name, ty: Val1)
@@ -72,7 +78,9 @@ object Staging:
           else VLam1(r => VLam1(a => VLam1(b => b)))
         case (PAppendLabel, List(VStringLit1(a), VStringLit1(b))) =>
           VStringLit1(a + b)
-        case _ => VPrim1(x, as ++ List(a))
+        case (PConsumeLinearUnit, List(_, _, v)) => v
+        case (PNewDrop, List(_))                 => VPrim1(PUnit, Nil)
+        case _                                   => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()
@@ -324,6 +332,11 @@ object Staging:
           dmono
         )
         IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
+
+      case VSplicePrim0(PNewScope, List(_, _, k)) =>
+        quote(vsplice0(vapp1(k, gensym())))
+      case VSplicePrim0(PNewDup, List(_, _, _, k)) =>
+        quote(vsplice0(vapp1(vapp1(k, gensym()), gensym())))
 
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)

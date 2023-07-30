@@ -222,21 +222,27 @@ object Parser:
     private lazy val defParam: Parsley[DefParam] =
       attempt(piSigmaParam) <|> bind.map(x => (Many, List(x), Expl, None))
 
+    private val nConsumeLinearUnit = Var(Name("consumeLinearUnit"))
     private lazy val let: Parsley[Tm] =
       positioned(
-        ("let" *> usage <~> identOrOp <~> many(defParam) <~> option(
-          ":" *> tm
-        ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
-          .map { case ((((((u, x), ps), ty), m), v), b) =>
-            Let(
-              u,
-              x,
-              m,
-              ty.map(typeFromParams(ps, _)),
-              lamFromDefParams(ps, v, ty.isEmpty),
-              b
-            )
-          }
+        attempt(
+          ("let" *> ("(" *> ")") *> "=" *> tm <~> ";" *> tm)
+        ).map { case (v, b) =>
+          App(App(nConsumeLinearUnit, v, ArgIcit(Expl)), b, ArgIcit(Expl))
+        } <|>
+          ("let" *> usage <~> identOrOp <~> many(defParam) <~> option(
+            ":" *> tm
+          ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
+            .map { case ((((((u, x), ps), ty), m), v), b) =>
+              Let(
+                u,
+                x,
+                m,
+                ty.map(typeFromParams(ps, _)),
+                lamFromDefParams(ps, v, ty.isEmpty),
+                b
+              )
+            }
       )
 
     private enum DoEntry:
