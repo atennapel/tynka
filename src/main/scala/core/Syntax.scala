@@ -46,7 +46,15 @@ object Syntax:
     case Var(ix: Ix)
     case Global(name: Name)
     case Prim(name: PrimName)
-    case Let(name: Name, ty: Ty, stage: CStage, bty: Ty, value: Tm, body: Tm)
+    case Let(
+        usage: Usage,
+        name: Name,
+        ty: Ty,
+        stage: CStage,
+        bty: Ty,
+        value: Tm,
+        body: Tm
+    )
     case U(stage: CStage)
 
     case IntLit(value: Int)
@@ -104,7 +112,7 @@ object Syntax:
       case IntLit(_)    => Set.empty
       case StringLit(_) => Set.empty
       case U(stage)     => stage.fold(Set.empty, _.metas)
-      case Let(name, ty, stage, bty, value, body) =>
+      case Let(_, name, ty, stage, bty, value, body) =>
         ty.metas ++ stage.fold(
           Set.empty,
           _.metas
@@ -141,12 +149,13 @@ object Syntax:
           .foldLeft(Set.empty[MetaId])(_ ++ _)
 
     override def toString: String = this match
-      case Var(x)                     => s"'$x"
-      case Global(x)                  => s"$x"
-      case Prim(x)                    => s"$x"
-      case Let(x, t, SMeta, _, v, b)  => s"(let $x : $t = $v; $b)"
-      case Let(x, t, STy(_), _, v, b) => s"(let $x : $t := $v; $b)"
-      case U(s)                       => s"$s"
+      case Var(x)                       => s"'$x"
+      case Global(x)                    => s"$x"
+      case Prim(x)                      => s"$x"
+      case Let(u, x, t, SMeta, _, v, b) => s"(let ${u.prefix}$x : $t = $v; $b)"
+      case Let(u, x, t, STy(_), _, v, b) =>
+        s"(let ${u.prefix}$x : $t := $v; $b)"
+      case U(s) => s"$s"
 
       case IntLit(v)    => s"$v"
       case StringLit(v) => s"\"$v\""

@@ -140,11 +140,11 @@ object Evaluation:
     case _ => VPrim(x)
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
-    case Var(ix)               => env(ix.expose)
-    case Global(x)             => vglobal(x)
-    case Prim(x)               => vprim(x)
-    case Let(_, _, _, _, v, b) => eval(b)(eval(v) :: env)
-    case U(s)                  => VU(s.map(eval))
+    case Var(ix)                  => env(ix.expose)
+    case Global(x)                => vglobal(x)
+    case Prim(x)                  => vprim(x)
+    case Let(_, _, _, _, _, v, b) => eval(b)(eval(v) :: env)
+    case U(s)                     => VU(s.map(eval))
 
     case IntLit(v)    => VIntLit(v)
     case StringLit(v) => VStringLit(v)

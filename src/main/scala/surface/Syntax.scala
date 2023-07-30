@@ -62,7 +62,14 @@ object Syntax:
   type Ty = Tm
   enum Tm:
     case Var(name: Name)
-    case Let(name: Name, meta: Boolean, ty: Option[Ty], value: Tm, body: Tm)
+    case Let(
+        usage: Usage,
+        name: Name,
+        meta: Boolean,
+        ty: Option[Ty],
+        value: Tm,
+        body: Tm
+    )
     case U(stage: Stage[Ty])
 
     case IntLit(value: Int)
@@ -99,7 +106,7 @@ object Syntax:
 
     def free: List[Name] = this match
       case Var(name) => List(name)
-      case Let(name, meta, ty, value, body) =>
+      case Let(_, name, meta, ty, value, body) =>
         ty.map(_.free).getOrElse(Nil) ++ value.free ++ body.free.filterNot(
           _ == name
         )
@@ -134,10 +141,11 @@ object Syntax:
       case StringLit(_) => Nil
 
     override def toString: String = this match
-      case Var(x)                => s"$x"
-      case Let(x, m, None, v, b) => s"(let $x ${if m then "" else ":"}= $v; $b)"
-      case Let(x, m, Some(t), v, b) =>
-        s"(let $x : $t ${if m then "" else ":"}= $v; $b)"
+      case Var(x) => s"$x"
+      case Let(u, x, m, None, v, b) =>
+        s"(let ${u.prefix}$x ${if m then "" else ":"}= $v; $b)"
+      case Let(u, x, m, Some(t), v, b) =>
+        s"(let ${u.prefix}$x : $t ${if m then "" else ":"}= $v; $b)"
       case U(s) => s"$s"
 
       case IntLit(v)    => s"$v"

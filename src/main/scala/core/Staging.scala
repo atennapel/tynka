@@ -88,18 +88,18 @@ object Staging:
     v => eval1(t)(Def1(env, v))
 
   private def eval1(t: Tm)(implicit env: Env): Val1 = t match
-    case Var(x)                => vvar1(x)
-    case Global(x)             => eval1(getGlobal(x).get.tm)
-    case Prim(x)               => VPrim1(x, Nil)
-    case Lam(_, _, _, b)       => VLam1(clos1(b))
-    case App(f, a, _)          => vapp1(eval1(f), eval1(a))
-    case Proj(t, p, _, _)      => vproj1(eval1(t), p)
-    case Let(_, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
-    case Pair(fst, snd, _)     => VPair1(eval1(fst), eval1(snd))
-    case Quote(t)              => VQuote1(eval0(t))
-    case TCon(x, as)           => VTCon1(x, as.map(eval1))
-    case Wk(t)                 => eval1(t)(env.tail)
-    case StringLit(v)          => VStringLit1(v)
+    case Var(x)                   => vvar1(x)
+    case Global(x)                => eval1(getGlobal(x).get.tm)
+    case Prim(x)                  => VPrim1(x, Nil)
+    case Lam(_, _, _, b)          => VLam1(clos1(b))
+    case App(f, a, _)             => vapp1(eval1(f), eval1(a))
+    case Proj(t, p, _, _)         => vproj1(eval1(t), p)
+    case Let(_, _, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
+    case Pair(fst, snd, _)        => VPair1(eval1(fst), eval1(snd))
+    case Quote(t)                 => VQuote1(eval0(t))
+    case TCon(x, as)              => VTCon1(x, as.map(eval1))
+    case Wk(t)                    => eval1(t)(env.tail)
+    case StringLit(v)             => VStringLit1(v)
 
     case U(_)              => VType1
     case Pi(_, _, _, _, _) => VType1
@@ -146,7 +146,7 @@ object Staging:
         o.map(eval0)
       )
     case App(f, a, _) => VApp0(eval0(f), eval0(a))
-    case Let(x, t, _, bt, v, b) =>
+    case Let(_, x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
     case Splice(t)           => vsplice0(eval1(t))
     case Con(x, cx, tas, as) => VCon0(x, cx, tas.map(eval1), as.map(eval0))

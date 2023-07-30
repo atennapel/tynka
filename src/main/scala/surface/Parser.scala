@@ -224,11 +224,12 @@ object Parser:
 
     private lazy val let: Parsley[Tm] =
       positioned(
-        ("let" *> identOrOp <~> many(defParam) <~> option(
+        ("let" *> usage <~> identOrOp <~> many(defParam) <~> option(
           ":" *> tm
         ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
-          .map { case (((((x, ps), ty), m), v), b) =>
+          .map { case ((((((u, x), ps), ty), m), v), b) =>
             Let(
+              u,
               x,
               m,
               ty.map(typeFromParams(ps, _)),
@@ -240,7 +241,14 @@ object Parser:
 
     private enum DoEntry:
       case DoBind(pos: PosInfo, x: Bind, t: Option[Ty], v: Tm)
-      case DoLet(pos: PosInfo, x: Name, m: Boolean, t: Option[Ty], v: Tm)
+      case DoLet(
+          pos: PosInfo,
+          usage: Usage,
+          x: Name,
+          m: Boolean,
+          t: Option[Ty],
+          v: Tm
+      )
       case DoTm(t: Tm)
     import DoEntry.*
     private val bindVar = Var(Name(">>="))
@@ -280,7 +288,7 @@ object Parser:
                   ArgIcit(Expl)
                 )
               )
-            case (DoLet(p, x, m, t, v), b) => Pos(p, Let(x, m, t, v, b))
+            case (DoLet(p, u, x, m, t, v), b) => Pos(p, Let(u, x, m, t, v, b))
             // (>>=) v (\_. b)
             case (DoTm(v), b) =>
               App(
@@ -301,12 +309,12 @@ object Parser:
           DoBind(pos, x, t, v)
       } <|>
         attempt(
-          pos <~> "let" *> identOrOp <~> (":=" #> false <|> "=" #> true) <~> option(
+          pos <~> usage <~> "let" *> identOrOp <~> (":=" #> false <|> "=" #> true) <~> option(
             ":" *> tm
           ) <~> tm <* ";"
         )
-          .map { case ((((pos, x), m), t), v) =>
-            DoLet(pos, x, m, t, v)
+          .map { case (((((pos, u), x), m), t), v) =>
+            DoLet(pos, u, x, m, t, v)
           } <|> (tm <* ";").map(DoTm.apply)
 
     private type LamParam = (List[Bind], ArgInfo, Option[Ty])

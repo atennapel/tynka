@@ -48,8 +48,8 @@ object Zonking:
     case Irrelevant   => t
     case IntLit(_)    => t
     case StringLit(_) => t
-    case Let(x, t, s, bt, v, b) =>
-      Let(x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))
+    case Let(u, x, t, s, bt, v, b) =>
+      Let(u, x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))
     case U(s) => U(s.map(zonk))
 
     case Pi(u, x, i, t, b) => Pi(u, x, i, zonk(t), zonkLift(b))

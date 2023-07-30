@@ -82,11 +82,11 @@ object Pretty:
     case Prim(x)                     => s"$x"
     case IntLit(x)                   => s"$x"
     case StringLit(x)                => s"\"$x\""
-    case Let(x, t, s, _, v, b) =>
+    case Let(u, x, t, s, _, v, b) =>
       val ss = s match
         case SMeta  => ""
         case STy(_) => ":"
-      s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
+      s"let ${u.prefix}$x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
     case U(s) => pretty(s)
 
     case Pi(_, _, _, _, _) => prettyPi(tm)

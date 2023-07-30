@@ -489,7 +489,9 @@ object Elaboration:
         val (et, u) = check(t, a, STy(cv))
         (et.quote, u)
 
-      case (S.Let(x, m, t, v, b), _) if stage.isMeta == m =>
+      case (S.Let(u, x, m, t, v, b), _) if stage.isMeta == m =>
+        if !m && u != Many then
+          error(s"usage $u not allowed in non-meta level let")
         val valstage = if m then SMeta else STy(newCV())
         val vvalstage = ctx.eval(valstage)
         val (ev, et, vt, uv) = check(v, t, vvalstage)
@@ -497,8 +499,9 @@ object Elaboration:
         val (eb, us) = check(b, ty, stage)(
           ctx.define(Many, x, vt, et, vvalstage, valstage, ctx.eval(ev), ev)
         )
-        val (_, ub) = us.uncons
-        (Let(x, et, valstage, ctx.quote(ty), ev, eb), uv + ub)
+        val (ux, ub) = us.uncons
+        if !(ux <= u) then error(s"usage error: expected ${u} but was ${ux}")
+        (Let(u, x, et, valstage, ctx.quote(ty), ev, eb), (ux * uv) + ub)
 
       case (S.Hole(ox), _) =>
         val t = newMeta(ty, stage)
@@ -754,7 +757,9 @@ object Elaboration:
                   case Some(e) => (Global(x), e.vty, e.vstage, ctx.uses)
                   case None    => error(s"undefined variable $x")
 
-      case S.Let(x, m, t, v, b) =>
+      case S.Let(u, x, m, t, v, b) =>
+        if !m && u != Many then
+          error(s"usage $u not allowed in non-meta level let")
         val stage1 = if m then SMeta else STy(newCV())
         val vstage1 = ctx.eval(stage1)
         val stage2 = if m then SMeta else STy(newCV())
@@ -764,8 +769,14 @@ object Elaboration:
           infer(b, vstage2)(
             ctx.define(Many, x, vt, et, vstage1, stage1, ctx.eval(ev), ev)
           )
-        val (_, ub2) = ub.uncons
-        (Let(x, et, stage1, ctx.quote(rt), ev, eb), rt, vstage2, uv + ub2)
+        val (ux, ub2) = ub.uncons
+        if !(ux <= u) then error(s"usage error: expected ${u} but was ${ux}")
+        (
+          Let(u, x, et, stage1, ctx.quote(rt), ev, eb),
+          rt,
+          vstage2,
+          (ux * uv) + ub2
+        )
 
       case S.Pi(u, x, Impl, a, b) =>
         val (ea, u1) = checkType(a, SMeta)
@@ -1110,8 +1121,9 @@ object Elaboration:
       )
     case AppPruning(tm, spine) => AppPruning(replaceMeta(id, tm, ix), spine)
 
-    case Let(name, ty, stage, bty, value, body) =>
+    case Let(u, name, ty, stage, bty, value, body) =>
       Let(
+        u,
         name,
         replaceMeta(id, ty, ix),
         stage.map(replaceMeta(id, _, ix)),

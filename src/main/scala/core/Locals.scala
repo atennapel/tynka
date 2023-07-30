@@ -9,9 +9,10 @@ enum Locals:
   case Defined(locals: Locals, x: Name, ty: Ty, stage: CStage, tm: Tm)
 
   def closeTy(b: Ty): Ty = this match
-    case Empty                   => b
-    case Bound(ls, x, a, _)      => ls.closeTy(Pi(Many, x, Expl, a, b))
-    case Defined(ls, x, a, s, v) => ls.closeTy(Let(x, a, s, Irrelevant, v, b))
+    case Empty              => b
+    case Bound(ls, x, a, _) => ls.closeTy(Pi(Many, x, Expl, a, b))
+    case Defined(ls, x, a, s, v) =>
+      ls.closeTy(Let(Many, x, a, s, Irrelevant, v, b))
 
   def names: List[Name] = this match
     case Empty                   => Nil
