@@ -197,11 +197,25 @@ object Value:
       case VRigid(HPrim(PLabel), SId) => true
       case _                          => false
 
+  object VRW:
+    def apply(t: Val): Val = VRigid(HPrim(PRW), SApp(SId, t, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PRW), SApp(SId, t, Expl)) => Some(t)
+      case _                                      => None
+
   object VIO:
     def apply(t: Val): Val = VRigid(HPrim(PIO), SApp(SId, t, Expl))
     def unapply(value: Val): Option[Val] = value match
       case VRigid(HPrim(PIO), SApp(SId, t, Expl)) => Some(t)
       case _                                      => None
+
+  object VMutable:
+    def apply(l: Val, a: Val): Val =
+      VRigid(HPrim(PMutable), SApp(SApp(SId, l, Expl), a, Expl))
+    def unapply(value: Val): Option[(Val, Val)] = value match
+      case VRigid(HPrim(PMutable), SApp(SApp(SId, l, Expl), a, Expl)) =>
+        Some((l, a))
+      case _ => None
 
   object VForeignType:
     def apply(t: Val): Val = VRigid(HPrim(PForeignType), SApp(SId, t, Expl))

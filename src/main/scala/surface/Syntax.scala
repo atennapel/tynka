@@ -1,6 +1,7 @@
 package surface
 
 import common.Common.*
+import scala.runtime.LazyVals.Names
 
 object Syntax:
   final case class Defs(defs: List[Def]):
@@ -96,6 +97,8 @@ object Syntax:
 
     case Foreign(io: Boolean, rt: Ty, label: Tm, args: List[Tm])
 
+    case Mutable(con: Name, as: List[Tm], newToken: Tm, k: Tm)
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -134,7 +137,9 @@ object Syntax:
       case Foreign(_, rt, label, args) =>
         rt.free ++ label.free ++ args
           .map(_.free)
-          .foldLeft(List.empty[Name])(_ ++ _)
+          .flatten
+      case Mutable(c, as, n, k) =>
+        as.map(_.free).flatten ++ n.free ++ k.free
       case Hole(name)   => Nil
       case Pos(pos, tm) => tm.free
       case IntLit(_)    => Nil
@@ -176,6 +181,9 @@ object Syntax:
       case Foreign(false, rt, l, as)  => s"(foreign $rt $l ${as.mkString(" ")})"
       case Foreign(true, rt, l, Nil)  => s"(foreignIO $rt $l)"
       case Foreign(true, rt, l, as) => s"(foreignIO $rt $l ${as.mkString(" ")})"
+
+      case Mutable(c, as, n, k) =>
+        s"(mutable $c${if as.isEmpty then "" else s" ${as.mkString(" ")}"} $n $k)"
 
       case Match(scrut, cs, other) =>
         s"(match $scrut ${cs

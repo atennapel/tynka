@@ -189,8 +189,10 @@ object Common:
     case PNewScope
 
     case PMutable
+    case PMutableInternal
 
     case PRW
+    case PMutableFreeze
 
     override def toString: String = this match
       case PCV   => "CV"
@@ -217,9 +219,11 @@ object Common:
       case PNewDup   => "dupNew"
       case PNewScope => "scopeNew"
 
-      case PMutable => "Mutable"
+      case PMutable         => "Mutable"
+      case PMutableInternal => "internalMutable"
 
-      case PRW => "RW"
+      case PRW            => "RW"
+      case PMutableFreeze => "freezeMutable"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -243,7 +247,8 @@ object Common:
         "dupNew",
         "scopeNew",
         "Mutable",
-        "RW"
+        "RW",
+        "freezeMutable"
       )
         .map(Name.apply)
 
@@ -273,6 +278,7 @@ object Common:
 
       case "Mutable" => Some(PMutable)
 
-      case "RW" => Some(PRW)
+      case "RW"            => Some(PRW)
+      case "freezeMutable" => Some(PMutableFreeze)
 
       case _ => None

@@ -338,6 +338,10 @@ object Staging:
       case VSplicePrim0(PNewDup, List(_, _, _, k)) =>
         quote(vsplice0(vapp1(vapp1(k, gensym()), gensym())))
 
+      case VSplicePrim0(PMutableFreeze, List(_, _, _, v)) => quote(vsplice0(v))
+      case VSplicePrim0(PMutableInternal, List(_, _, _, v, _, k)) =>
+        quote(vsplice0(vapp1(vapp1(vapp1(k, gensym()), gensym()), v)))
+
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)
 

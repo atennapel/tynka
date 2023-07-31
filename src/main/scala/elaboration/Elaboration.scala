@@ -380,7 +380,8 @@ object Elaboration:
           .getOrElse(ctx.uses)
         val (eb, us2) = check(b, ctx.inst(rt), SMeta)(ctx.bind(u, x, a, SMeta))
         val (uhd, utl) = us2.uncons
-        if !(uhd <= u) then error(s"usage error: expected ${u} but was ${uhd}")
+        if !(uhd <= u) then
+          error(s"usage error for $x: expected ${u} but was ${uhd}")
         (Lam(x, i2, ctx.quote(ty), eb), us1 + utl)
       case (S.Lam(x, S.ArgIcit(Expl), ot, b), VFun(a, cv, rt)) =>
         val u1 = ot
@@ -401,7 +402,8 @@ object Elaboration:
         val (etm, us) =
           check(tm, ctx.inst(b), SMeta)(ctx.bind(u, x, a, SMeta, true))
         val (uhd, utl) = us.uncons
-        if !(uhd <= u) then error(s"usage error: expected ${u} but was ${uhd}")
+        if !(uhd <= u) then
+          error(s"usage error for $x: expected ${u} but was ${uhd}")
         (Lam(x, Impl, ctx.quote(ty), etm), utl)
 
       case (S.Pair(fst, snd), VSigma(_, a, b)) =>
@@ -500,7 +502,8 @@ object Elaboration:
           ctx.define(Many, x, vt, et, vvalstage, valstage, ctx.eval(ev), ev)
         )
         val (ux, ub) = us.uncons
-        if !(ux <= u) then error(s"usage error: expected ${u} but was ${ux}")
+        if !(ux <= u) then
+          error(s"usage error for $x: expected ${u} but was ${ux}")
         (Let(u, x, et, valstage, ctx.quote(ty), ev, eb), (u * uv) + ub)
 
       case (S.Hole(ox), _) =>
@@ -770,7 +773,8 @@ object Elaboration:
             ctx.define(Many, x, vt, et, vstage1, stage1, ctx.eval(ev), ev)
           )
         val (ux, ub2) = ub.uncons
-        if !(ux <= u) then error(s"usage error: expected ${u} but was ${ux}")
+        if !(ux <= u) then
+          error(s"usage error for $x: expected ${u} but was ${ux}")
         (
           Let(u, x, et, stage1, ctx.quote(rt), ev, eb),
           rt,
@@ -1024,6 +1028,62 @@ object Elaboration:
         val us = eas1.map(_._3).foldLeft(u1 + u2)(_ + _)
         if io then (Foreign(ert, el, eas), VIO(ctx.eval(ert)), SCTy(), us)
         else (Foreign(ert, el, eas), ctx.eval(ert), SVTy(), us)
+
+      case S.Mutable(c, as, n, k) =>
+        getGlobalCon(c) match
+          case None => error(s"undefined constructor $c")
+          case Some((dx, cas)) =>
+            val (dps, cons) = getGlobalData(dx).get
+            val vdps = dps.map(_ => ctx.eval(newMeta(VVTy(), SMeta)))
+            val vd = VTCon(dx, vdps)
+            val ctxConsTypes = datatypeCtx(dps, vdps)
+            val eas0 = as
+              .zip(cas)
+              .map((a, t) => check(a, ctxConsTypes.eval(t), SVTy()))
+            val eas = eas0.map(_._1)
+            val uas = eas0.map(_._2).foldLeft(ctx.uses)((a, u) => u + a)
+            val (en, un) = check(n, VNew(), SMeta)
+            val cv = ctx.eval(newMeta(VCV(), SMeta))
+            val r = ctx.eval(newMeta(VUTy(cv), SMeta))
+            // k : {l : Label} (1 _: RW) -> ^(Mutable l A) -> ^R
+            val tk =
+              vpiI(
+                "l",
+                VLabel(),
+                l =>
+                  vfun1(
+                    VRW(l),
+                    vfun(VLift(VVal(), VMutable(l, vd)), VLift(cv, r))
+                  )
+              )
+            val (ek, uk) = check(k, tk, SMeta)
+            // internalMutable {vd} {cv} {r} (c as...) n k
+            (
+              App(
+                App(
+                  App(
+                    App(
+                      App(
+                        App(Prim(PMutableInternal), ctx.quote(vd), Impl),
+                        ctx.quote(cv),
+                        Impl
+                      ),
+                      ctx.quote(r),
+                      Impl
+                    ),
+                    Con(dx, c, vdps.map(v => ctx.quote(v)), eas).quote,
+                    Expl
+                  ),
+                  en,
+                  Expl
+                ),
+                ek,
+                Expl
+              ),
+              VLift(cv, r),
+              SMeta,
+              uas + un + uk
+            )
 
   // elaboration
   private def prettyHoles(implicit ctx0: Ctx): String =

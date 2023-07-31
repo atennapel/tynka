@@ -374,9 +374,68 @@ object Evaluation:
 
     // Label -> VTy -> VTy
     case PMutable => (vfun(VLabel(), vfun(VVTy(), VVTy())), SMeta)
+    // {A : VTy} {cv : CV} {R : Ty cv} -> ^A -> (1 new : New) -> (1 k : {l : Label} -> (1 rw : RW l) -> ^(Mutable l A) -> ^R) -> ^R
+    case PMutableInternal =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "cv",
+              VCV(),
+              cv =>
+                vpiI(
+                  "R",
+                  VUTy(cv),
+                  r =>
+                    val la = VLift(VVal(), a)
+                    val lr = VLift(cv, r)
+                    vfun(
+                      la,
+                      vfun1(
+                        VNew(),
+                        vfun1(
+                          vpiI(
+                            "l",
+                            VLabel(),
+                            l =>
+                              vfun1(
+                                VRW(l),
+                                vfun(VLift(VVal(), VMutable(l, a)), lr)
+                              )
+                          ),
+                          lr
+                        )
+                      )
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
 
     // Label -> VTy
     case PRW => (vfun(VLabel(), VUMeta()), SMeta)
+    // {A : VTy} {l : Label} -> (1 rw : RW) -> ^(Mutable l A) -> ^A
+    case PMutableFreeze =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "l",
+              VLabel(),
+              l =>
+                vfun1(
+                  VRW(l),
+                  vfun(VLift(VVal(), VMutable(l, a)), VLift(VVal(), a))
+                )
+            )
+        ),
+        SMeta
+      )
 
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))
