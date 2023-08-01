@@ -436,6 +436,42 @@ object Evaluation:
         ),
         SMeta
       )
+    // {l : Label} -> (1 rw : RW l) -> ()
+    case PMutableDrop =>
+      (vpiI("l", VLabel(), l => vfun1(VRW(l), VUnitType())), SMeta)
+    // {l : Label} {A : VTy} {cv : CV} {R : Ty cv} -> (1 _ : RW l) -> ^(Mutable l A) -> (1 _ : (1 _ : RW l) -> ^A -> ^R) -> ^R
+    case PMutableGet =>
+      (
+        vpiI(
+          "l",
+          VLabel(),
+          l =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpiI(
+                  "cv",
+                  VCV(),
+                  cv =>
+                    vpiI(
+                      "R",
+                      VUTy(cv),
+                      r =>
+                        val lr = VLift(cv, r)
+                        vfun1(
+                          VRW(l),
+                          vfun(
+                            VLift(VVal(), VMutable(l, a)),
+                            vfun1(vfun1(VRW(l), vfun(VLift(VVal(), a), lr)), lr)
+                          )
+                        )
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
 
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))

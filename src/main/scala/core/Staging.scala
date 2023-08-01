@@ -80,6 +80,7 @@ object Staging:
           VStringLit1(a + b)
         case (PConsumeLinearUnit, List(_, _, v)) => v
         case (PNewDrop, List(_))                 => VPrim1(PUnit, Nil)
+        case (PMutableDrop, List(_, _))          => VPrim1(PUnit, Nil)
         case _                                   => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
@@ -339,8 +340,28 @@ object Staging:
         quote(vsplice0(vapp1(vapp1(k, gensym()), gensym())))
 
       case VSplicePrim0(PMutableFreeze, List(_, _, _, v)) => quote(vsplice0(v))
-      case VSplicePrim0(PMutableInternal, List(_, _, _, v, _, k)) =>
-        quote(vsplice0(vapp1(vapp1(vapp1(k, gensym()), gensym()), v)))
+      case VSplicePrim0(PMutableInternal, List(ta, _, tr, v, _, k)) =>
+        val x = fresh()
+        val qt1 = IR.TDef(quoteVTy(ta))
+        val qt2 = quoteCTy(tr)
+        IR.Let(
+          x,
+          qt1,
+          qt2,
+          quote(vsplice0(v)),
+          quote(
+            vsplice0(
+              vapp1(vapp1(vapp1(k, gensym()), gensym()), VQuote1(VVar0(l)))
+            )
+          )(
+            l + 1,
+            (x, qt1) :: ns,
+            fresh,
+            dmono
+          )
+        )
+      case VSplicePrim0(PMutableGet, List(_, _, _, _, rw, v, k)) =>
+        quote(vsplice0(vapp1(vapp1(k, rw), v)))
 
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)
