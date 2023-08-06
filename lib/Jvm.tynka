@@ -83,6 +83,10 @@ def Str/case {cv : CV} {A : Ty cv} (x : Str) (ifEmpty : A) (ifNonEmpty : Char ->
   else
     ifNonEmpty (Str/unsafeIndex 0 x) (Str/unsafeSubstringFrom 1 x)
 
+-- arrays
+def arrayNew {A : VTy} (length : Int) (initial : A) : IO (Array A) =
+  foreignIO (Array A) "newArray" length initial
+
 -- etc
 def parseInt (s : Str) : Option Int :=
   catch "java/lang/NumberFormatException" (

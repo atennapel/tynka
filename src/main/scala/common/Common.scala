@@ -178,6 +178,8 @@ object Common:
     case PBindIO
     case PRunIO
 
+    case PArray
+
     case PLabel
     case PEqLabel
     case PAppendLabel
@@ -212,6 +214,8 @@ object Common:
       case PBindIO   => "bindIO"
       case PRunIO    => "unsafePerformIO"
 
+      case PArray => "Array"
+
       case PLabel       => "Label"
       case PEqLabel     => "eqLabel"
       case PAppendLabel => "appendLabel"
@@ -245,6 +249,7 @@ object Common:
         "returnIO",
         "bindIO",
         "unsafePerformIO",
+        "Array",
         "Label",
         "eqLabel",
         "appendLabel",
@@ -275,6 +280,8 @@ object Common:
       case "returnIO"        => Some(PReturnIO)
       case "bindIO"          => Some(PBindIO)
       case "unsafePerformIO" => Some(PRunIO)
+
+      case "Array" => Some(PArray)
 
       case "Label"       => Some(PLabel)
       case "eqLabel"     => Some(PEqLabel)

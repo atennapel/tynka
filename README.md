@@ -23,6 +23,9 @@ TODO:
 - [x] Imports
 - [x] Add mutable
 - [ ] Add mutate
+- [ ] Add IO Array get, put and length
+- [ ] Meta newtypes
+- [ ] ST monad
 - [ ] Modules
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines

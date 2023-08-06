@@ -53,6 +53,9 @@ object JvmGenerator:
   private val cons: mutable.Map[GName, mutable.Map[GName, (Type, List[Ty])]] =
     mutable.Map.empty
 
+  private def conIsFirst(dx: GName, cx: GName): Boolean =
+    tcons(dx)._3.head == cx
+
   private def name(x: GName)(implicit ctx: Ctx): GName = s"${escape(x)}"
 
   def generate(moduleGName: String, ds: Defs): Unit =
@@ -131,6 +134,7 @@ object JvmGenerator:
     bos.close()
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
+    case TArray(ty)    => Type.getType(s"[${gen(ty).getDescriptor()};")
     case TForeign(cls) => Type.getType(cls)
     case TCon(x) =>
       val (t, k, _) = tcons(x)
@@ -153,6 +157,7 @@ object JvmGenerator:
   private def descriptorIsPrimitive(d: String): Boolean = primitives.contains(d)
 
   private def isBoxed(t: Ty): Boolean = t match
+    case TArray(_)                               => true
     case TForeign(d) if descriptorIsPrimitive(d) => false
     case TForeign(_)                             => true
     case TCon(x) =>
@@ -713,6 +718,49 @@ object JvmGenerator:
         ty,
         Method("<init>", Type.VOID_TYPE, as.map((_, t) => gen(t)).toArray)
       )
+    case Foreign(
+          rt @ TArray(ty),
+          "newArray",
+          List((length, _), (initial, _))
+        ) =>
+      val ety = gen(ty)
+      gen(length)
+      (ety.getDescriptor(), initial) match
+        case (d, IntLit(0)) if descriptorIsPrimitive(d) => mg.newArray(ety)
+        case (d, Con(dx, cx, Nil))
+            if descriptorIsPrimitive(d) && conIsFirst(dx, cx) =>
+          mg.newArray(ety)
+        case _ =>
+          val lengthLocal = mg.newLocal(Type.INT_TYPE)
+          mg.storeLocal(lengthLocal)
+          mg.loadLocal(lengthLocal)
+          mg.newArray(ety)
+          gen(initial)
+          mg.push(0)
+          val indexLocal = mg.newLocal(Type.INT_TYPE)
+          mg.storeLocal(indexLocal)
+          val start = mg.newLabel()
+          val end = mg.newLabel()
+          /*
+          array
+          value
+           */
+          mg.visitLabel(start)
+          // jump to end if index >= length
+          mg.loadLocal(indexLocal)
+          mg.loadLocal(lengthLocal)
+          mg.ifICmp(IFGE, end)
+          // set value in array
+          mg.dup2()
+          mg.loadLocal(indexLocal)
+          mg.swap()
+          mg.arrayStore(ety)
+          // inc index
+          mg.iinc(indexLocal, 1)
+          mg.visitJumpInsn(GOTO, start)
+          mg.visitLabel(end)
+          mg.pop()
+
     case Foreign(rt, cmd0, as) =>
       val (cmd, arg) = splitForeign(cmd0)
       (cmd, arg, as) match

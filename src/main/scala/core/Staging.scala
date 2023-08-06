@@ -9,6 +9,7 @@ import ir.Syntax as IR
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable.ListMap
+import jvmir.JvmName.escape
 
 object Staging:
   // evaluation
@@ -190,6 +191,7 @@ object Staging:
       case IR.TCon(x) => repData(defCache.find(d => d.name == x).get.cs)
       case IR.TForeign(x) if descriptorIsPrimitive(x) => x
       case IR.TForeign(x)                             => "BOX"
+      case IR.TArray(_)                               => "BOX"
     private def repData(cs: List[(String, List[IR.Ty])]): String = cs match
       case Nil                                  => "Z"
       case List((_, Nil))                       => "Z"
@@ -206,6 +208,7 @@ object Staging:
           case IR.TCon(x) => x
           case IR.TForeign(x) =>
             x.replace(";", "").replace("/", "_").replace("\\", "_")
+          case IR.TArray(ty) => s"Array_${escapeTy(ty)}"
       else r
 
     def get(name: Name, cparams: List[Val1]): IR.GName =
@@ -236,6 +239,7 @@ object Staging:
         val dx = dmono.get(x, as)
         IR.TCon(dx)
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
+      case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
       case _                                          => impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
