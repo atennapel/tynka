@@ -22,11 +22,14 @@ TODO:
 - [x] Do syntax for monads
 - [x] Imports
 - [x] Add mutable
+- [x] Add arrays in IO
 - [ ] Add mutate
-- [ ] Add IO Array get, put and length
 - [ ] Meta newtypes
 - [ ] ST monad
 - [ ] Modules
+- [ ] Remove unused definitions
+- [ ] Fix duplicate definitions import bug
+- [ ] Improve do syntax bind specification
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions

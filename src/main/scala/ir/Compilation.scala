@@ -141,178 +141,179 @@ object Compilation:
       globalgen: GlobalGen,
       localgen: LocalGen,
       defname: GName
-  ): Tm = tm match
-    case Var(x, t)    => tm
-    case Global(x, t) => tm
-    case IntLit(n)    => tm
-    case BoolLit(n)   => tm
-    case StringLit(v) => tm
+  ): Tm =
+    tm match
+      case Var(x, t)    => tm
+      case Global(x, t) => tm
+      case IntLit(n)    => tm
+      case BoolLit(n)   => tm
+      case StringLit(v) => tm
 
-    case Con(x, cx, as)   => Con(x, cx, as.map(conv))
-    case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
+      case Con(x, cx, as)   => Con(x, cx, as.map(conv))
+      case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
 
-    case Field(dty, cx, s, i) =>
-      conv(s) match
-        case Con(name, con, as) => as(i)
-        case cs                 => Field(dty, cx, cs, i)
+      case Field(dty, cx, s, i) =>
+        conv(s) match
+          case Con(name, con, as) => as(i)
+          case cs                 => Field(dty, cx, cs, i)
 
-    case App(f, a) =>
-      conv(f) match
-        case Lam(x, t, rt, b)    => conv(Let(x, TDef(t), rt, a, b))
-        case Let(x, t, rt, v, b) => conv(Let(x, t, rt.tail, v, App(b, a)))
-        case f                   => App(f, conv(a))
+      case App(f, a) =>
+        conv(f) match
+          case Lam(x, t, rt, b)    => conv(Let(x, TDef(t), rt, a, b))
+          case Let(x, t, rt, v, b) => conv(Let(x, t, rt.tail, v, App(b, a)))
+          case f                   => App(f, conv(a))
 
-    case Let(x, t, bt, v, b) =>
-      conv(v) match
-        case Let(y, t2, bt2, v2, b2) =>
-          conv(Let(y, t2, bt, v2, Let(x, t, bt, b2, b)))
-        case v =>
-          val c = b.fvs.count((y, _) => x == y)
-          if c == 0 then conv(b)
-          else if c == 1 || isSmall(v) then conv(b.subst(Map(x -> v)))
-          else if !t.io && t.ps.isEmpty then
-            val (vs, spine) = eta(bt.params)
-            Let(x, t, TDef(bt.io, bt.rt), v, conv(b.apps(spine)))
-              .lams(vs, TDef(bt.io, bt.rt))
-          else
-            val (vs, spine) = eta(t.params)
-            val fv = v.fvs.map((x, t) => (x, t.ty)).distinctBy((y, _) => y)
-            val nps = fv ++ vs
-            val args = nps.zipWithIndex.map { case ((x, _), ix) =>
-              x -> ix
-            }.toMap
-            val gx = globalgen.gen()
-            defs += DDef(
-              gx,
-              true,
-              TDef(fv.map(_._2), t),
-              conv(v.apps(spine).lams(nps, TDef(t.io, t.rt)))
-            )
-            val gl = Global(gx, TDef(nps.map(_._2), t.io, t.rt))
-              .apps(fv.map((x, t) => Var(x, TDef(t))))
-            val (vs2, spine2) = eta(bt.params)
-            conv(
-              b.subst(Map(x -> gl)).apps(spine2).lams(vs2, TDef(bt.io, bt.rt))
-            )
+      case Let(x, t, bt, v, b) =>
+        conv(v) match
+          case Let(y, t2, bt2, v2, b2) =>
+            conv(Let(y, t2, bt, v2, Let(x, t, bt, b2, b)))
+          case v =>
+            val c = b.fvs.count((y, _) => x == y)
+            if c == 0 then conv(b)
+            else if c == 1 || isSmall(v) then conv(b.subst(Map(x -> v)))
+            else if !t.io && t.ps.isEmpty then
+              val (vs, spine) = eta(bt.params)
+              Let(x, t, TDef(bt.io, bt.rt), v, conv(b.apps(spine)))
+                .lams(vs, TDef(bt.io, bt.rt))
+            else
+              val (vs, spine) = eta(t.params)
+              val fv = v.fvs.map((x, t) => (x, t.ty)).distinctBy((y, _) => y)
+              val nps = fv ++ vs
+              val args = nps.zipWithIndex.map { case ((x, _), ix) =>
+                x -> ix
+              }.toMap
+              val gx = globalgen.gen()
+              defs += DDef(
+                gx,
+                true,
+                TDef(fv.map(_._2), t),
+                conv(v.apps(spine).lams(nps, TDef(t.io, t.rt)))
+              )
+              val gl = Global(gx, TDef(nps.map(_._2), t.io, t.rt))
+                .apps(fv.map((x, t) => Var(x, TDef(t))))
+              val (vs2, spine2) = eta(bt.params)
+              conv(
+                b.subst(Map(x -> gl)).apps(spine2).lams(vs2, TDef(bt.io, bt.rt))
+              )
 
-    case Fix(t1, t2, g, x, b0, arg) =>
-      val (vs, spine) = eta(t2.params)
-      val fv = b0.fvs
-        .filterNot((y, _) => y == g || y == x)
-        .map((x, t) => (x, t.ty))
-        .distinctBy((y, _) => y)
-      val nps = fv ++ List((x, t1)) ++ vs
-      val args = nps.zipWithIndex.map { case ((x, _), ix) =>
-        x -> ix
-      }.toMap
-      val gx = globalgen.gen()
-      val gl = Global(gx, TDef(nps.map(_._2), t2.io, t2.rt))
-        .apps(fv.map((x, t) => Var(x, TDef(t))))
-      val b = conv(
-        b0.apps(spine).lams(nps, TDef(t2.io, t2.rt)).subst(Map(g -> gl))
-      )
-      defs += DDef(
-        gx,
-        true,
-        TDef(fv.map(_._2) ++ List(t1), t2),
-        b
-      )
-      App(gl, conv(arg))
-
-    case Match(dty, rty, mx, scrut, cs, other) =>
-      conv(scrut) match
-        case v @ BoolLit(b) =>
-          cs.toMap.get(if b then "True" else "False") match
-            case Some(b) => conv(b.subst(Map(mx -> v)))
-            case None    => impossible()
-        case v @ Con(_, x, as) =>
-          cs.toMap.get(x) match
-            case Some(b) => conv(b.subst(Map(mx -> v)))
-            case None    => conv(other.get)
-        case v @ cscrut =>
-          val (vs, spine) = eta(rty.params)
-          Match(
-            dty,
-            TDef(rty.io, rty.rt),
-            mx,
-            cscrut,
-            cs.map((x, t) => (x, conv(t.apps(spine)))),
-            other.map(t => conv(t.apps(spine)))
-          ).lams(vs, TDef(rty.io, rty.rt))
-
-    case ReturnIO(v) => ReturnIO(conv(v))
-    case BindIO(t1, t2, x, v, b) =>
-      conv(v) match
-        case BindIO(t3, t4, y, v2, b2) =>
-          conv(BindIO(t3, t2, y, v2, BindIO(t4, t2, x, b2, b)))
-        case ReturnIO(v) => b.subst(Map(x -> v))
-        case v           => BindIO(t1, t2, x, v, conv(b))
-    case RunIO(c) =>
-      conv(c) match
-        case ReturnIO(v) => v
-        case c           => RunIO(c)
-
-    case Foreign(io, rt, l, as) =>
-      (l, as.map((a, _) => conv(a))) match
-        // +
-        case ("op:96", List(IntLit(a), IntLit(b))) => IntLit(a + b)
-        case ("op:96", List(a, IntLit(0)))         => a
-        case ("op:96", List(IntLit(0), b))         => b
-        // -
-        case ("op:100", List(IntLit(a), IntLit(b))) => IntLit(a - b)
-        case ("op:100", List(IntLit(0), b)) =>
-          conv(Foreign(io, rt, "op:116", List((b, as(1)._2))))
-        case ("op:100", List(a, IntLit(0))) => a
-        // *
-        case ("op:104", List(_, IntLit(0)))         => IntLit(0)
-        case ("op:104", List(IntLit(0), _))         => IntLit(0)
-        case ("op:104", List(a, IntLit(1)))         => a
-        case ("op:104", List(IntLit(1), a))         => a
-        case ("op:104", List(IntLit(a), IntLit(b))) => IntLit(a * b)
-        // /
-        case ("op:108", List(IntLit(a), IntLit(b))) => IntLit(a / b)
-        case ("op:108", List(a, IntLit(1)))         => a
-        // %
-        case ("op:112", List(IntLit(a), IntLit(b))) => IntLit(a % b)
-        case ("op:112", List(a, IntLit(1)))         => IntLit(0)
-        // neg
-        case ("op:116", List(IntLit(a))) => IntLit(-a)
-        // ==
-        case ("branch:153", List(IntLit(a), IntLit(b))) =>
-          BoolLit(a == b)
-        // !=
-        case ("branch:154", List(IntLit(a), IntLit(b))) =>
-          BoolLit(a != b)
-        // <
-        case ("branch:155", List(IntLit(a), IntLit(b))) =>
-          BoolLit(a < b)
-        // >
-        case ("branch:157", List(IntLit(a), IntLit(b))) =>
-          BoolLit(a > b)
-        // <=
-        case ("branch:158", List(IntLit(a), IntLit(b))) =>
-          BoolLit(a <= b)
-        // >=
-        case ("branch:156", List(IntLit(a), IntLit(b))) =>
-          BoolLit(a >= b)
-
-        case (
-              "invokeVirtual:java.lang.String.concat",
-              List(StringLit(""), b)
-            ) =>
+      case Fix(t1, t2, g, x, b0, arg) =>
+        val (vs, spine) = eta(t2.params)
+        val fv = b0.fvs
+          .filterNot((y, _) => y == g || y == x)
+          .map((x, t) => (x, t.ty))
+          .distinctBy((y, _) => y)
+        val nps = fv ++ List((x, t1)) ++ vs
+        val args = nps.zipWithIndex.map { case ((x, _), ix) =>
+          x -> ix
+        }.toMap
+        val gx = globalgen.gen()
+        val gl = Global(gx, TDef(nps.map(_._2), t2.io, t2.rt))
+          .apps(fv.map((x, t) => Var(x, TDef(t))))
+        val b = conv(
+          b0.subst(Map(g -> gl)).apps(spine).lams(nps, TDef(t2.io, t2.rt))
+        )
+        defs += DDef(
+          gx,
+          true,
+          TDef(fv.map(_._2) ++ List(t1), t2),
           b
-        case (
-              "invokeVirtual:java.lang.String.concat",
-              List(a, StringLit(""))
-            ) =>
-          a
-        case (
-              "invokeVirtual:java.lang.String.concat",
-              List(StringLit(a), StringLit(b))
-            ) =>
-          StringLit(a + b)
+        )
+        App(gl, conv(arg))
 
-        case (l, gas) => Foreign(io, rt, l, gas.zip(as.map(_._2)))
+      case Match(dty, rty, mx, scrut, cs, other) =>
+        conv(scrut) match
+          case v @ BoolLit(b) =>
+            cs.toMap.get(if b then "True" else "False") match
+              case Some(b) => conv(b.subst(Map(mx -> v)))
+              case None    => impossible()
+          case v @ Con(_, x, as) =>
+            cs.toMap.get(x) match
+              case Some(b) => conv(b.subst(Map(mx -> v)))
+              case None    => conv(other.get)
+          case v @ cscrut =>
+            val (vs, spine) = eta(rty.params)
+            Match(
+              dty,
+              TDef(rty.io, rty.rt),
+              mx,
+              cscrut,
+              cs.map((x, t) => (x, conv(t.apps(spine)))),
+              other.map(t => conv(t.apps(spine)))
+            ).lams(vs, TDef(rty.io, rty.rt))
+
+      case ReturnIO(v) => ReturnIO(conv(v))
+      case BindIO(t1, t2, x, v, b) =>
+        conv(v) match
+          case BindIO(t3, t4, y, v2, b2) =>
+            conv(BindIO(t3, t2, y, v2, BindIO(t4, t2, x, b2, b)))
+          case ReturnIO(v) => b.subst(Map(x -> v))
+          case v           => BindIO(t1, t2, x, v, conv(b))
+      case RunIO(c) =>
+        conv(c) match
+          case ReturnIO(v) => v
+          case c           => RunIO(c)
+
+      case Foreign(io, rt, l, as) =>
+        (l, as.map((a, _) => conv(a))) match
+          // +
+          case ("op:96", List(IntLit(a), IntLit(b))) => IntLit(a + b)
+          case ("op:96", List(a, IntLit(0)))         => a
+          case ("op:96", List(IntLit(0), b))         => b
+          // -
+          case ("op:100", List(IntLit(a), IntLit(b))) => IntLit(a - b)
+          case ("op:100", List(IntLit(0), b)) =>
+            conv(Foreign(io, rt, "op:116", List((b, as(1)._2))))
+          case ("op:100", List(a, IntLit(0))) => a
+          // *
+          case ("op:104", List(_, IntLit(0)))         => IntLit(0)
+          case ("op:104", List(IntLit(0), _))         => IntLit(0)
+          case ("op:104", List(a, IntLit(1)))         => a
+          case ("op:104", List(IntLit(1), a))         => a
+          case ("op:104", List(IntLit(a), IntLit(b))) => IntLit(a * b)
+          // /
+          case ("op:108", List(IntLit(a), IntLit(b))) => IntLit(a / b)
+          case ("op:108", List(a, IntLit(1)))         => a
+          // %
+          case ("op:112", List(IntLit(a), IntLit(b))) => IntLit(a % b)
+          case ("op:112", List(a, IntLit(1)))         => IntLit(0)
+          // neg
+          case ("op:116", List(IntLit(a))) => IntLit(-a)
+          // ==
+          case ("branch:153", List(IntLit(a), IntLit(b))) =>
+            BoolLit(a == b)
+          // !=
+          case ("branch:154", List(IntLit(a), IntLit(b))) =>
+            BoolLit(a != b)
+          // <
+          case ("branch:155", List(IntLit(a), IntLit(b))) =>
+            BoolLit(a < b)
+          // >
+          case ("branch:157", List(IntLit(a), IntLit(b))) =>
+            BoolLit(a > b)
+          // <=
+          case ("branch:158", List(IntLit(a), IntLit(b))) =>
+            BoolLit(a <= b)
+          // >=
+          case ("branch:156", List(IntLit(a), IntLit(b))) =>
+            BoolLit(a >= b)
+
+          case (
+                "invokeVirtual:java.lang.String.concat",
+                List(StringLit(""), b)
+              ) =>
+            b
+          case (
+                "invokeVirtual:java.lang.String.concat",
+                List(a, StringLit(""))
+              ) =>
+            a
+          case (
+                "invokeVirtual:java.lang.String.concat",
+                List(StringLit(a), StringLit(b))
+              ) =>
+            StringLit(a + b)
+
+          case (l, gas) => Foreign(io, rt, l, gas.zip(as.map(_._2)))
 
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)      => true

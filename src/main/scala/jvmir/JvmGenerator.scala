@@ -134,7 +134,7 @@ object JvmGenerator:
     bos.close()
 
   private def gen(t: Ty)(implicit ctx: Ctx): Type = t match
-    case TArray(ty)    => Type.getType(s"[${gen(ty).getDescriptor()};")
+    case TArray(ty)    => Type.getType(s"[${gen(ty).getDescriptor()}")
     case TForeign(cls) => Type.getType(cls)
     case TCon(x) =>
       val (t, k, _) = tcons(x)
@@ -720,7 +720,15 @@ object JvmGenerator:
       )
     case Foreign(
           rt @ TArray(ty),
-          "newArray",
+          "arrayUnsafeNew",
+          List((length, _))
+        ) =>
+      val ety = gen(ty)
+      gen(length)
+      mg.newArray(ety)
+    case Foreign(
+          rt @ TArray(ty),
+          "arrayNew",
           List((length, _), (initial, _))
         ) =>
       val ety = gen(ty)
@@ -760,7 +768,33 @@ object JvmGenerator:
           mg.visitJumpInsn(GOTO, start)
           mg.visitLabel(end)
           mg.pop()
-
+    case Foreign(
+          ty,
+          "arrayGet",
+          List((index, _), (array, _))
+        ) =>
+      val ety = gen(ty)
+      gen(array)
+      gen(index)
+      mg.arrayLoad(ety)
+    case Foreign(
+          _,
+          "arraySet",
+          List((index, _), (value, _), (array, TArray(ty)))
+        ) =>
+      val ety = gen(ty)
+      gen(array)
+      gen(index)
+      gen(value)
+      mg.arrayStore(ety)
+      mg.push(false)
+    case Foreign(
+          _,
+          "arrayLength",
+          List((array, _))
+        ) =>
+      gen(array)
+      mg.arrayLength()
     case Foreign(rt, cmd0, as) =>
       val (cmd, arg) = splitForeign(cmd0)
       (cmd, arg, as) match

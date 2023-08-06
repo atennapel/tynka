@@ -1,0 +1,21 @@
+import "lib/Base"
+import "lib/IO"
+import "lib/Jvm"
+import "lib/Array"
+
+def Ref A = Array A
+
+def Ref/new {A : VTy} (x : A) : IO (Ref A) = Array/new 1 x
+
+def Ref/unsafeNew {A : VTy} : IO (Ref A) = Array/unsafeNew 1
+
+def Ref/get {A : VTy} (ref : Ref A) : IO A = Array/get 0 ref
+
+def Ref/set {A : VTy} (x : A) (ref : Ref A) : IO Unit = Array/set 0 x ref
+
+def Ref/getSet {A : VTy} (x : A) (ref : Ref A) : IO A = Array/update 0 (\_. x) ref
+
+def Ref/updateIO {A : VTy} (f : A -> IO A) (ref : Ref A) : IO A = Array/updateIO 0 f ref
+
+def Ref/update {A : VTy} (f : A -> A) (ref : Ref A) : IO A =
+  Ref/updateIO (\x. IO/return (f x)) ref

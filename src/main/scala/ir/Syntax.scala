@@ -253,7 +253,7 @@ object Syntax:
           case Nil => (nps, b.subst(sub, scope))
           case (x, t) :: ps =>
             if scope.contains(x) then
-              val y = scope.max
+              val y = scope.max + 1
               go(
                 ps,
                 nps ++ List((y, t)),
