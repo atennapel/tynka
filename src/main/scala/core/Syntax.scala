@@ -73,7 +73,7 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
-    case Foreign(rt: Ty, cmd: Tm, args: List[(Tm, Ty)])
+    case Foreign(io: Boolean, rt: Ty, cmd: Tm, args: List[(Tm, Ty)])
 
     case TCon(name: Name, args: List[Ty])
     case Con(name: Name, con: Name, targs: List[Ty], args: List[Tm])
@@ -143,7 +143,7 @@ object Syntax:
       case Meta(id)              => Set(id)
       case AppPruning(tm, spine) => tm.metas
       case Irrelevant            => Set.empty
-      case Foreign(rt, cmd, args) =>
+      case Foreign(_, rt, cmd, args) =>
         rt.metas ++ cmd.metas ++ args
           .map((a, b) => a.metas ++ b.metas)
           .foldLeft(Set.empty[MetaId])(_ ++ _)
@@ -177,9 +177,10 @@ object Syntax:
       case Quote(t)   => s"`$t"
       case Splice(t)  => s"$$$t"
 
-      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
-      case Foreign(rt, cmd, as) =>
-        s"(foreign $rt $cmd ${as.map(_._1).mkString(" ")})"
+      case Foreign(io, rt, cmd, Nil) =>
+        s"(foreign${if io then "IO" else ""} $rt $cmd)"
+      case Foreign(io, rt, cmd, as) =>
+        s"(foreign${if io then "IO" else ""} $rt $cmd ${as.map(_._1).mkString(" ")})"
 
       case TCon(name, Nil)      => s"(tcon $name)"
       case TCon(name, as)       => s"(tcon $name ${as.mkString(" ")})"

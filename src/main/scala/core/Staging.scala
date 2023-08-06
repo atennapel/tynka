@@ -58,7 +58,7 @@ object Staging:
     case VCon0(x: Name, con: Name, tas: List[Val1], as: List[Val0])
     case VStringLit0(v: String)
     case VIntLit0(v: Int)
-    case VForeign0(ty: Val1, cmd: String, as: List[(Val0, Val1)])
+    case VForeign0(io: Boolean, ty: Val1, cmd: String, as: List[(Val0, Val1)])
   import Val0.*
 
   private def vvar1(ix: Ix)(implicit env: Env): Val1 =
@@ -162,11 +162,11 @@ object Staging:
     case Wk(t)               => eval0(t)(env.tail)
     case StringLit(v)        => VStringLit0(v)
     case IntLit(v)           => VIntLit0(v)
-    case Foreign(rt, cmd, as) =>
+    case Foreign(io, rt, cmd, as) =>
       val l = eval1(cmd) match
         case VStringLit1(v) => v
         case _              => impossible()
-      VForeign0(eval1(rt), l, as.map((a, t) => (eval0(a), eval1(t))))
+      VForeign0(io, eval1(rt), l, as.map((a, t) => (eval0(a), eval1(t))))
     case _ => impossible()
 
   // quotation
@@ -333,6 +333,7 @@ object Staging:
           dmono
         )
         IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
+      case VSplicePrim0(PRunIO, List(_, c)) => IR.RunIO(quote(vsplice0(c)))
 
       case VSplicePrim0(PNewScope, List(_, _, k)) =>
         quote(vsplice0(vapp1(k, gensym())))
@@ -366,8 +367,9 @@ object Staging:
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)
 
-      case VForeign0(ty, cmd, as) =>
+      case VForeign0(io, ty, cmd, as) =>
         IR.Foreign(
+          io,
           quoteVTy(ty),
           cmd,
           as.map((a, t) => (quote(a), quoteVTy(t)))

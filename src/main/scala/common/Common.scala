@@ -176,6 +176,7 @@ object Common:
     case PIO
     case PReturnIO
     case PBindIO
+    case PRunIO
 
     case PLabel
     case PEqLabel
@@ -209,6 +210,7 @@ object Common:
       case PIO       => "IO"
       case PReturnIO => "returnIO"
       case PBindIO   => "bindIO"
+      case PRunIO    => "unsafePerformIO"
 
       case PLabel       => "Label"
       case PEqLabel     => "eqLabel"
@@ -242,6 +244,7 @@ object Common:
         "IO",
         "returnIO",
         "bindIO",
+        "unsafePerformIO",
         "Label",
         "eqLabel",
         "appendLabel",
@@ -268,9 +271,10 @@ object Common:
       case "[]"                => Some(PUnit)
       case "consumeLinearUnit" => Some(PConsumeLinearUnit)
 
-      case "IO"       => Some(PIO)
-      case "returnIO" => Some(PReturnIO)
-      case "bindIO"   => Some(PBindIO)
+      case "IO"              => Some(PIO)
+      case "returnIO"        => Some(PReturnIO)
+      case "bindIO"          => Some(PBindIO)
+      case "unsafePerformIO" => Some(PRunIO)
 
       case "Label"       => Some(PLabel)
       case "eqLabel"     => Some(PEqLabel)

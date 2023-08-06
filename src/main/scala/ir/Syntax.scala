@@ -87,8 +87,9 @@ object Syntax:
 
     case ReturnIO(value: Tm)
     case BindIO(t1: Ty, t2: Ty, x: LName, value: Tm, body: Tm)
+    case RunIO(value: Tm)
 
-    case Foreign(rt: Ty, cmd: String, args: List[(Tm, Ty)])
+    case Foreign(io: Boolean, rt: Ty, cmd: String, args: List[(Tm, Ty)])
 
     override def toString: String = this match
       case Var(x, _)    => s"'$x"
@@ -121,10 +122,12 @@ object Syntax:
 
       case ReturnIO(v)           => s"(returnIO $v)"
       case BindIO(_, _, x, v, b) => s"($x <- $v; $b)"
+      case RunIO(v)              => s"(unsafePerformIO $v)"
 
-      case Foreign(rt, l, Nil) => s"(foreign $rt $l)"
-      case Foreign(rt, l, as) =>
-        s"(foreign $rt $l ${as.map(_._1).mkString(" ")})"
+      case Foreign(io, rt, l, Nil) =>
+        s"(foreign${if io then "IO" else ""} $rt $l)"
+      case Foreign(io, rt, l, as) =>
+        s"(foreign${if io then "IO" else ""} $rt $l ${as.map(_._1).mkString(" ")})"
 
     def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
       ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
@@ -173,8 +176,9 @@ object Syntax:
 
       case ReturnIO(v)           => v.fvs
       case BindIO(_, _, x, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+      case RunIO(v)              => v.fvs
 
-      case Foreign(_, _, as) => as.flatMap(_._1.fvs)
+      case Foreign(_, _, _, as) => as.flatMap(_._1.fvs)
 
     def usedNames: Set[LName] = this match
       case Var(x, _)    => Set(x)
@@ -196,8 +200,9 @@ object Syntax:
 
       case ReturnIO(v)           => v.usedNames
       case BindIO(_, _, x, v, b) => v.usedNames ++ b.usedNames
+      case RunIO(v)              => v.usedNames
 
-      case Foreign(_, _, as) => as.toSet.flatMap(_._1.usedNames)
+      case Foreign(_, _, _, as) => as.toSet.flatMap(_._1.usedNames)
 
     def maxName: LName = this match
       case Var(x, _)    => x
@@ -220,8 +225,9 @@ object Syntax:
 
       case ReturnIO(v)           => v.maxName
       case BindIO(_, _, x, v, b) => v.maxName max b.maxName
+      case RunIO(v)              => v.maxName
 
-      case Foreign(_, _, as) => as.map(_._1.maxName).fold(-1)(_ max _)
+      case Foreign(_, _, _, as) => as.map(_._1.maxName).fold(-1)(_ max _)
 
     def subst(sub: Map[LName, Tm]): Tm =
       subst(
@@ -309,7 +315,8 @@ object Syntax:
         case BindIO(t1, t2, x0, v, b0) =>
           val (List((x, _)), b) = underN(List((x0, TDef(t1))), b0, sub, scope)
           BindIO(t1, t2, x, v.subst(sub, scope), b)
+        case RunIO(v) => RunIO(v.subst(sub, scope))
 
-        case Foreign(rt, cmd, args) =>
-          Foreign(rt, cmd, args.map((t, ty) => (t.subst(sub, scope), ty)))
+        case Foreign(io, rt, cmd, args) =>
+          Foreign(io, rt, cmd, args.map((t, ty) => (t.subst(sub, scope), ty)))
   export Tm.*

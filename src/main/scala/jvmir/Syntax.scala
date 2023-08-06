@@ -127,7 +127,8 @@ object Syntax:
             .map((c, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
 
-      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
+      case Foreign(rt, cmd, Nil) =>
+        s"(foreign $rt $cmd)"
       case Foreign(rt, cmd, as) =>
         s"(foreign $rt $cmd ${as.map((v, t) => s"$v").mkString(" ")})"
   export Tm.*

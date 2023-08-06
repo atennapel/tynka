@@ -231,8 +231,8 @@ object Unification:
       case VTCon(x, as)         => TCon(x, as.map(go))
       case VCon(x, cx, tas, as) => Con(x, cx, tas.map(go), as.map(go))
 
-      case VForeign(rt, cmd, as) =>
-        Foreign(go(rt), go(cmd), as.map((a, t) => (go(a), go(t))))
+      case VForeign(io, rt, cmd, as) =>
+        Foreign(io, go(rt), go(cmd), as.map((a, t) => (go(a), go(t))))
 
       case VIrrelevant   => Irrelevant
       case VIntLit(v)    => IntLit(v)
@@ -410,8 +410,8 @@ object Unification:
           if x == y && cx == cy && tas1.size == tas2.size && as1.size == as2.size =>
         tas1.zip(tas2).foreach((v, w) => unify(v, w))
         as1.zip(as2).foreach((v, w) => unify(v, w))
-      case (VForeign(rt1, cmd1, as1), VForeign(rt2, cmd2, as2))
-          if as1.size == as2.size =>
+      case (VForeign(io1, rt1, cmd1, as1), VForeign(io2, rt2, cmd2, as2))
+          if io1 == io2 && as1.size == as2.size =>
         unify(rt1, rt2)
         unify(cmd1, cmd2)
         as1.zip(as2).foreach { case ((a, t1), (b, t2)) =>

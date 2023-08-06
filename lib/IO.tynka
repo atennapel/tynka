@@ -11,3 +11,6 @@ def IO/map {A B : VTy} (f : A -> B) (io : IO A) : IO B =
 
 def IO/fix {A : VTy} (action : IO A -> IO A) : IO A =
   fix (go _. action (go U)) U
+
+def IO/unsafePerformIO {A : VTy} (action : IO A) : A =
+  unsafePerformIO action

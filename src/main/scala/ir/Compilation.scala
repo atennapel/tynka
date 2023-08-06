@@ -89,8 +89,9 @@ object Compilation:
       case BindIO(t1, t2, x0, v, b) =>
         val x = localrename.fresh(x0, false)
         J.Let(x, go(t1), go(v, false), go(b, tr))
+      case RunIO(v) => go(v, tr)
 
-      case Foreign(rt, cmd, args) =>
+      case Foreign(_, rt, cmd, args) =>
         J.Foreign(go(rt), cmd, args.map((t, ty) => (go(t, false), go(ty))))
 
       case Lam(_, _, _, _)       => impossible()
@@ -245,8 +246,12 @@ object Compilation:
           conv(BindIO(t3, t2, y, v2, BindIO(t4, t2, x, b2, b)))
         case ReturnIO(v) => b.subst(Map(x -> v))
         case v           => BindIO(t1, t2, x, v, conv(b))
+    case RunIO(c) =>
+      conv(c) match
+        case ReturnIO(v) => v
+        case c           => RunIO(c)
 
-    case Foreign(rt, l, as) =>
+    case Foreign(io, rt, l, as) =>
       (l, as.map((a, _) => conv(a))) match
         // +
         case ("op:96", List(IntLit(a), IntLit(b))) => IntLit(a + b)
@@ -255,7 +260,7 @@ object Compilation:
         // -
         case ("op:100", List(IntLit(a), IntLit(b))) => IntLit(a - b)
         case ("op:100", List(IntLit(0), b)) =>
-          conv(Foreign(rt, "op:116", List((b, as(1)._2))))
+          conv(Foreign(io, rt, "op:116", List((b, as(1)._2))))
         case ("op:100", List(a, IntLit(0))) => a
         // *
         case ("op:104", List(_, IntLit(0)))         => IntLit(0)
@@ -306,7 +311,7 @@ object Compilation:
             ) =>
           StringLit(a + b)
 
-        case (l, gas) => Foreign(rt, l, gas.zip(as.map(_._2)))
+        case (l, gas) => Foreign(io, rt, l, gas.zip(as.map(_._2)))
 
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)      => true

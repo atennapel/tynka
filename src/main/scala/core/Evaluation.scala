@@ -163,8 +163,8 @@ object Evaluation:
     case Quote(t)    => vquote(eval(t))
     case Splice(t)   => vsplice(eval(t))
 
-    case Foreign(rt, cmd, as) =>
-      VForeign(eval(rt), eval(cmd), as.map((a, t) => (eval(a), eval(t))))
+    case Foreign(io, rt, cmd, as) =>
+      VForeign(io, eval(rt), eval(cmd), as.map((a, t) => (eval(a), eval(t))))
 
     case TCon(x, as)         => VTCon(x, as.map(eval))
     case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
@@ -269,8 +269,9 @@ object Evaluation:
           as.map(a => quote(a, unfold))
         )
 
-      case VForeign(rt, cmd, as) =>
+      case VForeign(io, rt, cmd, as) =>
         Foreign(
+          io,
           quote(rt, unfold),
           quote(cmd, unfold),
           as.map((a, t) => (quote(a, unfold), quote(t, unfold)))
@@ -309,7 +310,7 @@ object Evaluation:
       )
     // bindIO : {A B : VTy} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
     case PBindIO =>
-      def vio(a: VTy) = VLift(VComp(), vappE(VPrim(PIO), a))
+      def vio(a: VTy) = VLift(VComp(), VIO(a))
       (
         vpiI(
           "A",
@@ -321,6 +322,12 @@ object Evaluation:
               b => vfun(vio(a), vfun(vfun(VLift(VVal(), a), vio(b)), vio(b)))
             )
         ),
+        SMeta
+      )
+    // unsafePerformIO : {A : VTy} -> ^(IO A) -> ^A
+    case PRunIO =>
+      (
+        vpiI("A", VVTy(), a => vfun(VLift(VComp(), VIO(a)), VLift(VVal(), a))),
         SMeta
       )
 

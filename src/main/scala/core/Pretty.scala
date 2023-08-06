@@ -123,10 +123,12 @@ object Pretty:
           .map(t => s"| ${pretty(t)}")
           .getOrElse("")}"
 
-    case Foreign(rt, cmd, Nil) =>
-      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)}"
-    case Foreign(rt, cmd, as) =>
-      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)} ${as.map((a, _) => prettyParen(a)).mkString(" ")}"
+    case Foreign(io, rt, cmd, Nil) =>
+      s"foreign${if io then "IO" else ""} ${prettyParen(rt)} ${prettyParen(cmd)}"
+    case Foreign(io, rt, cmd, as) =>
+      s"foreign${if io then "IO" else ""} ${prettyParen(rt)} ${prettyParen(
+          cmd
+        )} ${as.map((a, _) => prettyParen(a)).mkString(" ")}"
 
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"

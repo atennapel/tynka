@@ -1026,8 +1026,8 @@ object Elaboration:
           as.map(a => infer(a, SVTy())).map((a, t, u) => (a, ctx.quote(t), u))
         val eas = eas1.map((a, b, c) => (a, b))
         val us = eas1.map(_._3).foldLeft(u1 + u2)(_ + _)
-        if io then (Foreign(ert, el, eas), VIO(ctx.eval(ert)), SCTy(), us)
-        else (Foreign(ert, el, eas), ctx.eval(ert), SVTy(), us)
+        if io then (Foreign(io, ert, el, eas), VIO(ctx.eval(ert)), SCTy(), us)
+        else (Foreign(io, ert, el, eas), ctx.eval(ert), SVTy(), us)
 
       case S.Mutable(c, as, n, k) =>
         getGlobalCon(c) match
@@ -1217,8 +1217,9 @@ object Elaboration:
         other.map(replaceMeta(id, _, ix))
       )
 
-    case Foreign(rt, cmd, args) =>
+    case Foreign(io, rt, cmd, args) =>
       Foreign(
+        io,
         replaceMeta(id, rt, ix),
         replaceMeta(id, cmd, ix),
         args.map((a, b) => (replaceMeta(id, a, ix), replaceMeta(id, b, ix)))

@@ -74,7 +74,7 @@ object Value:
     case VTCon(name: Name, args: List[Val])
     case VCon(name: Name, con: Name, targs: List[Val], args: List[Val])
 
-    case VForeign(rt: VTy, l: Val, args: List[(Val, VTy)])
+    case VForeign(io: Boolean, rt: VTy, l: Val, args: List[(Val, VTy)])
 
     case VIrrelevant
   export Val.*

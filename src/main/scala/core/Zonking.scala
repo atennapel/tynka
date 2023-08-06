@@ -76,8 +76,8 @@ object Zonking:
     case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
 
-    case Foreign(rt, cmd, as) =>
-      Foreign(zonk(rt), zonk(cmd), as.map((a, t) => (zonk(a), zonk(t))))
+    case Foreign(io, rt, cmd, as) =>
+      Foreign(io, zonk(rt), zonk(cmd), as.map((a, t) => (zonk(a), zonk(t))))
 
     case TCon(x, as)         => TCon(x, as.map(zonk))
     case Con(x, cx, tas, as) => Con(x, cx, tas.map(zonk), as.map(zonk))
