@@ -269,54 +269,58 @@ object Parser:
     private val bindVar = Var(Name(">>="))
     private lazy val doP: Parsley[Tm] =
       positioned(
-        ("do" *> many(attempt(doEntry)) <~> tm).map((es, b) =>
-          es.foldRight(b) {
-            // (>>=) {_} {t} v (\x. b)
-            case (DoBind(p, x, Some(t), v), b) =>
-              Pos(
-                p,
-                App(
+        ("do" *> option("{" *> tm <* "}") <~> many(attempt(doEntry)) <~> tm)
+          .map { case ((monad, es), b) =>
+            val body = es.foldRight(b) {
+              // (>>=) {_} {t} v (\x. b)
+              case (DoBind(p, x, Some(t), v), b) =>
+                Pos(
+                  p,
                   App(
                     App(
-                      App(bindVar, Hole(None), ArgIcit(Impl)),
-                      t,
-                      ArgIcit(Impl)
+                      App(
+                        App(bindVar, Hole(None), ArgIcit(Impl)),
+                        t,
+                        ArgIcit(Impl)
+                      ),
+                      v,
+                      ArgIcit(Expl)
                     ),
-                    v,
+                    Lam(x, ArgIcit(Expl), None, b),
                     ArgIcit(Expl)
-                  ),
-                  Lam(x, ArgIcit(Expl), None, b),
-                  ArgIcit(Expl)
+                  )
                 )
-              )
-            // (>>=) v (\x. b)
-            case (DoBind(p, x, None, v), b) =>
-              Pos(
-                p,
+              // (>>=) v (\x. b)
+              case (DoBind(p, x, None, v), b) =>
+                Pos(
+                  p,
+                  App(
+                    App(
+                      bindVar,
+                      v,
+                      ArgIcit(Expl)
+                    ),
+                    Lam(x, ArgIcit(Expl), None, b),
+                    ArgIcit(Expl)
+                  )
+                )
+              case (DoLet(p, u, x, m, t, v), b) => Pos(p, Let(u, x, m, t, v, b))
+              // (>>=) v (\_. b)
+              case (DoTm(v), b) =>
                 App(
                   App(
                     bindVar,
                     v,
                     ArgIcit(Expl)
                   ),
-                  Lam(x, ArgIcit(Expl), None, b),
+                  Lam(DontBind, ArgIcit(Expl), None, b),
                   ArgIcit(Expl)
                 )
-              )
-            case (DoLet(p, u, x, m, t, v), b) => Pos(p, Let(u, x, m, t, v, b))
-            // (>>=) v (\_. b)
-            case (DoTm(v), b) =>
-              App(
-                App(
-                  bindVar,
-                  v,
-                  ArgIcit(Expl)
-                ),
-                Lam(DontBind, ArgIcit(Expl), None, b),
-                ArgIcit(Expl)
-              )
+            }
+            monad match
+              case None    => body
+              case Some(m) => Let(Many, Name(">>="), true, None, m, body)
           }
-        )
       )
     private lazy val doEntry: Parsley[DoEntry] =
       attempt(pos <~> bind <~> option(":" *> tm) <~> "<-" *> tm <* ";").map {

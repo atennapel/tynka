@@ -1,0 +1,7 @@
+import "lib/Jvm"
+import "lib/IO"
+
+def trace {A B : VTy} (msg : A) (value : B) : B =
+  IO/unsafePerformIO \. do {IO/bind}
+    putLn msg;
+    IO/return value
