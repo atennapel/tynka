@@ -62,7 +62,7 @@ object Syntax:
 
   type Ty = Tm
   enum Tm:
-    case Var(name: Name)
+    case Var(name: Name, rigid: Boolean = false)
     case Let(
         usage: Usage,
         name: Name,
@@ -108,7 +108,7 @@ object Syntax:
       case _         => false
 
     def free: List[Name] = this match
-      case Var(name) => List(name)
+      case Var(name, _) => List(name)
       case Let(_, name, meta, ty, value, body) =>
         ty.map(_.free).getOrElse(Nil) ++ value.free ++ body.free.filterNot(
           _ == name
@@ -146,7 +146,8 @@ object Syntax:
       case StringLit(_) => Nil
 
     override def toString: String = this match
-      case Var(x) => s"$x"
+      case Var(x, true) => s"rigid $x"
+      case Var(x, _)    => s"$x"
       case Let(u, x, m, None, v, b) =>
         s"(let ${u.prefix}$x ${if m then "" else ":"}= $v; $b)"
       case Let(u, x, m, Some(t), v, b) =>

@@ -18,8 +18,7 @@ def Array/set {A : VTy} (index : Int) (value : A) (array : Array A) : IO Unit =
   foreignIO Unit "arraySet" index value array
 
 def Array/updateIO {A : VTy} (i : Int) (f : A -> IO A) (a : Array A) : IO A =
-  let (>>=) {A B} x f = IO/bind {A} {B} x f;
-  do
+  do {IO/bind}
     x <- Array/get i a;
     x' <- f x;
     Array/set i x' a;
@@ -29,11 +28,10 @@ def Array/update {A : VTy} (i : Int) (f : A -> A) (a : Array A) : IO A =
   Array/updateIO i (\x. IO/return (f x)) a
 
 def Array/foldrWithIndexIO {A B : VTy} (n : B) (c : Int -> A -> B -> IO B) (a : Array A) : IO B =
-  let (>>=) {A B} x f = IO/bind {A} {B} x f;
-  do
+  do {IO/bind}
     l <- Array/length a;
     fix (go i. \acc.
-      if Int/geq i 0 then do
+      if Int/geq i 0 then do {IO/bind}
         x <- Array/get i a;
         acc' <- c i x acc;
         go (Int/sub i 1) acc'
@@ -51,11 +49,10 @@ def Array/foldr {A B : VTy} (n : B) (c : A -> B -> B) (a : Array A) : IO B =
   Array/foldrWithIndex n (\_. c) a
 
 def Array/foldlWithIndexIO {A B : VTy} (n : B) (c : Int -> B -> A -> IO B) (a : Array A) : IO B =
-  let (>>=) {A B} x f = IO/bind {A} {B} x f;
-  do
+  do {IO/bind}
     l <- Array/length a;
     fix (go i. \acc.
-      if Int/lt i l then do
+      if Int/lt i l then do {IO/bind}
         x <- Array/get i a;
         acc' <- (c i acc x);
         go (Int/add i 1) acc'
@@ -79,8 +76,7 @@ def Array/each {A : VTy} (a : Array A) (f : A -> IO Unit) : IO Unit =
   Array/eachWithIndex a \_ hd. f hd
 
 def Array/mutmapIO {A : VTy} (f : Int -> A -> IO A) (a : Array A) : IO Unit =
-  let (>>=) {A B} x f = IO/bind {A} {B} x f;
-  Array/eachWithIndex a \i x. do
+  Array/eachWithIndex a \i x. do {IO/bind}
     x' <- f i x;
     Array/set i x' a
 
@@ -88,8 +84,7 @@ def Array/mutmap {A : VTy} (f : Int -> A -> A) (a : Array A) : IO Unit =
   Array/mutmapIO (\i x. IO/return (f i x)) a
 
 def Array/newInitIO {A : VTy} (length : Int) (f : Int -> IO A) : IO (Array A) =
-  let (>>=) {A B} x f = IO/bind {A} {B} x f;
-  do
+  do {IO/bind}
     a <- Array/unsafeNew length;
     Array/mutmapIO (\i _. f i) a;
     IO/return a
@@ -98,10 +93,9 @@ def Array/newInit {A : VTy} (length : Int) (f : Int -> A) : IO (Array A) =
   Array/newInitIO length (\i. IO/return (f i))
 
 def Array/mapIO {A B : VTy} (f : A -> IO B) (a : Array A) : IO (Array B) =
-  let (>>=) {A B} x f = IO/bind {A} {B} x f;
-  do
+  do {IO/bind}
     l <- Array/length a;
-    Array/newInitIO l (\i. do
+    Array/newInitIO l (\i. do {IO/bind}
       x <- Array/get i a;
       f x)
 

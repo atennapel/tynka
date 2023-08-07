@@ -394,7 +394,7 @@ object Elaboration:
         val (eb, us) = check(b, rt, STy(cv))(ctx.bind(Many, x, a, SVTy()))
         val (_, u2) = us.uncons
         (Lam(x, Expl, ctx.quote(ty), eb), u1 + u2)
-      case (S.Var(x), VPi(_, _, Impl, _, _)) if hasMetaType(x) =>
+      case (S.Var(x, _), VPi(_, _, Impl, _, _)) if hasMetaType(x) =>
         val Some((_, ix, varty, SMeta)) = ctx.lookup(x): @unchecked
         unify(varty, ty)
         (Var(ix), ctx.use(ix))
@@ -451,7 +451,7 @@ object Elaboration:
         val STy(vrcv) = stage: @unchecked
         checkMatch(tm, scrut, cs, other, ctx.quote(ty), ty, vrcv)
 
-      case (S.Var(Name("[]")), VTCon(dx, as)) if !stage.isMeta =>
+      case (S.Var(Name("[]"), _), VTCon(dx, as)) if !stage.isMeta =>
         val nilary = getGlobalData(dx).get._2.filter((_, as) => as.isEmpty)
         if nilary.isEmpty then
           error(
@@ -728,12 +728,17 @@ object Elaboration:
         (etm, vrty, u)
 
       case _ =>
-        val (t, a, si, u) = insert(infer(tm))
+        val (t, a, si, u) =
+          if isRigidVar(tm) then infer(tm) else insert(infer(tm))
         debug(
           s"inferred $t : ${ctx.pretty(a)} : ${ctx.pretty(si)} to ${ctx.pretty(s)}"
         )
         val (et, ty) = adjustStage(t, a, si, s)
         (et, ty, u)
+
+  private def isRigidVar(tm: S.Tm): Boolean = tm match
+    case S.Var(x, true) => true
+    case _              => false
 
   private def infer(tm: S.Tm)(implicit ctx: Ctx): (Tm, VTy, VStage, Uses) =
     if !tm.isPos then debug(s"infer $tm")
@@ -747,7 +752,7 @@ object Elaboration:
       case S.U(STy(cv)) =>
         val (evf, u) = check(cv, VCV(), SMeta)
         (U(STy(evf)), VU(SMeta), SMeta, u)
-      case S.Var(x) =>
+      case S.Var(x, _) =>
         PrimName(x) match
           case Some(p) =>
             val (t, u) = primType(p)

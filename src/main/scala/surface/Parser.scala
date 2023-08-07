@@ -108,7 +108,7 @@ object Parser:
         <|> ("`" *> projAtom).map(Quote.apply)
         <|> ("$" *> projAtom).map(Splice.apply)
         <|> string.map(StringLit.apply)
-        <|> attempt("(" *> userOp.map(Var.apply) <* ")")
+        <|> attempt("(" *> userOp.map(x => Var(x)) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
           .map(mkUnitPair)
@@ -116,7 +116,7 @@ object Parser:
         <|> nat
         <|> ("Meta" #> U(SMeta))
         <|> ("Ty" *> projAtom).map(cv => U(STy(cv)))
-        <|> ident.map(Var.apply)
+        <|> ident.map(x => Var(x))
     )
 
     private val unittype = Var(Name("()"))
@@ -269,7 +269,9 @@ object Parser:
     private val bindVar = Var(Name(">>="))
     private lazy val doP: Parsley[Tm] =
       positioned(
-        ("do" *> option("{" *> tm <* "}") <~> many(attempt(doEntry)) <~> tm)
+        ("do" *> option("{" *> identOrOp <* "}") <~> many(
+          attempt(doEntry)
+        ) <~> tm)
           .map { case ((monad, es), b) =>
             val body = es.foldRight(b) {
               // (>>=) {_} {t} v (\x. b)
@@ -318,8 +320,9 @@ object Parser:
                 )
             }
             monad match
-              case None    => body
-              case Some(m) => Let(Many, Name(">>="), true, None, m, body)
+              case None => body
+              case Some(m) =>
+                Let(Many, Name(">>="), true, None, Var(m, true), body)
           }
       )
     private lazy val doEntry: Parsley[DoEntry] =

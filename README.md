@@ -28,7 +28,7 @@ TODO:
 - [ ] ST monad
 - [ ] Modules
 - [ ] Fix duplicate definitions import bug
-- [ ] Improve do syntax bind specification
+- [ ] Fix unused data definitions
 - [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
