@@ -6,9 +6,29 @@ import Syntax.*
 import jvmir.Syntax as J
 
 import scala.collection.mutable
+import scala.annotation.tailrec
 
 object Compilation:
-  def compile(ds: Defs): J.Defs = J.Defs(ds.toList.flatMap(go))
+  def compile(ds: Defs): J.Defs =
+    val jds = ds.toList.flatMap(go)
+    J.Defs(removeUnused(jds))
+
+  private def removeUnused(ds: List[J.Def]): List[J.Def] =
+    def isUsed(x: J.GName, ds: List[J.Def]): Boolean =
+      ds.filterNot { case J.DDef(y, _, _, _) => y == x; case _ => false }
+        .flatMap { case J.DDef(_, _, _, v) => v.globals; case _ => Set.empty }
+        .contains(x)
+    def go(ds: List[J.Def], full: List[J.Def]): Option[List[J.Def]] = ds match
+      case Nil                       => None
+      case (d @ J.DData(_, _)) :: tl => go(tl, full).map(d :: _)
+      case (d @ J.DDef(x, _, _, _)) :: tl if x == "main" || isUsed(x, full) =>
+        go(tl, full).map(d :: _)
+      case J.DDef(x, _, _, _) :: tl => Some(tl)
+    @tailrec
+    def loop(ds: List[J.Def]): List[J.Def] = go(ds, ds) match
+      case None      => ds
+      case Some(nds) => loop(nds)
+    loop(ds)
 
   private type LocalMap = mutable.Map[LName, (LName, Boolean)]
   private case class LocalRename(

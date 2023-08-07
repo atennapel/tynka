@@ -27,7 +27,6 @@ TODO:
 - [ ] Meta newtypes
 - [ ] ST monad
 - [ ] Modules
-- [ ] Remove unused definitions
 - [ ] Fix duplicate definitions import bug
 - [ ] Improve do syntax bind specification
 - [ ] Fix naming issues in datatypes and generated JVM bytecode

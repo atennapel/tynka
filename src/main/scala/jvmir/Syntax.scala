@@ -101,6 +101,30 @@ object Syntax:
 
     case Foreign(rt: Ty, cmd: String, args: List[(Tm, Ty)])
 
+    def globals: Set[GName] = this match
+      case Arg(ix)          => Set.empty
+      case Var(name)        => Set.empty
+      case IntLit(value)    => Set.empty
+      case BoolLit(value)   => Set.empty
+      case StringLit(value) => Set.empty
+
+      case Global(name, ty) => Set(name)
+      case GlobalApp(name, ty, tc, as) =>
+        Set(name) ++ as.flatMap(_.globals)
+
+      case Let(name, ty, value, body) =>
+        value.globals ++ body.globals
+      case Con(name, con, args) =>
+        args.flatMap(_.globals).toSet
+      case Field(dty, con, scrut, ix) =>
+        scrut.globals
+      case Match(dty, ty, x, scrut, cs, other) =>
+        scrut.globals ++ cs.flatMap((_, t) => t.globals) ++ other
+          .map(_.globals)
+          .getOrElse(Set.empty)
+      case Foreign(rt, cmd, args) =>
+        args.flatMap((t, _) => t.globals).toSet
+
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"
       case Var(x)          => s"'$x"
