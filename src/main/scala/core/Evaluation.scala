@@ -331,68 +331,63 @@ object Evaluation:
       )
 
     case PArray => (vfun(VVTy(), VVTy()), SMeta)
-    /*
-    // {A : VTy} -> ^Int -> ^A -> ^(IO (Array A))
-    case PArrayNew =>
-      val int = VForeignType(VStringLit("I"))
-      (
-        vpiI(
-          "A",
-          VVTy(),
-          a =>
-            vfun(
-              VLift(VVal(), int),
-              vfun(VLift(VVal(), a), VLift(VComp(), VIO(VArray(a))))
-            )
-        ),
-        SMeta
-      )
-    // {A : VTy} -> ^Int -> ^(Array A) -> ^(IO A)
-    case PArrayGet =>
-      val int = VForeignType(VStringLit("I"))
-      (
-        vpiI(
-          "A",
-          VVTy(),
-          a =>
-            vfun(
-              VLift(VVal(), int),
-              vfun(VLift(VVal(), VArray(a)), VLift(VComp(), VIO(a)))
-            )
-        ),
-        SMeta
-      )
-    // {A : VTy} -> ^Int -> ^A -> ^(Array A) -> ^(IO A)
-    case PArraySet =>
-      val int = VForeignType(VStringLit("I"))
-      (
-        vpiI(
-          "A",
-          VVTy(),
-          a =>
-            vfun(
-              VLift(VVal(), a),
-              vfun(VLift(VVal(), VArray(a)), VLift(VComp(), VIO(a)))
-            )
-        ),
-        SMeta
-      )
-    // {A : VTy} -> ^(Array A) -> ^(IO Int)
-    case PArrayLength =>
-      val int = VForeignType(VStringLit("I"))
-      (
-        vpiI(
-          "A",
-          VVTy(),
-          a => vfun(VLift(VVal(), VArray(a)), VLift(VComp(), VIO(int)))
-        ),
-        SMeta
-      )
-     */
 
     case PLabel       => (VUMeta(), SMeta)
     case PEqLabel     => (vfun(VLabel(), vfun(VLabel(), vcbool)), SMeta)
     case PAppendLabel => (vfun(VLabel(), vfun(VLabel(), VLabel())), SMeta)
+
+    // {cv : CV} -> Label -> Ty cv -> Ty cv
+    case PTagged =>
+      (
+        vpiI(
+          "cv",
+          VCV(),
+          cv =>
+            val tycv = VUTy(cv)
+            vfun(VLabel(), vfun(tycv, tycv))
+        ),
+        SMeta
+      )
+    // {l : Label} {cv : CV} {A : Ty cv} -> ^A -> ^(Tagged l A)
+    case PTag =>
+      (
+        vpiI(
+          "l",
+          VLabel(),
+          l =>
+            vpiI(
+              "cv",
+              VCV(),
+              cv =>
+                vpiI(
+                  "A",
+                  VUTy(cv),
+                  a => vfun(VLift(cv, a), VLift(cv, VTagged(cv, l, a)))
+                )
+            )
+        ),
+        SMeta
+      )
+    // {l : Label} {cv : CV} {A : Ty cv} -> ^(Tagged l A) -> ^A
+    case PUntag =>
+      (
+        vpiI(
+          "l",
+          VLabel(),
+          l =>
+            vpiI(
+              "cv",
+              VCV(),
+              cv =>
+                vpiI(
+                  "A",
+                  VUTy(cv),
+                  a => vfun(VLift(cv, VTagged(cv, l, a)), VLift(cv, a))
+                )
+            )
+        ),
+        SMeta
+      )
 
     // Label -> VTy
     case PForeignType => (vfun(VLabel(), VVTy()), SMeta)

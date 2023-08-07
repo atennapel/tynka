@@ -272,7 +272,7 @@ object Compilation:
         conv(v) match
           case BindIO(t3, t4, y, v2, b2) =>
             conv(BindIO(t3, t2, y, v2, BindIO(t4, t2, x, b2, b)))
-          case ReturnIO(v) => b.subst(Map(x -> v))
+          case ReturnIO(v) => conv(b.subst(Map(x -> v)))
           case v           => BindIO(t1, t2, x, v, conv(b))
       case RunIO(c) =>
         conv(c) match
