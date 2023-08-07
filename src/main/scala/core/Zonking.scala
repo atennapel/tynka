@@ -53,6 +53,7 @@ object Zonking:
     case U(s) => U(s.map(zonk))
 
     case Pi(u, x, i, t, b) => Pi(u, x, i, zonk(t), zonkLift(b))
+    case Fun(u, a, b, c)   => Fun(u, zonk(a), zonk(b), zonk(c))
     case Lam(x, i, ty, b)  => Lam(x, i, zonk(ty), zonkLift(b))
     case App(_, _, _)      => quoteVT(zonkSp(t))
     case Fix(ty, rty, g, x, b, arg) =>

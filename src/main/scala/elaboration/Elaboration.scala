@@ -226,7 +226,11 @@ object Elaboration:
               )
             case (Some(fst), Some(snd)) => Some(Pair(fst, snd, ctx.quote(b)))
 
-        case (VFun(p1, cv, r1), VFun(p2, cv2, r2)) =>
+        case (VFun(u1, p1, cv, r1), VFun(u2, p2, cv2, r2)) =>
+          if u1 != u2 then
+            error(
+              s"usage mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
+            )
           unify(cv, cv2)
           val x = DoBind(Name("x"))
           val ctx2 = ctx.bind(Many, x, p2, SVTy())
@@ -241,7 +245,11 @@ object Elaboration:
                   Some(Lam(x, Expl, ctx.quote(b), App(Wk(t), coev0, Expl)))
                 case Some(body) => Some(Lam(x, Expl, ctx.quote(b), body))
 
-        case (VFun(p1, cv, r1), VPi(u, x, i, p2, r2)) =>
+        case (VFun(u1, p1, cv, r1), VPi(u, x, i, p2, r2)) =>
+          if u1 != u then
+            error(
+              s"usage mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
+            )
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
           val ctx2 = ctx.bind(u, x, p2, SMeta)
@@ -270,7 +278,11 @@ object Elaboration:
                 case None =>
                   Some(Lam(pick(y, x), i, ctx.quote(b), App(Wk(t), coev0, i)))
                 case Some(body) => Some(Lam(pick(y, x), i, ctx.quote(b), body))
-        case (VPi(_, x, i, p1, r1), VFun(p2, cv, r2)) =>
+        case (VPi(u1, x, i, p1, r1), VFun(u, p2, cv, r2)) =>
+          if u1 != u then
+            error(
+              s"usage mismatch ${ctx.pretty(t)} : ${ctx.pretty(a)} ~ ${ctx.pretty(b)}"
+            )
           if i == Impl then
             error(s"coerce error ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
           val ctx2 = ctx.bind(Many, x, p2, SVTy())
@@ -383,7 +395,7 @@ object Elaboration:
         if !(uhd <= u) then
           error(s"usage error for $x: expected ${u} but was ${uhd}")
         (Lam(x, i2, ctx.quote(ty), eb), us1 + utl)
-      case (S.Lam(x, S.ArgIcit(Expl), ot, b), VFun(a, cv, rt)) =>
+      case (S.Lam(x, S.ArgIcit(Expl), ot, b), VFun(u, a, cv, rt)) =>
         val u1 = ot
           .map(t0 => {
             val (ety, u1) = checkVTy(t0)
@@ -391,8 +403,10 @@ object Elaboration:
             u1
           })
           .getOrElse(ctx.uses)
-        val (eb, us) = check(b, rt, STy(cv))(ctx.bind(Many, x, a, SVTy()))
-        val (_, u2) = us.uncons
+        val (eb, us) = check(b, rt, STy(cv))(ctx.bind(u, x, a, SVTy()))
+        val (uhd, u2) = us.uncons
+        if !(uhd <= u) then
+          error(s"usage error for $x: expected ${u} but was ${uhd}")
         (Lam(x, Expl, ctx.quote(ty), eb), u1 + u2)
       case (S.Var(x, _), VPi(_, _, Impl, _, _)) if hasMetaType(x) =>
         val Some((_, ix, varty, SMeta)) = ctx.lookup(x): @unchecked
@@ -427,7 +441,7 @@ object Elaboration:
         val (ea, u1) = checkType(a, SVTy())
         val cv2 = newCV()
         val (eb, u2) = checkType(b, STy(ctx.eval(cv2)))
-        (Fun(ea, cv2, eb), u1 + u2)
+        (Fun(u, ea, cv2, eb), u1 + u2)
       case (S.Sigma(x, a, b), VU(SMeta)) =>
         val (ea, u1) = checkType(a, SMeta)
         val va = ctx.eval(ea)
@@ -441,7 +455,7 @@ object Elaboration:
         val (eb, us) =
           check(b, ty, STy(cv))(
             ctx
-              .bind(Many, g, VFun(pty, cv, ty), SCTy())
+              .bind(Many, g, VFun(Many, pty, cv, ty), SCTy())
               .bind(Many, x, pty, SVTy())
           )
         val (_, _, ub) = us.uncons2
@@ -602,7 +616,7 @@ object Elaboration:
             )
           val (fnty, ecv) = tas
             .foldRight((vrty, vrcv)) { case (t, (rt, rcv)) =>
-              (VFun(ctxConsTypes.eval(t), rcv, rt), VComp())
+              (VFun(Many, ctxConsTypes.eval(t), rcv, rt), VComp())
             }
           val lam =
             ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
@@ -687,8 +701,8 @@ object Elaboration:
             val ctx2 = ctx.bind(Many, x, va, SVTy())
             val (eb0, ub) = check(b, rty0, STy(cv))(ctx2)
             val (eb, rty, ub2) = insert(STy(cv), (eb0, rty0, ub))(ctx2)
-            val (_, ub3) = ub2.uncons
-            val fty = VFun(va, cv, rty)
+            val (u, ub3) = ub2.uncons
+            val fty = VFun(u, va, cv, rty)
             (Lam(x, Expl, ctx.quote(fty), eb), fty, ut + ub3)
       case S.Lam(x, S.ArgNamed(_), _, _) => error(s"cannot infer $tm")
 
@@ -712,7 +726,7 @@ object Elaboration:
         val (earg, vty, uarg) = infer(arg, SVTy())
         val rty = newMeta(VUTy(cv), SMeta)
         val vrty = ctx.eval(rty)
-        val ft = VFun(vty, cv, vrty)
+        val ft = VFun(Many, vty, cv, vrty)
         val (eb, ub) =
           check(b, vrty, STy(cv))(
             ctx.bind(Many, g, ft, SCTy()).bind(Many, x, vty, SVTy())
@@ -805,7 +819,7 @@ object Elaboration:
             unify(rcv, VVal())
             val cv = newCV()
             val (eb, u2) = checkType(b, STy(ctx.eval(cv)))
-            (Fun(ea, cv, eb), VCTy(), SMeta, u1 + u2)
+            (Fun(u, ea, cv, eb), VCTy(), SMeta, u1 + u2)
 
       case S.Sigma(x, a, b) =>
         val (ea, u1) = check(a, VUMeta(), SMeta)
@@ -859,7 +873,7 @@ object Elaboration:
             val (eb0, ub) = check(b, rty0, STy(cv))(ctx2)
             val (eb, rty, ub2) = insert(STy(cv), (eb0, rty0, ub))(ctx2)
             val (_, ub3) = ub2.uncons
-            val fty = VFun(pty, cv, rty)
+            val fty = VFun(Many, pty, cv, rty)
             (Lam(x, Expl, ctx.quote(fty), eb), fty, STy(cv), ut + ub3)
       case S.Lam(_, S.ArgNamed(_), _, _) => error(s"cannot infer: $tm")
 
@@ -881,10 +895,10 @@ object Elaboration:
             if icit != icit2 then error(s"icit mismatch: $tm")
             val (ea, ua) = check(a, pty, SMeta)
             (App(ef, ea, icit), rty(ctx.eval(ea)), SMeta, uf + up * ua)
-          case VFun(pty, rcv, rty) =>
+          case VFun(up, pty, rcv, rty) =>
             if icit == Impl then error(s"implicit app in Ty: $tm")
             val (ea, ua) = check(a, pty, SVTy())
-            (App(ef, ea, icit), rty, STy(rcv), uf + Many * ua)
+            (App(ef, ea, icit), rty, STy(rcv), uf + up * ua)
           case _ =>
             st match
               case SMeta =>
@@ -905,7 +919,7 @@ object Elaboration:
                 val pty = ctx.eval(newMeta(VVTy(), SMeta))
                 val rcv = ctx.eval(newCV())
                 val rty = ctx.eval(newMeta(VUTy(rcv), SMeta))
-                val ef2 = coe(ef, fty, st, VFun(pty, rcv, rty), st)
+                val ef2 = coe(ef, fty, st, VFun(Many, pty, rcv, rty), st)
                 val (ea, ua) = check(a, pty, SVTy())
                 (App(ef2, ea, Expl), rty, STy(rcv), uf + Many * ua)
 
@@ -994,7 +1008,7 @@ object Elaboration:
         val cv = ctx.eval(newCV())
         val rty = newMeta(VUTy(cv), SMeta)
         val vrty = ctx.eval(rty)
-        val ft = VFun(vty, cv, vrty)
+        val ft = VFun(Many, vty, cv, vrty)
         val (eb, ub1) =
           check(b, vrty, STy(cv))(
             ctx.bind(Many, g, ft, SCTy()).bind(Many, x, vty, SVTy())
@@ -1198,6 +1212,13 @@ object Elaboration:
       )
     case Pi(u, name, icit, ty, body) =>
       Pi(u, name, icit, replaceMeta(id, ty, ix), replaceMeta(id, body, ix + 1))
+    case Fun(u, a, b, c) =>
+      Fun(
+        u,
+        replaceMeta(id, a, ix),
+        replaceMeta(id, b, ix),
+        replaceMeta(id, c, ix)
+      )
     case Lam(name, icit, fnty, body) =>
       Lam(name, icit, replaceMeta(id, fnty, ix), replaceMeta(id, body, ix + 1))
     case App(fn, arg, icit) =>

@@ -23,7 +23,7 @@ TODO:
 - [x] Imports
 - [x] Add mutable
 - [x] Add arrays in IO
-- [ ] Add linearity in Ty
+- [x] Add linearity in Ty
 - [ ] Add mutate
 - [ ] Meta newtypes
 - [ ] ST monad

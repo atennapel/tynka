@@ -62,6 +62,7 @@ object Value:
     case VStringLit(value: String)
 
     case VPi(usage: Usage, name: Bind, icit: Icit, ty: VTy, body: Clos)
+    case VFun(usage: Usage, pty: VTy, cv: VTy, rty: VTy)
     case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
     case VFix(ty: VTy, rty: VTy, g: Bind, x: Bind, b: Clos2, arg: Val)
 
@@ -167,17 +168,6 @@ object Value:
     def unapply(value: Val): Boolean = value match
       case VU(STy(VComp())) => true
       case _                => false
-
-  object VFun:
-    def apply(a: Val, cv: Val, b: Val): Val =
-      VRigid(HPrim(PFun), SApp(SApp(SApp(SId, a, Expl), cv, Impl), b, Expl))
-    def unapply(value: Val): Option[(Val, Val, Val)] = value match
-      case VRigid(
-            HPrim(PFun),
-            SApp(SApp(SApp(SId, a, Expl), cv, Impl), b, Expl)
-          ) =>
-        Some((a, cv, b))
-      case _ => None
 
   object VUnitType:
     def apply(): Val = VRigid(HPrim(PUnitType), SId)

@@ -150,6 +150,7 @@ object Evaluation:
     case StringLit(v) => VStringLit(v)
 
     case Pi(u, x, i, t, b) => VPi(u, x, i, eval(t), Clos(b))
+    case Fun(u, a, b, c)   => VFun(u, eval(a), eval(b), eval(c))
     case Lam(x, i, ty, b)  => VLam(x, i, eval(ty), Clos(b))
     case App(f, a, i)      => vapp(eval(f), eval(a), i)
     case Fix(ty, rty, g, x, b, arg) =>
@@ -242,6 +243,8 @@ object Evaluation:
         Lam(x, i, quote(ty, unfold), quote(b(VVar(l)), unfold)(l + 1))
       case VPi(u, x, i, t, b) =>
         Pi(u, x, i, quote(t, unfold), quote(b(VVar(l)), unfold)(l + 1))
+      case VFun(u, a, b, c) =>
+        Fun(u, quote(a, unfold), quote(b, unfold), quote(c, unfold))
       case VFix(ty, rty, g, x, b, arg) =>
         Fix(
           quote(ty, unfold),
@@ -286,10 +289,6 @@ object Evaluation:
     case PCV   => (VUMeta(), SMeta)
     case PVal  => (VCV(), SMeta)
     case PComp => (VCV(), SMeta)
-
-    // Ty Val -> {cv : CV} -> Ty cv -> Ty Comp
-    case PFun =>
-      (vfun(VVTy(), vpiI("cv", VCV(), cv => vfun(VUTy(cv), VCTy()))), SMeta)
 
     case PUnitType => (VUMeta(), SMeta)
     case PUnit     => (VUnitType(), SMeta)

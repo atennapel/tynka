@@ -206,6 +206,7 @@ object Unification:
 
       case VPi(u, x, i, t, b) =>
         Pi(u, x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
+      case VFun(u, a, b, c) => Fun(u, go(a), go(b), go(c))
       case VLam(x, i, ty, b) =>
         Lam(x, i, go(ty), go(b(VVar(psub.cod)))(psub.lift))
       case VFix(ty, rty, g, x, b, arg) =>
@@ -390,6 +391,8 @@ object Unification:
       case (VPi(u1, _, i1, a1, b1), VPi(u2, _, i2, a2, b2))
           if u1 == u2 && i1 == i2 =>
         unify(a1, a2); unify(b1, b2)
+      case (VFun(u1, a1, b1, c1), VFun(u2, a2, b2, c2)) if u1 == u2 =>
+        unify(a1, a2); unify(b1, b2); unify(c1, c2)
       case (VSigma(_, a1, b1), VSigma(_, a2, b2)) =>
         unify(a1, a2); unify(b1, b2)
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)

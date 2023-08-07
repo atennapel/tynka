@@ -167,7 +167,6 @@ object Common:
     case PCV
     case PVal
     case PComp
-    case PFun
 
     case PUnitType
     case PUnit
@@ -203,7 +202,6 @@ object Common:
       case PCV   => "CV"
       case PVal  => "Val"
       case PComp => "Comp"
-      case PFun  => "Fun"
 
       case PUnitType          => "()"
       case PUnit              => "[]"
@@ -241,7 +239,6 @@ object Common:
         "CV",
         "Val",
         "Comp",
-        "Fun",
         "()",
         "[]",
         "consumeLinearUnit",
@@ -270,7 +267,6 @@ object Common:
       case "CV"   => Some(PCV)
       case "Val"  => Some(PVal)
       case "Comp" => Some(PComp)
-      case "Fun"  => Some(PFun)
 
       case "()"                => Some(PUnitType)
       case "[]"                => Some(PUnit)

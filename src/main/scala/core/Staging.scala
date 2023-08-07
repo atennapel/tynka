@@ -26,6 +26,7 @@ object Staging:
 
   private enum Val1:
     case VPrim1(x: PrimName, args: List[Val1])
+    case VFun1(t1: Val1, t2: Val1)
     case VLam1(fn: Val1 => Val1)
     case VQuote1(v: Val0)
     case VType1
@@ -110,6 +111,7 @@ object Staging:
     case TCon(x, as)              => VTCon1(x, as.map(eval1))
     case Wk(t)                    => eval1(t)(env.tail)
     case StringLit(v)             => VStringLit1(v)
+    case Fun(_, t1, _, t2)        => VFun1(eval1(t1), eval1(t2))
 
     case U(_)              => VType1
     case Pi(_, _, _, _, _) => VType1
@@ -244,9 +246,9 @@ object Staging:
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
     v match
-      case VPrim1(PFun, List(a, _, b)) => IR.TDef(quoteVTy(a), quoteCTy(b))
-      case VPrim1(PIO, List(a))        => IR.TDef(Nil, true, quoteVTy(a))
-      case _                           => IR.TDef(quoteVTy(v))
+      case VFun1(a, b)          => IR.TDef(quoteVTy(a), quoteCTy(b))
+      case VPrim1(PIO, List(a)) => IR.TDef(Nil, true, quoteVTy(a))
+      case _                    => IR.TDef(quoteVTy(v))
 
   private def quote(
       v: Val0

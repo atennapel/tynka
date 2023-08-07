@@ -19,7 +19,9 @@ object Pretty:
     case rest => pretty(rest)
 
   private def prettyPi(tm: Tm)(implicit ns: List[Name]): String = tm match
-    case Fun(a, _, b) => s"${prettyParen(a, true)} -> ${prettyPi(b)}"
+    case Fun(Many, a, _, b) => s"${prettyParen(a, true)} -> ${prettyPi(b)}"
+    case Fun(u, a, _, b) =>
+      s"${prettyParen(a, true)} ${u.prefix}-> ${prettyPi(b)}"
     case Pi(Many, DontBind, Expl, t, b) =>
       s"${prettyParen(t, true)} -> ${prettyPi(b)(DontBind.toName :: ns)}"
     case Pi(u, DoBind(x), Expl, t, b) =>
@@ -88,7 +90,7 @@ object Pretty:
     case U(s) => pretty(s)
 
     case Pi(_, _, _, _, _) => prettyPi(tm)
-    case Fun(_, _, _)      => prettyPi(tm)
+    case Fun(_, _, _, _)   => prettyPi(tm)
     case Lam(_, _, _, _)   => prettyLam(tm)
     case App(_, _, _)      => prettyApp(tm)
 

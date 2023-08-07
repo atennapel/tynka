@@ -61,6 +61,7 @@ object Syntax:
     case StringLit(value: String)
 
     case Pi(usage: Usage, name: Bind, icit: Icit, ty: Ty, body: Ty)
+    case Fun(usage: Usage, pty: Ty, cv: Ty, rty: Ty)
     case Lam(name: Bind, icit: Icit, fnty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
     case Fix(ty: Ty, rty: Ty, g: Bind, x: Bind, b: Tm, arg: Tm)
@@ -118,6 +119,7 @@ object Syntax:
           _.metas
         ) ++ bty.metas ++ value.metas ++ body.metas
       case Pi(_, name, icit, ty, body) => ty.metas ++ body.metas
+      case Fun(_, a, b, c)             => a.metas ++ b.metas ++ c.metas
       case Lam(name, icit, fnty, body) => fnty.metas ++ body.metas
       case App(fn, arg, icit)          => fn.metas ++ arg.metas
       case Fix(ty, rty, g, x, b, arg) =>
@@ -162,6 +164,8 @@ object Syntax:
 
       case Pi(Many, DontBind, Expl, t, b) => s"($t -> $b)"
       case Pi(u, x, i, t, b)  => s"(${i.wrap(s"${u.prefix}$x : $t")} -> $b)"
+      case Fun(Many, a, _, b) => s"($a -> $b)"
+      case Fun(u, a, _, b)    => s"($a ${u.prefix}-> $b)"
       case Lam(x, Expl, _, b) => s"(\\$x. $b)"
       case Lam(x, Impl, _, b) => s"(\\{$x}. $b)"
       case App(f, a, Expl)    => s"($f $a)"
@@ -201,11 +205,3 @@ object Syntax:
       case Meta(id)          => s"?$id"
       case AppPruning(t, sp) => s"($t [${sp.reverse.mkString(", ")}])"
   export Tm.*
-
-  object Fun:
-    def apply(a: Ty, cv: Ty, b: Ty): Ty =
-      App(App(App(Prim(PFun), a, Expl), cv, Impl), b, Expl)
-    def unapply(value: Ty): Option[(Ty, Ty, Ty)] = value match
-      case App(App(App(Prim(PFun), a, Expl), cv, Impl), b, Expl) =>
-        Some((a, cv, b))
-      case _ => None
