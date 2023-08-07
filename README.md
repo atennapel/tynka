@@ -23,15 +23,18 @@ TODO:
 - [x] Imports
 - [x] Add mutable
 - [x] Add arrays in IO
+- [ ] Add linearity in Ty
 - [ ] Add mutate
 - [ ] Meta newtypes
 - [ ] ST monad
 - [ ] Modules
-- [ ] Fix duplicate definitions import bug
-- [ ] Fix naming issues in datatypes and generated JVM bytecode
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Records/variants
 - [ ] Val Rep: Boxed or Unboxed
+
+BUGS:
+- [ ] Fix duplicate definitions import bug
+- [ ] Fix naming issues in datatypes and generated JVM bytecode
