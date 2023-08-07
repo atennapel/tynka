@@ -17,6 +17,11 @@ object Syntax:
       case TArray(ty)  => s"Array($ty)"
 
     def tdef: TDef = TDef(this)
+
+    def dataGlobals: Set[GName] = this match
+      case TCon(x)       => Set(x)
+      case TForeign(cls) => Set.empty
+      case TArray(ty)    => ty.dataGlobals
   export Ty.*
 
   final case class TDef(ps: Option[List[Ty]], rt: Ty):
@@ -30,6 +35,11 @@ object Syntax:
       else rt
     def drop(n: Int): TDef = TDef(ps.get.drop(n), rt)
     def params: List[Ty] = ps.getOrElse(Nil)
+
+    def dataGlobals: Set[GName] =
+      ps.map(_.flatMap(_.dataGlobals))
+        .getOrElse(Set.empty)
+        .toSet ++ rt.dataGlobals
   object TDef:
     def apply(rt: Ty): TDef = TDef(None, rt)
     def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
@@ -58,6 +68,15 @@ object Syntax:
         name: GName,
         cs: List[(GName, List[Ty])]
     )
+
+    def globals: Set[GName] = this match
+      case DDef(name, gen, ty, value) => value.globals
+      case DData(name, cs)            => Set.empty
+
+    def dataGlobals: Set[GName] = this match
+      case DDef(name, gen, ty, value) => ty.dataGlobals ++ value.dataGlobals
+      case DData(name, cs) =>
+        cs.flatMap((_, as) => as.flatMap(_.dataGlobals)).toSet
 
     override def toString: String = this match
       case DDef(x, _, TDef(None, t), v) => s"def $x : $t = $v"
@@ -124,6 +143,27 @@ object Syntax:
           .getOrElse(Set.empty)
       case Foreign(rt, cmd, args) =>
         args.flatMap((t, _) => t.globals).toSet
+
+    def dataGlobals: Set[GName] = this match
+      case Arg(ix)          => Set.empty
+      case Var(name)        => Set.empty
+      case IntLit(value)    => Set.empty
+      case BoolLit(value)   => Set.empty
+      case StringLit(value) => Set.empty
+
+      case Global(name, ty)     => ty.dataGlobals
+      case Con(name, con, args) => Set(name) ++ args.flatMap(_.dataGlobals)
+      case Field(dty, con, scrut, ix) => Set(dty) ++ scrut.dataGlobals
+      case Match(dty, ty, x, scrut, cs, other) =>
+        Set(dty) ++ ty.dataGlobals ++ scrut.dataGlobals ++ cs.flatMap((_, t) =>
+          t.dataGlobals
+        ) ++ other.map(_.dataGlobals).getOrElse(Set.empty)
+      case Let(name, ty, value, body) =>
+        ty.dataGlobals ++ value.dataGlobals ++ body.dataGlobals
+      case GlobalApp(name, ty, tc, as) =>
+        ty.dataGlobals ++ as.flatMap(_.dataGlobals)
+      case Foreign(rt, cmd, args) =>
+        rt.dataGlobals ++ args.flatMap((a, b) => a.dataGlobals ++ b.dataGlobals)
 
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"

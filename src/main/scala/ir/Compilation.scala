@@ -16,11 +16,17 @@ object Compilation:
   private def removeUnused(ds: List[J.Def]): List[J.Def] =
     def isUsed(x: J.GName, ds: List[J.Def]): Boolean =
       ds.filterNot { case J.DDef(y, _, _, _) => y == x; case _ => false }
-        .flatMap { case J.DDef(_, _, _, v) => v.globals; case _ => Set.empty }
+        .flatMap(_.globals)
+        .contains(x)
+    def isDataUsed(x: J.GName, ds: List[J.Def]): Boolean =
+      ds.filterNot { case J.DData(y, _) => y == x; case _ => false }
+        .flatMap(_.dataGlobals)
         .contains(x)
     def go(ds: List[J.Def], full: List[J.Def]): Option[List[J.Def]] = ds match
-      case Nil                       => None
-      case (d @ J.DData(_, _)) :: tl => go(tl, full).map(d :: _)
+      case Nil => None
+      case (d @ J.DData(x, _)) :: tl if isDataUsed(x, full) =>
+        go(tl, full).map(d :: _)
+      case J.DData(_, _) :: tl => Some(tl)
       case (d @ J.DDef(x, _, _, _)) :: tl if x == "main" || isUsed(x, full) =>
         go(tl, full).map(d :: _)
       case J.DDef(x, _, _, _) :: tl => Some(tl)
