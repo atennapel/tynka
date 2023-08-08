@@ -706,7 +706,7 @@ object Elaboration:
             val (eb0, ub) = check(b, rty0, STy(cv))(ctx2)
             val (eb, rty, ub2) = insert(STy(cv), (eb0, rty0, ub))(ctx2)
             val (u, ub3) = ub2.uncons
-            val fty = VFun(u, va, cv, rty)
+            val fty = VFun(Many, va, cv, rty)
             (Lam(x, Expl, ctx.quote(fty), eb), fty, ut + ub3)
       case S.Lam(x, S.ArgNamed(_), _, _) => error(s"cannot infer $tm")
 

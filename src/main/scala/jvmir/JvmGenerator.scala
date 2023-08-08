@@ -823,11 +823,52 @@ object JvmGenerator:
             Type.getType(owner),
             Method(member, gen(rt), as.map((_, t) => gen(t)).toArray)
           )
-        case ("mutateData", i, List((d, td), (v, tv))) =>
-          gen(d)
-          mg.dup()
-          gen(v)
-          mg.putField(gen(td), s"a$i", gen(tv))
+        case ("mutateData", str, List((d, td), (v, tv))) =>
+          val spl = str.reverse.split("\\:")
+          val i = spl.head.reverse
+          if spl.size == 1 then
+            gen(d)
+            mg.dup()
+            gen(v)
+            mg.putField(gen(td), s"a$i", gen(tv))
+          else
+            val precon = spl.tail.mkString(":").reverse
+            val con =
+              if precon.startsWith("(") then precon.tail.init
+              else precon
+            val x = td match
+              case TCon(x)       => x
+              case TForeign(cls) => impossible()
+              case TArray(ty)    => impossible()
+            val tc = cons(x)(con)._1
+            gen(d)
+            mg.checkCast(tc)
+            mg.dup()
+            gen(v)
+            mg.putField(tc, s"a$i", gen(tv))
+        case ("mutateDataUnit", str, List((d, td), (v, tv))) =>
+          val spl = str.reverse.split("\\:")
+          val i = spl.head.reverse
+          if spl.size == 1 then
+            gen(d)
+            gen(v)
+            mg.putField(gen(td), s"a$i", gen(tv))
+            mg.push(false)
+          else
+            val precon = spl.tail.mkString(":").reverse
+            val con =
+              if precon.startsWith("(") then precon.tail.init
+              else precon
+            val x = td match
+              case TCon(x)       => x
+              case TForeign(cls) => impossible()
+              case TArray(ty)    => impossible()
+            val tc = cons(x)(con)._1
+            gen(d)
+            mg.checkCast(tc)
+            gen(v)
+            mg.putField(tc, s"a$i", gen(tv))
+            mg.push(false)
         case _ => impossible()
 
   private def genLocal(scrut: Tm, jty: Type, t: Ty)(implicit

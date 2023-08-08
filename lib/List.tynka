@@ -40,3 +40,19 @@ def List/traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
 
 def List/traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
   List/foldr (IO/return U) (\hd tl. IO/seq (f hd) tl) l
+
+def List/foldlIO {A B : VTy} (start : B) (f : B -> A -> IO B) (l : List A) : IO B =
+  List/foldr (\acc. IO/return acc) (\hd tl acc. IO/bind (f acc hd) tl) l start
+
+def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
+  match l
+  | Nil. Nil
+  | (::) hd tl.
+    IO/unsafePerformIO do {IO/bind}
+      let start := f hd :: Nil;
+      List/foldlIO start (\pointer hd. do {IO/bind}
+        let next := f hd :: Nil;
+        foreignIO Unit "mutateDataUnit:(::):1" pointer next;
+        IO/return next
+      ) tl;
+      IO/return start
