@@ -315,11 +315,30 @@ object Elaboration:
         case (VU(STy(cv)), VU(SMeta)) => Some(Lift(ctx.quote(cv), t))
         case (VFlex(_, _), _)         => justAdjust(t, a, st1, b, st2)
         case (_, VFlex(_, _))         => justAdjust(t, a, st1, b, st2)
+
         case (VLift(cv1, a), VLift(cv2, b)) =>
           unify(cv1, cv2); unify(a, b); None
         case (VLift(cv, a), b) => Some(coe(t.splice, a, STy(cv), b, st2))
         case (a, VLift(cv, b)) => Some(coe(t, a, st1, b, STy(cv)).quote)
-        case _                 => justAdjust(t, a, st1, b, st2)
+
+        case (VConType(t1, c1), VConType(t2, c2)) =>
+          unify(t1, t2); unify(c1, c2); None
+        // Con A C <: A => $(exposeCon {at} {c} `t)
+        case (VConType(at, c), et) =>
+          unify(at, et);
+          Some(
+            App(
+              App(
+                App(Prim(PConExpose), ctx.quote(at), Impl),
+                ctx.quote(c),
+                Impl
+              ),
+              t.quote,
+              Expl
+            ).splice
+          )
+
+        case _ => justAdjust(t, a, st1, b, st2)
     go(t, a, st1, b, st2).getOrElse(t)
 
   // checking
@@ -1274,12 +1293,10 @@ object Elaboration:
             }
 
             // add global for datatype case
-            val rty = Lift(
-              Prim(PVal),
-              (0 until ps.size).reverse.foldLeft(Global(dx))((f, i) =>
-                App(f, Var(mkIx(i)), Expl)
-              )
+            val gty = (0 until ps.size).reverse.foldLeft(Global(dx))((f, i) =>
+              App(f, Var(mkIx(i)), Expl)
             )
+            val rty = Lift(Prim(PVal), gty)
             val targs =
               (0 until ps.size).reverse
                 .map(i => Var(mkIx(i + cas.size)))
@@ -1313,7 +1330,46 @@ object Elaboration:
               )
             )
 
-            ((cx, cas), DDef(cx, conty, SMeta, con))
+            val crty = Lift(
+              Prim(PVal),
+              App(App(Prim(PCon), gty, Expl), StringLit(cx.expose), Expl)
+            )
+            val cbody = App(
+              App(App(Prim(PMkCon), gty, Impl), StringLit(cx.expose), Impl),
+              Quote(Con(dx, cx, targs, args)),
+              Expl
+            )
+            val (ccon, cconty) =
+              ps.foldRight[(Tm, Ty)](
+                cas.zipWithIndex.foldRight[(Tm, Ty)]((cbody, crty)) {
+                  case ((ty, i), (b, rt)) =>
+                    val nty =
+                      Pi(Many, DontBind, Expl, Lift(Prim(PVal), ty), Wk(rt))
+                    (Lam(DoBind(Name(s"a$i")), Expl, nty, b), nty)
+                }
+              ) { case (p, (b, rt)) =>
+                val nty = Pi(Many, DoBind(p), Impl, vty, rt)
+                (Lam(DoBind(p), Impl, nty, b), nty)
+              }
+
+            val ccx = Name(s"Con/${cx.expose}")
+            setGlobal(
+              GlobalEntry(
+                false,
+                ccx,
+                ccon,
+                cconty,
+                SMeta,
+                ctx.eval(ccon),
+                ctx.eval(cconty),
+                SMeta
+              )
+            )
+
+            (
+              (cx, cas),
+              List(DDef(cx, conty, SMeta, con), DDef(ccx, cconty, SMeta, ccon))
+            )
           }
           ccs
         }
@@ -1321,7 +1377,7 @@ object Elaboration:
         setGlobalData(dx, ps, ccs.map(_._1))
 
         List(DData(dx, ps, ccs.map(_._1)), DDef(dx, tconty, SMeta, tcon)) ++ ccs
-          .map(_._2)
+          .flatMap(_._2)
 
   def elaborate(module: String, uri: String, ds: S.Defs): Defs =
     debug(s"elaborate $module $uri")

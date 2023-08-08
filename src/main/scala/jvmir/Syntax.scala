@@ -8,18 +8,21 @@ object Syntax:
 
   enum Ty:
     case TCon(x: GName)
+    case TConCon(x: GName, c: GName)
     case TForeign(cls: String)
     case TArray(ty: Ty)
 
     override def toString: String = this match
-      case TCon(x)     => s"$x"
-      case TForeign(x) => s"Foreign($x)"
-      case TArray(ty)  => s"Array($ty)"
+      case TCon(x)        => s"$x"
+      case TConCon(x, cx) => s"Con($x,$cx)"
+      case TForeign(x)    => s"Foreign($x)"
+      case TArray(ty)     => s"Array($ty)"
 
     def tdef: TDef = TDef(this)
 
     def dataGlobals: Set[GName] = this match
       case TCon(x)       => Set(x)
+      case TConCon(x, _) => Set(x)
       case TForeign(cls) => Set.empty
       case TArray(ty)    => ty.dataGlobals
   export Ty.*

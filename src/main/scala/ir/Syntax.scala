@@ -8,13 +8,15 @@ object Syntax:
 
   enum Ty:
     case TCon(x: GName)
+    case TConCon(x: GName, cx: GName)
     case TForeign(x: String)
     case TArray(ty: Ty)
 
     override def toString: String = this match
-      case TCon(x)     => s"$x"
-      case TForeign(x) => s"Foreign($x)"
-      case TArray(ty)  => s"Array($ty)"
+      case TCon(x)        => s"$x"
+      case TConCon(x, cx) => s"Con($x, $cx)"
+      case TForeign(x)    => s"Foreign($x)"
+      case TArray(ty)     => s"Array($ty)"
 
     def tdef: TDef = TDef(this)
   export Ty.*

@@ -188,7 +188,8 @@ object Staging:
       typeOrder += ddef.name
 
     private def rep(t: IR.Ty): String = t match
-      case IR.TCon(x) => repData(defCache.find(d => d.name == x).get.cs)
+      case IR.TCon(x)       => repData(defCache.find(d => d.name == x).get.cs)
+      case IR.TConCon(x, _) => repData(defCache.find(d => d.name == x).get.cs)
       case IR.TForeign(x) if descriptorIsPrimitive(x) => x
       case IR.TForeign(x)                             => "BOX"
       case IR.TArray(_)                               => "BOX"
@@ -205,10 +206,11 @@ object Staging:
       val r = rep(t)
       if r == "BOX" then
         t match
-          case IR.TCon(x) => x
+          case IR.TCon(x)       => x
+          case IR.TConCon(x, c) => s"CON_${x}_${escape(c)}"
           case IR.TForeign(x) =>
             x.replace(";", "").replace("/", "_").replace("\\", "_")
-          case IR.TArray(ty) => s"Array_${escapeTy(ty)}"
+          case IR.TArray(ty) => s"ARRAY_${escapeTy(ty)}"
       else r
 
     def get(name: Name, cparams: List[Val1]): IR.GName =
@@ -238,6 +240,10 @@ object Staging:
       case VTCon1(x, as) =>
         val dx = dmono.get(x, as)
         IR.TCon(dx)
+      case VPrim1(PCon, List(t, VStringLit1(c))) =>
+        quoteVTy(t) match
+          case IR.TCon(dx) => IR.TConCon(dx, c)
+          case _           => impossible()
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
       case _                                          => impossible()
@@ -338,6 +344,9 @@ object Staging:
         )
         IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
       case VSplicePrim0(PRunIO, List(_, c)) => IR.RunIO(quote(vsplice0(c)))
+
+      case VSplicePrim0(PMkCon, List(_, _, v))     => quote(vsplice0(v))
+      case VSplicePrim0(PConExpose, List(_, _, v)) => quote(vsplice0(v))
 
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)

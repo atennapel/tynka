@@ -124,9 +124,10 @@ object Compilation:
       case Fix(_, _, _, _, _, _) => impossible()
 
   private def go(t: Ty): J.Ty = t match
-    case TCon(x)     => J.TCon(x)
-    case TForeign(x) => J.TForeign(x)
-    case TArray(ty)  => J.TArray(go(ty))
+    case TCon(x)        => J.TCon(x)
+    case TConCon(x, cx) => J.TConCon(x, cx)
+    case TForeign(x)    => J.TForeign(x)
+    case TArray(ty)     => J.TArray(go(ty))
 
   private def go(t: TDef): J.TDef = t match
     case TDef(Nil, false, rt) => J.TDef(None, go(rt))

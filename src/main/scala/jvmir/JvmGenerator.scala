@@ -145,6 +145,15 @@ object JvmGenerator:
         case FiniteLike(_)  => Type.INT_TYPE
         case NewtypeLike(t) => gen(t)
         case _              => t
+    case TConCon(x, c) =>
+      val (t, k, _) = tcons(x)
+      k match
+        case UnitLike       => Type.BOOLEAN_TYPE
+        case BoolLike       => Type.BOOLEAN_TYPE
+        case VoidLike       => Type.BOOLEAN_TYPE
+        case FiniteLike(_)  => Type.INT_TYPE
+        case NewtypeLike(t) => gen(t)
+        case _              => cons(x)(c)._1
 
   private def constantValue(e: Tm): Option[Any] = e match
     case IntLit(n)          => Some(n)
@@ -160,6 +169,7 @@ object JvmGenerator:
     case TArray(_)                               => true
     case TForeign(d) if descriptorIsPrimitive(d) => false
     case TForeign(_)                             => true
+    case TConCon(x, _)                           => isBoxed(TCon(x))
     case TCon(x) =>
       val (_, k, _) = tcons(x)
       k match
@@ -838,6 +848,7 @@ object JvmGenerator:
               else precon
             val x = td match
               case TCon(x)       => x
+              case TConCon(x, _) => x
               case TForeign(cls) => impossible()
               case TArray(ty)    => impossible()
             val tc = cons(x)(con)._1
@@ -861,11 +872,58 @@ object JvmGenerator:
               else precon
             val x = td match
               case TCon(x)       => x
+              case TConCon(x, _) => x
               case TForeign(cls) => impossible()
               case TArray(ty)    => impossible()
             val tc = cons(x)(con)._1
             gen(d)
             mg.checkCast(tc)
+            gen(v)
+            mg.putField(tc, s"a$i", gen(tv))
+            mg.push(false)
+        case ("mutateCon", str, List((d, td), (v, tv))) =>
+          val spl = str.reverse.split("\\:")
+          val i = spl.head.reverse
+          if spl.size == 1 then
+            gen(d)
+            mg.dup()
+            gen(v)
+            mg.putField(gen(td), s"a$i", gen(tv))
+          else
+            val precon = spl.tail.mkString(":").reverse
+            val con =
+              if precon.startsWith("(") then precon.tail.init
+              else precon
+            val x = td match
+              case TConCon(x, _) => x
+              case TCon(x)       => impossible()
+              case TForeign(cls) => impossible()
+              case TArray(ty)    => impossible()
+            val tc = cons(x)(con)._1
+            gen(d)
+            mg.dup()
+            gen(v)
+            mg.putField(tc, s"a$i", gen(tv))
+        case ("mutateConUnit", str, List((d, td), (v, tv))) =>
+          val spl = str.reverse.split("\\:")
+          val i = spl.head.reverse
+          if spl.size == 1 then
+            gen(d)
+            gen(v)
+            mg.putField(gen(td), s"a$i", gen(tv))
+            mg.push(false)
+          else
+            val precon = spl.tail.mkString(":").reverse
+            val con =
+              if precon.startsWith("(") then precon.tail.init
+              else precon
+            val x = td match
+              case TConCon(x, _) => x
+              case TCon(x)       => impossible()
+              case TForeign(cls) => impossible()
+              case TArray(ty)    => impossible()
+            val tc = cons(x)(con)._1
+            gen(d)
             gen(v)
             mg.putField(tc, s"a$i", gen(tv))
             mg.push(false)

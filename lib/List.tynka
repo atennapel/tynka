@@ -49,10 +49,10 @@ def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
   | Nil. Nil
   | (::) hd tl.
     IO/unsafePerformIO do {IO/bind}
-      let start := f hd :: Nil;
+      let start := Con/:: (f hd) Nil;
       List/foldlIO start (\pointer hd. do {IO/bind}
-        let next := f hd :: Nil;
-        foreignIO Unit "mutateDataUnit:(::):1" pointer next;
+        let next := Con/:: (f hd) Nil;
+        foreignIO Unit "mutateConUnit:(::):1" pointer (exposeCon next);
         IO/return next
       ) tl;
       IO/return start

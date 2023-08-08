@@ -25,6 +25,7 @@ TODO:
 - [x] Add linearity in Ty
 - [x] ST monad
 - [x] Opaque definitions
+- [ ] Safe field access in Con
 - [ ] Modules
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
