@@ -15,6 +15,7 @@ object Globals:
   private val conmap: mutable.Map[Name, ConEntry] = mutable.Map.empty
 
   case class GlobalEntry(
+      opaque: Boolean,
       name: Name,
       tm: Tm,
       ty: Ty,

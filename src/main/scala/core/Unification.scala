@@ -202,7 +202,7 @@ object Unification:
         val inner2 = goSp(Meta(m), sp)
         goSp(inner2, outer)
 
-      case VGlobal(x, sp, _) => goSp(Global(x), sp)
+      case VGlobal(x, sp, _, _) => goSp(Global(x), sp)
 
       case VPi(u, x, i, t, b) =>
         Pi(u, x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
@@ -254,7 +254,8 @@ object Unification:
     go(a, lvl0)
 
   private def solve(m: MetaId, topSp: Spine, topRhs: Val)(implicit
-      l: Lvl
+      l: Lvl,
+      unfold: Set[Name]
   ): Unit =
     debug(s"solve ?$m := ${quote(topRhs)}")
     val (sp, outer) = splitSpine(topSp)
@@ -300,7 +301,8 @@ object Unification:
     solveMeta(m, eval(solution)(Nil), deps)
 
   private def flexFlex(m: MetaId, sp: Spine, m2: MetaId, sp2: Spine)(implicit
-      gamma: Lvl
+      gamma: Lvl,
+      unfold: Set[Name]
   ): Unit =
     Try {
       val (spn, outer) = splitSpine(sp)
@@ -314,7 +316,8 @@ object Unification:
       case Failure(err)           => throw err
 
   private def intersect(m: MetaId, sp0: Spine, sp02: Spine)(implicit
-      l: Lvl
+      l: Lvl,
+      unfold: Set[Name]
   ): Unit =
     val (sp, outer) = splitSpine(sp0)
     val (sp2, outer2) = splitSpine(sp02)
@@ -343,46 +346,57 @@ object Unification:
     else unify(sp, sp2)
 
   @tailrec
-  private def unifyProj(a: Spine, b: Spine, n: Int)(implicit l: Lvl): Unit =
+  private def unifyProj(a: Spine, b: Spine, n: Int)(implicit
+      l: Lvl,
+      unfold: Set[Name]
+  ): Unit =
     (a, n) match
       case (a, 0)             => unify(a, b)
       case (SProj(a, Snd), n) => unifyProj(a, b, n - 1)
       case _                  => throw UnifyError(s"spine projection mismatch")
 
-  private def unify(a: Spine, b: Spine)(implicit l: Lvl): Unit = (a, b) match
-    case (SId, SId)                       => ()
-    case (SApp(s1, a, _), SApp(s2, b, _)) => unify(s1, s2); unify(a, b)
-    case (SSplice(s1), SSplice(s2))       => unify(s1, s2)
-    case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
-    case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
-    case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
-    case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
-      unify(a, b)
-      as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
-    case (SMatch(s1, dt1, rt1, cs1, o1), SMatch(s2, dt2, rt2, cs2, o2))
-        if cs1.size == cs2.size && o1.isDefined == o2.isDefined && cs1
-          .map(_._1)
-          .toSet == cs2.map(_._1).toSet =>
-      unify(s1, s2)
-      unify(dt1, dt2)
-      unify(rt1, rt2)
-      val m1 = cs1.map((x, _, t) => (x, t)).toMap
-      val m2 = cs2.map((x, _, t) => (x, t)).toMap
-      m1.keySet.foreach(k => unify(m1(k), m2(k)))
-      o1.foreach(c1 => o2.foreach(c2 => unify(c1, c2)))
-    case _ => throw UnifyError(s"spine mismatch")
+  private def unify(a: Spine, b: Spine)(implicit
+      l: Lvl,
+      unfold: Set[Name]
+  ): Unit =
+    (a, b) match
+      case (SId, SId)                       => ()
+      case (SApp(s1, a, _), SApp(s2, b, _)) => unify(s1, s2); unify(a, b)
+      case (SSplice(s1), SSplice(s2))       => unify(s1, s2)
+      case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
+      case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
+      case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
+      case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
+        unify(a, b)
+        as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
+      case (SMatch(s1, dt1, rt1, cs1, o1), SMatch(s2, dt2, rt2, cs2, o2))
+          if cs1.size == cs2.size && o1.isDefined == o2.isDefined && cs1
+            .map(_._1)
+            .toSet == cs2.map(_._1).toSet =>
+        unify(s1, s2)
+        unify(dt1, dt2)
+        unify(rt1, rt2)
+        val m1 = cs1.map((x, _, t) => (x, t)).toMap
+        val m2 = cs2.map((x, _, t) => (x, t)).toMap
+        m1.keySet.foreach(k => unify(m1(k), m2(k)))
+        o1.foreach(c1 => o2.foreach(c2 => unify(c1, c2)))
+      case _ => throw UnifyError(s"spine mismatch")
 
-  private def unify(a: Clos, b: Clos)(implicit l: Lvl): Unit =
+  private def unify(a: Clos, b: Clos)(implicit
+      l: Lvl,
+      unfold: Set[Name]
+  ): Unit =
     val v = VVar(l)
-    unify(a(v), b(v))(l + 1)
+    unify(a(v), b(v))(l + 1, unfold)
 
-  def unify(a: VStage, b: VStage)(implicit l: Lvl): Unit = (a, b) match
-    case (SMeta, SMeta)   => ()
-    case (STy(a), STy(b)) => unify(a, b)
-    case _ =>
-      throw UnifyError(s"cannot unify ${quoteS(a)} ~ ${quoteS(b)}")
+  def unify(a: VStage, b: VStage)(implicit l: Lvl, unfold: Set[Name]): Unit =
+    (a, b) match
+      case (SMeta, SMeta)   => ()
+      case (STy(a), STy(b)) => unify(a, b)
+      case _ =>
+        throw UnifyError(s"cannot unify ${quoteS(a)} ~ ${quoteS(b)}")
 
-  def unify(a: Val, b: Val)(implicit l: Lvl): Unit =
+  def unify(a: Val, b: Val)(implicit l: Lvl, unfold: Set[Name]): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
       case (VU(s1), VU(s2))                         => unify(s1, s2)
@@ -405,7 +419,7 @@ object Unification:
         unify(a1, a2); unify(b1, b2)
         val v = VVar(l)
         val w = VVar(l + 1)
-        unify(f1(v, w), f2(v, w))(l + 1)
+        unify(f1(v, w), f2(v, w))(l + 1, unfold)
         unify(arg1, arg2)
       case (VTCon(x, as1), VTCon(y, as2)) if x == y && as1.size == as2.size =>
         as1.zip(as2).foreach((v, w) => unify(v, w))
@@ -428,9 +442,9 @@ object Unification:
         if m == m2 then intersect(m, sp, sp2) else flexFlex(m, sp, m2, sp2)
 
       case (VLam(_, i, _, b), w) =>
-        val v = VVar(l); unify(b(v), vapp(w, v, i))(l + 1)
+        val v = VVar(l); unify(b(v), vapp(w, v, i))(l + 1, unfold)
       case (w, VLam(_, i, _, b)) =>
-        val v = VVar(l); unify(vapp(w, v, i), b(v))(l + 1)
+        val v = VVar(l); unify(vapp(w, v, i), b(v))(l + 1, unfold)
       case (VPair(a, b, _), w) => unify(a, vfst(w)); unify(b, vsnd(w))
       case (w, VPair(a, b, _)) => unify(vfst(w), a); unify(vsnd(w), b)
 
@@ -440,11 +454,17 @@ object Unification:
       case (VUnit(), _) => ()
       case (_, VUnit()) => ()
 
-      case (VGlobal(x1, sp1, v1), VGlobal(x2, sp2, v2)) if x1 == x2 =>
+      case (VGlobal(x1, sp1, opq, v1), VGlobal(x2, sp2, _, v2)) if x1 == x2 =>
         try unify(sp1, sp2)
-        catch case _: UnifyError => unify(v1(), v2())
-      case (VGlobal(_, _, v), VGlobal(_, _, w)) => unify(v(), w())
-      case (VGlobal(_, _, v), w)                => unify(v(), w)
-      case (w, VGlobal(_, _, v))                => unify(w, v())
+        catch
+          case _: UnifyError if !opq || unfold.contains(x1) =>
+            unify(v1(), v2())
+      case (VGlobal(x1, _, opq1, v), VGlobal(x2, _, opq2, w))
+          if (!opq1 || unfold.contains(x1)) && (!opq2 || unfold.contains(x2)) =>
+        unify(v(), w())
+      case (VGlobal(x, _, opq, v), w) if !opq || unfold.contains(x) =>
+        unify(v(), w)
+      case (w, VGlobal(x, _, opq, v)) if !opq || unfold.contains(x) =>
+        unify(w, v())
 
       case (_, _) => throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")

@@ -25,7 +25,7 @@ object Elaboration:
   // unification
   private def unify(a: VStage, b: VStage)(implicit ctx: Ctx): Unit =
     debug(s"unify ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
-    try unify0(a, b)(ctx.lvl)
+    try unify0(a, b)(ctx.lvl, ctx.unfoldSet)
     catch
       case err: UnifyError =>
         error(
@@ -34,7 +34,7 @@ object Elaboration:
 
   private def unify(a: Val, b: Val)(implicit ctx: Ctx): Unit =
     debug(s"unify ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
-    try unify0(a, b)(ctx.lvl)
+    try unify0(a, b)(ctx.lvl, ctx.unfoldSet)
     catch
       case err: UnifyError =>
         error(
@@ -374,6 +374,8 @@ object Elaboration:
     (tm, force(ty)) match
       case (S.Pos(pos, tm), _) => check(tm, ty, stage)(ctx.enter(pos))
 
+      case (S.Unfold(xs, b), _) => check(b, ty, stage)(ctx.unfold(xs))
+
       case (S.StringLit(v), VLift(cv, ty)) if stage.isMeta =>
         unify(cv, VVal())
         unify(ty, VForeignType(VStringLit("Ljava/lang/String;")))
@@ -662,6 +664,8 @@ object Elaboration:
     if !tm.isPos then debug(s"infer $tm : ${ctx.pretty(s)}")
     tm match
       case S.Pos(pos, tm) => infer(tm, s)(ctx.enter(pos))
+
+      case S.Unfold(xs, b) => infer(b, s)(ctx.unfold(xs))
 
       case S.StringLit(v) =>
         s match
@@ -1048,6 +1052,9 @@ object Elaboration:
         if io then (Foreign(io, ert, el, eas), VIO(ctx.eval(ert)), SCTy(), us)
         else (Foreign(io, ert, el, eas), ctx.eval(ert), SVTy(), us)
 
+      case S.Unfold(xs, b) =>
+        infer(b)(ctx.unfold(xs))
+
       case S.Mutable(c, as, n, k) =>
         getGlobalCon(c) match
           case None => error(s"undefined constructor $c")
@@ -1255,12 +1262,13 @@ object Elaboration:
     debug(s"elaborate $d")
     d match
       case S.DImport(pos, uri) => Nil
-      case S.DDef(pos, x, m, t, v) =>
+      case S.DDef(pos, opq, x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty(pos)
         if getGlobal(x).isDefined then error(s"duplicate global $x")
         val (etm, ety, estage) = elaborate(v, t, m)
         setGlobal(
           GlobalEntry(
+            opq,
             x,
             etm,
             ety,
@@ -1294,6 +1302,7 @@ object Elaboration:
           }._1
         setGlobal(
           GlobalEntry(
+            false,
             dx,
             tcon,
             tconty,
@@ -1349,6 +1358,7 @@ object Elaboration:
 
             setGlobal(
               GlobalEntry(
+                false,
                 cx,
                 con,
                 conty,

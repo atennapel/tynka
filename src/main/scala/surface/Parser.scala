@@ -34,7 +34,9 @@ object Parser:
         "foreign",
         "foreignIO",
         "mutable",
-        "do"
+        "do",
+        "opaque",
+        "unfold"
       ),
       operators = Set(
         "=",
@@ -148,7 +150,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> mutableP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> mutableP <|> unfoldP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(Many, DontBind, Expl, l, r)))
@@ -190,6 +192,10 @@ object Parser:
         (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
           .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
       }
+    )
+
+    private lazy val unfoldP: Parsley[Tm] = positioned(
+      ("unfold" *> some(identOrOp) <~> ";" *> tm).map(Unfold.apply)
     )
 
     private lazy val foreignP: Parsley[Tm] = positioned(
@@ -461,12 +467,15 @@ object Parser:
       many(defP <|> dataP <|> importP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
-      (pos <~> "def" *> identOrOp <~> many(defParam) <~> option(
+      (pos <~> option("opaque") <~> "def" *> identOrOp <~> many(
+        defParam
+      ) <~> option(
         ":" *> tm
       ) <~> (":=" #> false <|> "=" #> true) <~> tm)
-        .map { case (((((pos, x), ps), ty), m), v) =>
+        .map { case ((((((pos, opq), x), ps), ty), m), v) =>
           DDef(
             pos,
+            opq.isDefined,
             x,
             m,
             ty.map(typeFromParams(ps, _)),

@@ -26,11 +26,14 @@ final case class Ctx(
     locals: Locals,
     pruning: Pruning,
     types: Types,
+    unfoldSet: Set[Name],
     pos: PosInfo
 ):
   def names: List[Name] = locals.names
 
   def enter(pos: PosInfo): Ctx = copy(pos = pos)
+
+  def unfold(xs: List[Name]): Ctx = copy(unfoldSet = unfoldSet ++ xs)
 
   def inType: Ctx = copy(usage = Zero)
 
@@ -51,6 +54,7 @@ final case class Ctx(
       Bound(locals, x, quote(ty), quote(stage)),
       Some(Expl) :: pruning,
       newtypes,
+      unfoldSet,
       pos
     )
 
@@ -71,6 +75,7 @@ final case class Ctx(
       Defined(locals, x, qty, qstage, qvalue),
       None :: pruning,
       types + (x -> (u, lvl, ty, stage)),
+      unfoldSet,
       pos
     )
 
@@ -120,4 +125,4 @@ final case class Ctx(
 
 object Ctx:
   def empty(pos: PosInfo): Ctx =
-    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, pos)
+    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, Set.empty, pos)

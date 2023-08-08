@@ -183,10 +183,6 @@ object Common:
     case PEqLabel
     case PAppendLabel
 
-    case PTagged
-    case PTag
-    case PUntag
-
     case PForeignType
 
     case PNew
@@ -222,10 +218,6 @@ object Common:
       case PEqLabel     => "eqLabel"
       case PAppendLabel => "appendLabel"
 
-      case PTagged => "Tagged"
-      case PTag    => "tag"
-      case PUntag  => "untag"
-
       case PForeignType => "Foreign"
 
       case PNew      => "New"
@@ -258,9 +250,6 @@ object Common:
         "Label",
         "eqLabel",
         "appendLabel",
-        "Tagged",
-        "tag",
-        "untag",
         "Foreign",
         "New",
         "dropNew",
@@ -293,10 +282,6 @@ object Common:
       case "Label"       => Some(PLabel)
       case "eqLabel"     => Some(PEqLabel)
       case "appendLabel" => Some(PAppendLabel)
-
-      case "Tagged" => Some(PTagged)
-      case "tag"    => Some(PTag)
-      case "untag"  => Some(PUntag)
 
       case "Foreign" => Some(PForeignType)
 

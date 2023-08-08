@@ -19,6 +19,7 @@ object Syntax:
     case DImport(pos: PosInfo, uri: String)
     case DDef(
         pos: PosInfo,
+        opaque: Boolean,
         name: Name,
         meta: Boolean,
         ty: Option[Ty],
@@ -33,9 +34,10 @@ object Syntax:
 
     override def toString: String = this match
       case DImport(pos, uri) => s"import \"$uri\""
-      case DDef(_, x, m, Some(t), v) =>
-        s"def $x : $t ${if m then "" else ":"}= $v"
-      case DDef(_, x, m, None, v) => s"def $x ${if m then "" else ":"}= $v"
+      case DDef(_, opq, x, m, Some(t), v) =>
+        s"${if opq then "opaque " else ""}def $x : $t ${if m then "" else ":"}= $v"
+      case DDef(_, opq, x, m, None, v) =>
+        s"${if opq then "opaque " else ""}def $x ${if m then "" else ":"}= $v"
       case DData(_, x, ps, Nil) =>
         s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
       case DData(_, x, ps, cs) =>
@@ -72,6 +74,7 @@ object Syntax:
         body: Tm
     )
     case U(stage: Stage[Ty])
+    case Unfold(xs: List[Name], body: Tm)
 
     case IntLit(value: Int)
     case StringLit(value: String)
@@ -113,7 +116,8 @@ object Syntax:
         ty.map(_.free).getOrElse(Nil) ++ value.free ++ body.free.filterNot(
           _ == name
         )
-      case U(stage) => Nil
+      case U(stage)     => Nil
+      case Unfold(_, b) => b.free
       case Pi(_, name, icit, ty, body) =>
         ty.free ++ body.free.filterNot(_ == name.toName)
       case Lam(name, info, ty, body) =>
@@ -152,7 +156,8 @@ object Syntax:
         s"(let ${u.prefix}$x ${if m then "" else ":"}= $v; $b)"
       case Let(u, x, m, Some(t), v, b) =>
         s"(let ${u.prefix}$x : $t ${if m then "" else ":"}= $v; $b)"
-      case U(s) => s"$s"
+      case U(s)          => s"$s"
+      case Unfold(xs, b) => s"(unfold ${xs.mkString(" ")}; $b)"
 
       case IntLit(v)    => s"$v"
       case StringLit(v) => s"\"$v\""

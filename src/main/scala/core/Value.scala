@@ -55,7 +55,7 @@ object Value:
   enum Val:
     case VRigid(head: Head, spine: Spine)
     case VFlex(id: MetaId, spine: Spine)
-    case VGlobal(name: Name, spine: Spine, value: () => Val)
+    case VGlobal(name: Name, spine: Spine, opaque: Boolean, value: () => Val)
     case VU(stage: VStage)
 
     case VIntLit(value: Int)
@@ -204,17 +204,6 @@ object Value:
     def unapply(value: Val): Option[Val] = value match
       case VRigid(HPrim(PArray), SApp(SId, t, Expl)) => Some(t)
       case _                                         => None
-
-  object VTagged:
-    def apply(cv: Val, l: Val, a: Val): Val =
-      VRigid(HPrim(PTagged), SApp(SApp(SApp(SId, cv, Impl), l, Expl), a, Expl))
-    def unapply(value: Val): Option[(Val, Val, Val)] = value match
-      case VRigid(
-            HPrim(PTagged),
-            SApp(SApp(SApp(SId, cv, Impl), l, Expl), a, Expl)
-          ) =>
-        Some((cv, l, a))
-      case _ => None
 
   object VMutable:
     def apply(l: Val, a: Val): Val =

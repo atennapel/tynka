@@ -25,8 +25,8 @@ TODO:
 - [x] Add arrays in IO
 - [x] Add linearity in Ty
 - [x] ST monad
+- [x] Opaque definitions
 - [ ] Add mutate
-- [ ] Meta newtypes (or opaque meta definitions)
 - [ ] Modules
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
