@@ -150,7 +150,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> mutableP <|> unfoldP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> unfoldP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(Many, DontBind, Expl, l, r)))
@@ -205,14 +205,6 @@ object Parser:
         .map { case (((io, rt), l), as) =>
           Foreign(io, rt, l, as)
         }
-    )
-
-    private lazy val mutableP: Parsley[Tm] = positioned(
-      ("mutable" *> identOrOp <~> many(projAtom) <~> option(lam)).map {
-        case ((c, as), l) =>
-          val args = as ++ l
-          Mutable(c, args.dropRight(2), args.init.last, args.last)
-      }
     )
 
     private lazy val matchP: Parsley[Tm] = positioned(

@@ -81,8 +81,6 @@ object Staging:
         case (PAppendLabel, List(VStringLit1(a), VStringLit1(b))) =>
           VStringLit1(a + b)
         case (PConsumeLinearUnit, List(_, _, v)) => v
-        case (PNewDrop, List(_))                 => VPrim1(PUnit, Nil)
-        case (PMutableDrop, List(_, _))          => VPrim1(PUnit, Nil)
         case _                                   => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
@@ -242,7 +240,6 @@ object Staging:
         IR.TCon(dx)
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
-      case VPrim1(PMutable, List(_, t))               => quoteVTy(t)
       case _                                          => impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
@@ -341,35 +338,6 @@ object Staging:
         )
         IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
       case VSplicePrim0(PRunIO, List(_, c)) => IR.RunIO(quote(vsplice0(c)))
-
-      case VSplicePrim0(PNewScope, List(_, _, k)) =>
-        quote(vsplice0(vapp1(k, gensym())))
-      case VSplicePrim0(PNewDup, List(_, _, _, k)) =>
-        quote(vsplice0(vapp1(vapp1(k, gensym()), gensym())))
-
-      case VSplicePrim0(PMutableFreeze, List(_, _, _, v)) => quote(vsplice0(v))
-      case VSplicePrim0(PMutableInternal, List(ta, _, tr, v, _, k)) =>
-        val x = fresh()
-        val qt1 = IR.TDef(quoteVTy(ta))
-        val qt2 = quoteCTy(tr)
-        IR.Let(
-          x,
-          qt1,
-          qt2,
-          quote(vsplice0(v)),
-          quote(
-            vsplice0(
-              vapp1(vapp1(vapp1(k, gensym()), gensym()), VQuote1(VVar0(l)))
-            )
-          )(
-            l + 1,
-            (x, qt1) :: ns,
-            fresh,
-            dmono
-          )
-        )
-      case VSplicePrim0(PMutableGet, List(_, _, _, _, rw, v, k)) =>
-        quote(vsplice0(vapp1(vapp1(k, rw), v)))
 
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)

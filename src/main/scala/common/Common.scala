@@ -185,19 +185,6 @@ object Common:
 
     case PForeignType
 
-    case PNew
-    case PNewDrop
-    case PNewDup
-    case PNewScope
-
-    case PMutable
-    case PMutableInternal
-
-    case PRW
-    case PMutableFreeze
-    case PMutableDrop
-    case PMutableGet
-
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -219,19 +206,6 @@ object Common:
       case PAppendLabel => "appendLabel"
 
       case PForeignType => "Foreign"
-
-      case PNew      => "New"
-      case PNewDrop  => "dropNew"
-      case PNewDup   => "dupNew"
-      case PNewScope => "scopeNew"
-
-      case PMutable         => "Mutable"
-      case PMutableInternal => "internalMutable"
-
-      case PRW            => "RW"
-      case PMutableFreeze => "freezeMutable"
-      case PMutableDrop   => "dropMutable"
-      case PMutableGet    => "getMutable"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -250,16 +224,7 @@ object Common:
         "Label",
         "eqLabel",
         "appendLabel",
-        "Foreign",
-        "New",
-        "dropNew",
-        "dupNew",
-        "scopeNew",
-        "Mutable",
-        "RW",
-        "freezeMutable",
-        "dropMutable",
-        "getMutable"
+        "Foreign"
       )
         .map(Name.apply)
 
@@ -284,17 +249,5 @@ object Common:
       case "appendLabel" => Some(PAppendLabel)
 
       case "Foreign" => Some(PForeignType)
-
-      case "New"      => Some(PNew)
-      case "dropNew"  => Some(PNewDrop)
-      case "dupNew"   => Some(PNewDup)
-      case "scopeNew" => Some(PNewScope)
-
-      case "Mutable" => Some(PMutable)
-
-      case "RW"            => Some(PRW)
-      case "freezeMutable" => Some(PMutableFreeze)
-      case "dropMutable"   => Some(PMutableDrop)
-      case "getMutable"    => Some(PMutableGet)
 
       case _ => None

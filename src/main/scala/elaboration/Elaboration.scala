@@ -1055,62 +1055,6 @@ object Elaboration:
       case S.Unfold(xs, b) =>
         infer(b)(ctx.unfold(xs))
 
-      case S.Mutable(c, as, n, k) =>
-        getGlobalCon(c) match
-          case None => error(s"undefined constructor $c")
-          case Some((dx, cas)) =>
-            val (dps, cons) = getGlobalData(dx).get
-            val vdps = dps.map(_ => ctx.eval(newMeta(VVTy(), SMeta)))
-            val vd = VTCon(dx, vdps)
-            val ctxConsTypes = datatypeCtx(dps, vdps)
-            val eas0 = as
-              .zip(cas)
-              .map((a, t) => check(a, ctxConsTypes.eval(t), SVTy()))
-            val eas = eas0.map(_._1)
-            val uas = eas0.map(_._2).foldLeft(ctx.uses)((a, u) => u + a)
-            val (en, un) = check(n, VNew(), SMeta)
-            val cv = ctx.eval(newMeta(VCV(), SMeta))
-            val r = ctx.eval(newMeta(VUTy(cv), SMeta))
-            // k : {l : Label} (1 _: RW) -> ^(Mutable l A) -> ^R
-            val tk =
-              vpiI(
-                "l",
-                VLabel(),
-                l =>
-                  vfun1(
-                    VRW(l),
-                    vfun(VLift(VVal(), VMutable(l, vd)), VLift(cv, r))
-                  )
-              )
-            val (ek, uk) = check(k, tk, SMeta)
-            // internalMutable {vd} {cv} {r} (c as...) n k
-            (
-              App(
-                App(
-                  App(
-                    App(
-                      App(
-                        App(Prim(PMutableInternal), ctx.quote(vd), Impl),
-                        ctx.quote(cv),
-                        Impl
-                      ),
-                      ctx.quote(r),
-                      Impl
-                    ),
-                    Con(dx, c, vdps.map(v => ctx.quote(v)), eas).quote,
-                    Expl
-                  ),
-                  en,
-                  Expl
-                ),
-                ek,
-                Expl
-              ),
-              VLift(cv, r),
-              SMeta,
-              uas + un + uk
-            )
-
   // elaboration
   private def prettyHoles(implicit ctx0: Ctx): String =
     holes.toList
