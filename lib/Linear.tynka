@@ -6,12 +6,13 @@ opaque def Ur {cv} (A : Ty cv) = A
 def ur {cv} {A : Ty cv} (x : A) : Ur A = unfold Ur; x
 def unUr {cv} {A : Ty cv} (x : Ur A) : Ur A = unfold Ur; x
 
-data Ref A := MkRef A | Empty
+-- TODO: Unit is required here or else Ref Int will be represented by an Int, which cannot be mutated
+data Ref A := MkRef A Unit
 
 def MRef A = Con (Ref A) "MkRef"
 
 def new {A : VTy} {cv} {B : Ty cv} (x : A) (1 k : (1 _ : MRef A) -> Ur B) : Ur B =
-  let ref := Con/MkRef x; k ref
+  let ref := Con/MkRef x U; k ref
 
 def set {A : VTy} (1 ref : MRef A) (x : A) : MRef A =
   (unsafeLinearFunction {MRef A} {\_. MRef A} \ref. Con/unsafeMutate ref "0" x) ref

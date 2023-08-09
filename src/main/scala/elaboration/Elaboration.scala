@@ -390,7 +390,7 @@ object Elaboration:
   ): (Tm, Uses) =
     if !tm.isPos then
       debug(s"check $tm : ${ctx.pretty(ty)} : ${ctx.pretty(stage)}")
-    (tm, force(ty)) match
+    (tm, forceWithSet(ty, ctx.unfoldSet)) match
       case (S.Pos(pos, tm), _) => check(tm, ty, stage)(ctx.enter(pos))
 
       case (S.Unfold(xs, b), _) => check(b, ty, stage)(ctx.unfold(xs))

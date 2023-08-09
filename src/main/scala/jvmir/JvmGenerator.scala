@@ -153,7 +153,7 @@ object JvmGenerator:
         case VoidLike       => Type.BOOLEAN_TYPE
         case FiniteLike(_)  => Type.INT_TYPE
         case NewtypeLike(t) => gen(t)
-        case _ => Type.getType(s"${t.getDescriptor().init}$$${escape(c)};")
+        case _              => cons(x)(c)._1
 
   private def constantValue(e: Tm): Option[Any] = e match
     case IntLit(n)          => Some(n)
@@ -215,14 +215,21 @@ object JvmGenerator:
         case List((_, List(t)))                   => NewtypeLike(t)
         case List(ts)                             => ProductLike(ts._2)
         case _                                    => ADT
-      tcons += (x -> (Type.getType(s"L${ctx.moduleName}$$$x;"), kind, cs.map(
+      val td = Type.getType(s"L${ctx.moduleName}$$$x;")
+      tcons += (x -> (td, kind, cs.map(
         _._1
       )))
       cs.foreach { (cx, as) =>
         if cons.get(x).isEmpty then cons(x) = mutable.Map.empty
-        cons(x) += cx -> (Type.getType(
-          s"L${ctx.moduleName}$$$x$$${escape(cx)};"
-        ), as)
+        val ty = kind match
+          case VoidLike        => Type.BOOLEAN_TYPE
+          case UnitLike        => Type.BOOLEAN_TYPE
+          case BoolLike        => Type.BOOLEAN_TYPE
+          case FiniteLike(n)   => Type.INT_TYPE
+          case ProductLike(ts) => td
+          case NewtypeLike(t)  => td
+          case ADT => Type.getType(s"L${ctx.moduleName}$$$x$$${escape(cx)};")
+        cons(x) += cx -> (ty, as)
       }
     case _ =>
 
