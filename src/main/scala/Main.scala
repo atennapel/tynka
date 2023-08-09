@@ -17,7 +17,7 @@ import scala.io.Source
 import parsley.io.given
 
 object Main:
-  @main def run(filename0: String): Unit =
+  @main def run(filename0: String, options: String*): Unit =
     setDebug(false)
     try
       val etimeStart = System.nanoTime()
@@ -26,6 +26,8 @@ object Main:
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
       println(pretty(eds))
+
+      if options.contains("typecheck") then return
 
       /*
       getGlobal(Name("main")).foreach { g =>
@@ -37,9 +39,13 @@ object Main:
       val irds = stage(eds)
       println(irds)
 
+      if options.contains("stage") then return
+
       println("\ncompilation:")
       val jvmirds = compile(irds)
       println(jvmirds)
+
+      if options.contains("compile") then return
 
       /*
       println("\ninterpret:")
