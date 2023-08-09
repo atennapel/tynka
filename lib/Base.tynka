@@ -38,7 +38,3 @@ data Nat := Z | S Nat
 def Id {A : Meta} (x y : A) : Meta =
   (P : A -> Meta) -> P x -> P y
 def Refl {A} (x : A) : Id x x = \P x. x
-
-def Ur A = (R : Meta) -> (A -> R) -> R
-def MkUr {A} (x : A) : Ur A = \R k. k x
-def unUr {A} (x : Ur A) : A = x A \y. y

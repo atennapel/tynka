@@ -171,6 +171,7 @@ object Common:
     case PUnitType
     case PUnit
     case PConsumeLinearUnit
+    case PUnsafeLinearFunction
 
     case PIO
     case PReturnIO
@@ -197,9 +198,10 @@ object Common:
       case PVal  => "Val"
       case PComp => "Comp"
 
-      case PUnitType          => "()"
-      case PUnit              => "[]"
-      case PConsumeLinearUnit => "consumeLinearUnit"
+      case PUnitType             => "()"
+      case PUnit                 => "[]"
+      case PConsumeLinearUnit    => "consumeLinearUnit"
+      case PUnsafeLinearFunction => "unsafeLinearFunction"
 
       case PIO       => "IO"
       case PReturnIO => "returnIO"
@@ -230,6 +232,7 @@ object Common:
         "()",
         "[]",
         "consumeLinearUnit",
+        "unsafeLinearFunction",
         "IO",
         "returnIO",
         "bindIO",
@@ -252,9 +255,10 @@ object Common:
       case "Val"  => Some(PVal)
       case "Comp" => Some(PComp)
 
-      case "()"                => Some(PUnitType)
-      case "[]"                => Some(PUnit)
-      case "consumeLinearUnit" => Some(PConsumeLinearUnit)
+      case "()"                   => Some(PUnitType)
+      case "[]"                   => Some(PUnit)
+      case "consumeLinearUnit"    => Some(PConsumeLinearUnit)
+      case "unsafeLinearFunction" => Some(PUnsafeLinearFunction)
 
       case "IO"              => Some(PIO)
       case "returnIO"        => Some(PReturnIO)

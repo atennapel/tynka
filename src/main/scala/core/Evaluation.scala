@@ -375,6 +375,25 @@ object Evaluation:
     // {R : Meta} (1 _ : ()) (1 _ : R) -> R
     case PConsumeLinearUnit =>
       (vpiI("R", VUMeta(), r => vfun1(VUnitType(), vfun1(r, r))), SMeta)
+    // {A : Meta} -> {B : A -> Meta} -> ((x : A) -> B x) -> ((1 x : A) -> B x)
+    case PUnsafeLinearFunction =>
+      (
+        vpiI(
+          "A",
+          VUMeta(),
+          a =>
+            vpiI(
+              "B",
+              vfun(a, VUMeta()),
+              b =>
+                vfun(
+                  vpi("x", a, x => vappE(b, x)),
+                  vpi1("x", a, x => vappE(b, x))
+                )
+            )
+        ),
+        SMeta
+      )
 
     case PIO => (vfun(VVTy(), VCTy()), SMeta)
     // returnIO : {A : VTy} -> ^A -> ^(IO A)

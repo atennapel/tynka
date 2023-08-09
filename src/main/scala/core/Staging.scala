@@ -89,7 +89,8 @@ object Staging:
             ) =>
           val env = ps.foldRight(Empty)((v, e) => Def1(e, v))
           eval1(getGlobalCon(Name(c)).get._2(i.toInt))(env)
-        case _ => VPrim1(x, as ++ List(a))
+        case (PUnsafeLinearFunction, List(_, _, f)) => f
+        case _                                      => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()
@@ -376,7 +377,7 @@ object Staging:
         )
 
       case VPrim0(_)           => impossible()
-      case VSplicePrim0(x, as) => impossible()
+      case VSplicePrim0(x, as) => println((x, as)); impossible()
 
   // staging
   private def stageCTy(t: Ty)(implicit dmono: DataMonomorphizer): IR.TDef =

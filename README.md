@@ -27,6 +27,7 @@ TODO:
 - [x] Opaque definitions
 - [x] Safe field access in Con
 - [x] Access to Con in pattern matching
+- [ ] Linear pairs
 - [ ] Modules
 - [ ] Remove implicit generalization
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO

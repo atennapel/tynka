@@ -1,0 +1,22 @@
+import "lib/Constructor"
+
+opaque def Ur {cv} (A : Ty cv) = A
+def ur {cv} {A : Ty cv} (x : A) : Ur A = unfold Ur; x
+def unUr {cv} {A : Ty cv} (x : Ur A) : Ur A = unfold Ur; x
+
+-- TODO: Below API does not work yet as it should!
+data Ref A := MkRef A
+
+def MRef A = Con (Ref A) "MkRef"
+
+def new {A : VTy} {cv} {B : Ty cv} (x : A) (1 k : (1 _ : MRef A) -> Ur B) : Ur B =
+  k (Con/MkRef x)
+
+def set {A : VTy} (1 ref : MRef A) (x : A) : MRef A =
+  (unsafeLinearFunction {MRef A} {\_. MRef A} \ref. Con/unsafeMutate ref "0" x) ref
+
+def freeze {A : VTy} (1 ref : MRef A) : Ur A =
+  (unsafeLinearFunction {MRef A} {\_. Ur A} \ref. ur (Con/field ref "0" [])) ref
+
+def get {A : VTy} (1 ref : MRef A) : Pair (MRef A) (Ur A) =
+  (unsafeLinearFunction {MRef A} {\_. Pair (MRef A) (Ur A)} \ref. MkPair ref (ur (Con/field ref "0" []))) ref
