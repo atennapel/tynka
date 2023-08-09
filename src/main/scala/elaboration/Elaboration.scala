@@ -164,7 +164,7 @@ object Elaboration:
         s"coe ${ctx.pretty(t)} : ${ctx.pretty(a)} : ${ctx.pretty(st1)} to ${ctx
             .pretty(b)} : ${ctx.pretty(st2)}"
       )
-      (force(a), force(b)) match
+      (forceWithSet(a, ctx.unfoldSet), forceWithSet(b, ctx.unfoldSet)) match
         case (VPi(u1, x, i, p1, r1), VPi(u2, x2, i2, p2, r2)) =>
           if u1 != u2 then
             error(
@@ -527,8 +527,6 @@ object Elaboration:
         (et.quote, u)
 
       case (S.Let(u, x, m, t, v, b), _) if stage.isMeta == m =>
-        if !m && u != Many then
-          error(s"usage $u not allowed in non-meta level let")
         val valstage = if m then SMeta else STy(newCV())
         val vvalstage = ctx.eval(valstage)
         val (ev, et, vt, uv) = check(v, t, vvalstage)
@@ -537,9 +535,9 @@ object Elaboration:
           ctx.define(Many, x, vt, et, vvalstage, valstage, ctx.eval(ev), ev)
         )
         val (ux, ub) = us.uncons
-        if !(ux <= u) then
+        if u != Many && !(ux <= u) then
           error(s"usage error for $x: expected ${u} but was ${ux}")
-        (Let(u, x, et, valstage, ctx.quote(ty), ev, eb), (u * uv) + ub)
+        (Let(u, x, et, valstage, ctx.quote(ty), ev, eb), (ux * uv) + ub)
 
       case (S.Hole(ox), _) =>
         val t = newMeta(ty, stage)
@@ -825,8 +823,6 @@ object Elaboration:
                   case None    => error(s"undefined variable $x")
 
       case S.Let(u, x, m, t, v, b) =>
-        if !m && u != Many then
-          error(s"usage $u not allowed in non-meta level let")
         val stage1 = if m then SMeta else STy(newCV())
         val vstage1 = ctx.eval(stage1)
         val stage2 = if m then SMeta else STy(newCV())
@@ -837,13 +833,13 @@ object Elaboration:
             ctx.define(Many, x, vt, et, vstage1, stage1, ctx.eval(ev), ev)
           )
         val (ux, ub2) = ub.uncons
-        if !(ux <= u) then
+        if u != Many && !(ux <= u) then
           error(s"usage error for $x: expected ${u} but was ${ux}")
         (
           Let(u, x, et, stage1, ctx.quote(rt), ev, eb),
           rt,
           vstage2,
-          (u * uv) + ub2
+          (ux * uv) + ub2
         )
 
       case S.Pi(u, x, Impl, a, b) =>

@@ -278,6 +278,17 @@ object Evaluation:
         force(v(), UnfoldAll)
       case _ => v
 
+  @tailrec
+  def forceWithSet(v: Val, unfold: Set[Name]): Val =
+    v match
+      case VFlex(id, sp) =>
+        getMeta(id) match
+          case Solved(_, v, _, _)   => forceWithSet(vspine(v, sp), unfold)
+          case Unsolved(_, _, _, _) => v
+      case VGlobal(x, _, opq, v) if !opq || unfold.contains(x) =>
+        forceWithSet(v(), unfold)
+      case _ => v
+
   private def quote(hd: Tm, sp: Spine, unfold: Unfold)(implicit l: Lvl): Tm =
     sp match
       case SId              => hd
@@ -375,7 +386,7 @@ object Evaluation:
     // {R : Meta} (1 _ : ()) (1 _ : R) -> R
     case PConsumeLinearUnit =>
       (vpiI("R", VUMeta(), r => vfun1(VUnitType(), vfun1(r, r))), SMeta)
-    // {A : Meta} -> {B : A -> Meta} -> ((x : A) -> B x) -> ((1 x : A) -> B x)
+    // {A : Meta} -> {B : A -> Meta} -> (1 _ : (x : A) -> B x) -> ((1 x : A) -> B x)
     case PUnsafeLinearFunction =>
       (
         vpiI(
@@ -386,7 +397,7 @@ object Evaluation:
               "B",
               vfun(a, VUMeta()),
               b =>
-                vfun(
+                vfun1(
                   vpi("x", a, x => vappE(b, x)),
                   vpi1("x", a, x => vappE(b, x))
                 )

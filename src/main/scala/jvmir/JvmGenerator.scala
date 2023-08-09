@@ -218,6 +218,12 @@ object JvmGenerator:
       tcons += (x -> (Type.getType(s"L${ctx.moduleName}$$$x;"), kind, cs.map(
         _._1
       )))
+      cs.foreach { (cx, as) =>
+        if cons.get(x).isEmpty then cons(x) = mutable.Map.empty
+        cons(x) += cx -> (Type.getType(
+          s"L${ctx.moduleName}$$$x$$${escape(cx)};"
+        ), as)
+      }
     case _ =>
 
   private def gen(d: Def)(implicit cw: ClassWriter, ctx: Ctx): Unit = d match
@@ -293,8 +299,6 @@ object JvmGenerator:
     // datatype constructors
     cs.zipWithIndex.foreach { case ((cx, as), i) =>
       val ecx = escape(cx)
-      if cons.get(dx).isEmpty then cons(dx) = mutable.Map.empty
-      cons(dx) += cx -> (Type.getType(s"L$className$$$ecx;"), as)
       genCon(className, cx, as)
       datacw.visitInnerClass(
         s"$className$$$ecx",
