@@ -128,7 +128,7 @@ object Evaluation:
   private def vmatch(
       dty: VTy,
       rty: VTy,
-      cs: List[(Name, Int, Val)],
+      cs: List[(Name, Boolean, Int, Val)],
       o: Option[Val],
       v: Val
   ): Val =
@@ -249,7 +249,7 @@ object Evaluation:
       vmatch(
         eval(dty),
         eval(rty),
-        cs.map((x, i, b) => (x, i, eval(b))),
+        cs.map((x, c, i, b) => (x, c, i, eval(b))),
         other.map(eval),
         eval(scrut)
       )
@@ -293,7 +293,7 @@ object Evaluation:
           App(f, a, i)
         }
       case SMatch(sp, dty, rty, cs, other) =>
-        val qcs = cs.map((x, i, b) => (x, i, quote(b, unfold)))
+        val qcs = cs.map((x, c, i, b) => (x, c, i, quote(b, unfold)))
         Match(
           quote(dty, unfold),
           quote(rty, unfold),

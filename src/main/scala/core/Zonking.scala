@@ -87,7 +87,7 @@ object Zonking:
         zonk(dty),
         zonk(rty),
         zonk(scrut),
-        cs.map((x, i, b) => (x, i, zonk(b))),
+        cs.map((x, c, i, b) => (x, c, i, zonk(b))),
         other.map(zonk)
       )
 

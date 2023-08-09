@@ -153,7 +153,7 @@ object JvmGenerator:
         case VoidLike       => Type.BOOLEAN_TYPE
         case FiniteLike(_)  => Type.INT_TYPE
         case NewtypeLike(t) => gen(t)
-        case _              => cons(x)(c)._1
+        case _ => Type.getType(s"${t.getDescriptor().init}$$${escape(c)};")
 
   private def constantValue(e: Tm): Option[Any] = e match
     case IntLit(n)          => Some(n)

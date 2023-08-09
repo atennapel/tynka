@@ -29,7 +29,7 @@ object Value:
         spine: Spine,
         dty: VTy,
         rty: VTy,
-        cs: List[(Name, Int, Val)],
+        cs: List[(Name, Boolean, Int, Val)],
         other: Option[Val]
     )
 

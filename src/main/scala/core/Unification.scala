@@ -186,7 +186,7 @@ object Unification:
           App(f, a, i)
         }
       case SMatch(sp, dty, rty, cs, other) =>
-        val qcs = cs.map((x, i, b) => (x, i, go(b)))
+        val qcs = cs.map((x, c, i, b) => (x, c, i, go(b)))
         Match(go(dty), go(rty), goSp(t, sp), qcs, other.map(go))
     def go(v: Val)(implicit psub: PSub): Tm = force(v, UnfoldMetas) match
       case VRigid(HVar(x), sp) =>
@@ -381,8 +381,8 @@ object Unification:
         unify(s1, s2)
         unify(dt1, dt2)
         unify(rt1, rt2)
-        val m1 = cs1.map((x, _, t) => (x, t)).toMap
-        val m2 = cs2.map((x, _, t) => (x, t)).toMap
+        val m1 = cs1.map((x, _, _, t) => (x, t)).toMap
+        val m2 = cs2.map((x, _, _, t) => (x, t)).toMap
         m1.keySet.foreach(k => unify(m1(k), m2(k)))
         o1.foreach(c1 => o2.foreach(c2 => unify(c1, c2)))
       case _ => throw UnifyError(s"spine mismatch")

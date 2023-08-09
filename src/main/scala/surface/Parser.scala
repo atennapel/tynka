@@ -213,13 +213,13 @@ object Parser:
           pos <~>
             "|" *> identOrOp.flatMap(x =>
               if x.expose == "_" then empty else pure(x)
-            ) <~> many(bind) <~> "." *> tm
+            ) <~> option("{" *> identOrOp <* "}") <~> many(bind) <~> "." *> tm
         )
       ) <~> option(pos <~> "|" *> option("_") *> "." *> tm)).map {
         case ((scrut, cs), other) =>
           Match(
             scrut,
-            cs.map { case (((pos, c), ps), b) => (pos, c, ps, b) },
+            cs.map { case ((((pos, c), cx), ps), b) => (pos, c, cx, ps, b) },
             other
           )
       }
@@ -354,7 +354,10 @@ object Parser:
           .map { case ((c, (pt, t)), (pf, f)) =>
             Match(
               c,
-              List((pt, Name("True"), Nil, t), (pf, Name("False"), Nil, f)),
+              List(
+                (pt, Name("True"), None, Nil, t),
+                (pf, Name("False"), None, Nil, f)
+              ),
               None
             )
           }

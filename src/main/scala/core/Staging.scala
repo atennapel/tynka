@@ -54,7 +54,7 @@ object Staging:
         dty: Val1,
         rty: Val1,
         scrut: Val0,
-        cs: List[(Name, Int, Val0)],
+        cs: List[(Name, Boolean, Int, Val0)],
         other: Option[Val0]
     )
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
@@ -160,7 +160,7 @@ object Staging:
         eval1(dty),
         eval1(rty),
         eval0(scrut),
-        cs.map((x, i, t) => (x, i, eval0(t))),
+        cs.map((x, c, i, t) => (x, c, i, eval0(t))),
         o.map(eval0)
       )
     case App(f, a, _) => VApp0(eval0(f), eval0(a))
@@ -309,16 +309,16 @@ object Staging:
           qrty,
           x,
           quote(scrut),
-          cs.map((cx, i, t) =>
-            (
-              cx.expose,
-              (0 until i).foldLeft(quote(t))((f, i) =>
-                IR.App(
-                  f,
-                  IR.Field(dataname, cx.expose, vv, i)
-                )
+          cs.map((cx, includeCon, i, t) =>
+            val qt0 = quote(t)
+            val qt = if includeCon then IR.App(qt0, vv) else qt0
+            val qb = (0 until i).foldLeft(qt)((f, i) =>
+              IR.App(
+                f,
+                IR.Field(dataname, cx.expose, vv, i)
               )
             )
+            (cx.expose, qb)
           ),
           other.map(quote)
         )

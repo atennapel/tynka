@@ -26,8 +26,9 @@ TODO:
 - [x] ST monad
 - [x] Opaque definitions
 - [x] Safe field access in Con
-- [ ] Access to Con in pattern matching
+- [x] Access to Con in pattern matching
 - [ ] Modules
+- [ ] Remove implicit generalization
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions

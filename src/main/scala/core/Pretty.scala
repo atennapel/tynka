@@ -120,7 +120,7 @@ object Pretty:
 
     case Match(_, _, scrut, cs, other) =>
       s"match ${prettyParen(scrut, true)} ${cs
-          .map((c, _, b) => s"| $c ${pretty(b)}")
+          .map((c, _, _, b) => s"| $c ${pretty(b)}")
           .mkString(" ")}${if other.isDefined then " " else ""}${other
           .map(t => s"| ${pretty(t)}")
           .getOrElse("")}"

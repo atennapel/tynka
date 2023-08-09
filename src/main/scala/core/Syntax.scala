@@ -82,7 +82,7 @@ object Syntax:
         dty: Ty,
         rty: Ty,
         scrut: Tm,
-        cs: List[(Name, Int, Tm)],
+        cs: List[(Name, Boolean, Int, Tm)],
         other: Option[Tm]
     )
 
@@ -137,7 +137,7 @@ object Syntax:
           .foldLeft(Set.empty[MetaId])(_ ++ _)
       case Match(dty, rty, scrut, cs, other) =>
         dty.metas ++ rty.metas ++ scrut.metas ++ cs
-          .map((_, _, t) => t.metas)
+          .map((_, _, _, t) => t.metas)
           .foldLeft(Set.empty[MetaId])(_ ++ _) ++ other
           .map(_.metas)
           .getOrElse(Set.empty[MetaId])
@@ -196,7 +196,7 @@ object Syntax:
 
       case Match(_, _, scrut, cs, other) =>
         s"(match $scrut ${cs
-            .map((c, _, b) => s"| $c $b")
+            .map((c, _, _, b) => s"| $c $b")
             .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
 
       case Wk(t)      => s"(Wk $t)"

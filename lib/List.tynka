@@ -1,6 +1,6 @@
 import "lib/Base"
 import "lib/IO"
-import "lib/Con"
+import "lib/Constructor"
 
 data List A
   | Nil

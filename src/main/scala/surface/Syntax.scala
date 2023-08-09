@@ -94,7 +94,7 @@ object Syntax:
 
     case Match(
         scrut: Tm,
-        cs: List[(PosInfo, Name, List[Bind], Tm)],
+        cs: List[(PosInfo, Name, Option[Name], List[Bind], Tm)],
         other: Option[(PosInfo, Tm)]
     )
 
@@ -132,7 +132,9 @@ object Syntax:
       case Splice(tm)     => tm.free
       case Match(scrut, cs, other) =>
         scrut.free ++ cs
-          .map((_, _, ps, t) => t.free.filterNot(x => ps.contains(DoBind(x))))
+          .map((_, _, cx, ps, t) =>
+            t.free.filterNot(x => ps.contains(DoBind(x)) && cx.exists(_ == x))
+          )
           .foldLeft(List.empty[Name])((acc, xs) => acc ++ xs) ++ other
           .map((_, t) => t.free)
           .getOrElse(Nil)
@@ -186,7 +188,9 @@ object Syntax:
 
       case Match(scrut, cs, other) =>
         s"(match $scrut ${cs
-            .map((_, c, ps, b) => s"| $c ${ps.mkString(" ")}. $b")
+            .map((_, c, cx, ps, b) =>
+              s"| $c${cx match { case None => ""; case Some(x) => s" {$x}" }} ${ps.mkString(" ")}. $b"
+            )
             .mkString(" ")} ${other.map((_, t) => s"|. $t").getOrElse("")})"
 
       case Hole(None)    => "_"

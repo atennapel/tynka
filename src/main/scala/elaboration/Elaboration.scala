@@ -484,7 +484,7 @@ object Elaboration:
 
       case (S.Match(scrut, cs, other), _) if !stage.isMeta =>
         val STy(vrcv) = stage: @unchecked
-        checkMatch(tm, scrut, cs, other, ctx.quote(ty), ty, vrcv)
+        checkMatch(scrut, cs, other, ctx.quote(ty), ty, vrcv)
 
       case (S.Var(Name("[]"), _), VTCon(dx, as)) if !stage.isMeta =>
         val nilary = getGlobalData(dx).get._2.filter((_, as) => as.isEmpty)
@@ -598,9 +598,8 @@ object Elaboration:
       )
     }
   private def checkMatch(
-      tm: S.Tm,
       scrut: S.Tm,
-      cs: List[(PosInfo, Name, List[Bind], S.Tm)],
+      cs: List[(PosInfo, Name, Option[Name], List[Bind], S.Tm)],
       other: Option[(PosInfo, S.Tm)],
       rty: Tm,
       vrty: VTy,
@@ -608,6 +607,15 @@ object Elaboration:
   )(implicit ctx: Ctx): (Tm, Uses) =
     val (escrut, vscrutty, uscrut) = infer(scrut, SVTy())
     force(vscrutty) match
+      case VConType(t, c) =>
+        checkMatch(
+          S.App(S.Var(Name("exposeCon")), scrut, S.ArgIcit(Expl)),
+          cs,
+          other,
+          rty,
+          vrty,
+          vrcv
+        )
       case VFlex(_, _) =>
         // try to figure out datatype from constructors
         val used = cs.flatMap(c => getGlobalCon(c._2).map(_._1))
@@ -618,31 +626,45 @@ object Elaboration:
           .map(_ => newMeta(VVTy(), SMeta))
           .foldLeft(Global(name))((f, a) => App(f, a, Expl))
         unify(vscrutty, ctx.eval(data))
-        checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        checkMatch(scrut, cs, other, rty, vrty, vrcv)
       case VTCon(dx, as) =>
         val (dps, cons) = getGlobalData(dx).get
         val ctxConsTypes = datatypeCtx(dps, as)
         val used = mutable.Set[Name]()
-        val ecs = cs.map { (pos, cx, ps, b) =>
+        val ecs = cs.map { (pos, cx, ocon, ps, b) =>
           implicit val ctx1: Ctx = ctx.enter(pos)
           if !cons.contains(cx) then
-            error(s"$cx is not a constructor of type $dx: $tm")
+            error(s"$cx is not a constructor of type $dx")
           if used.contains(cx) then
-            error(s"constructor appears twice in match $cx: $tm")
+            error(s"constructor appears twice in match $cx")
           used += cx
           val tas = cons(cx)
           if ps.size != tas.size then
             error(
               s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
             )
-          val (fnty, ecv) = tas
+          val (fnty0, ecv0) = tas
             .foldRight((vrty, vrcv)) { case (t, (rt, rcv)) =>
               (VFun(Many, ctxConsTypes.eval(t), rcv, rt), VComp())
             }
-          val lam =
+          val (fnty, ecv) = ocon.fold((fnty0, ecv0))(conx =>
+            (
+              VFun(
+                Many,
+                VConType(vscrutty, VStringLit(cx.expose)),
+                ecv0,
+                fnty0
+              ),
+              VComp()
+            )
+          )
+          val lam0 =
             ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
+          val lam = ocon.fold(lam0)(conx =>
+            S.Lam(DoBind(conx), S.ArgIcit(Expl), None, lam0)
+          )
           val (eb, u) = check(lam, fnty, STy(ecv))
-          (cx, tas.size, eb, u)
+          (cx, ocon.isDefined, tas.size, eb, u)
         }
         val left = cons.keySet -- used
         if other.isEmpty && left.nonEmpty then
@@ -654,7 +676,7 @@ object Elaboration:
           if left.isEmpty then error(s"other case does not match anything")
           check(b, vrty, STy(vrcv))
         }
-        val uses = (eother, ecs.map(_._4)) match
+        val uses = (eother, ecs.map(_._5)) match
           case (None, Nil)       => uscrut
           case (None, l)         => uscrut + Uses.lub(l)
           case (Some((_, u)), l) => uscrut + Uses.lub(u :: l)
@@ -663,14 +685,14 @@ object Elaboration:
             ctx.quote(vscrutty),
             rty,
             escrut,
-            ecs.map((a, b, c, d) => (a, b, c)),
+            ecs.map((a, con, b, c, d) => (a, con, b, c)),
             eother.map(_._1)
           ),
           uses
         )
       case _ =>
         error(
-          s"expected a datatype in match but got ${ctx.pretty(vscrutty)} in $tm"
+          s"expected a datatype in match but got ${ctx.pretty(vscrutty)}"
         )
 
   private def inferType(ty: S.Ty)(implicit ctx: Ctx): (Tm, VStage, Uses) =
@@ -761,7 +783,7 @@ object Elaboration:
         val STy(vrcv) = s: @unchecked
         val rty = newMeta(VUTy(vrcv), SMeta)
         val vrty = ctx.eval(rty)
-        val (etm, u) = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        val (etm, u) = checkMatch(scrut, cs, other, rty, vrty, vrcv)
         (etm, vrty, u)
 
       case _ =>
@@ -986,7 +1008,9 @@ object Elaboration:
                 val (em, ut) = check(
                   S.Match(
                     t,
-                    List((ctx.pos, cx, List(DoBind(x), DontBind), S.Var(x))),
+                    List(
+                      (ctx.pos, cx, None, List(DoBind(x), DontBind), S.Var(x))
+                    ),
                     None
                   ),
                   pty,
@@ -998,7 +1022,9 @@ object Elaboration:
                 val (em, ut) = check(
                   S.Match(
                     t,
-                    List((ctx.pos, cx, List(DontBind, DoBind(x)), S.Var(x))),
+                    List(
+                      (ctx.pos, cx, None, List(DontBind, DoBind(x)), S.Var(x))
+                    ),
                     None
                   ),
                   pty,
@@ -1043,7 +1069,7 @@ object Elaboration:
         val vrcv = ctx.eval(newCV())
         val rty = newMeta(VUTy(vrcv), SMeta)
         val vrty = ctx.eval(rty)
-        val (etm, u) = checkMatch(tm, scrut, cs, other, rty, vrty, vrcv)
+        val (etm, u) = checkMatch(scrut, cs, other, rty, vrty, vrcv)
         (etm, vrty, STy(vrcv), u)
 
       case S.Lift(a) =>
@@ -1209,7 +1235,7 @@ object Elaboration:
         replaceMeta(id, dty, ix),
         replaceMeta(id, rty, ix),
         replaceMeta(id, scrut, ix),
-        cs.map((x, i, t) => (x, i, replaceMeta(id, t, ix))),
+        cs.map((x, c, i, t) => (x, c, i, replaceMeta(id, t, ix))),
         other.map(replaceMeta(id, _, ix))
       )
 
