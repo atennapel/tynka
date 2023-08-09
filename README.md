@@ -25,14 +25,17 @@ TODO:
 - [x] Add linearity in Ty
 - [x] ST monad
 - [x] Opaque definitions
-- [ ] Safe field access in Con
+- [x] Safe field access in Con
+- [ ] Access to Con in pattern matching
 - [ ] Modules
+- [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
 - [ ] Recursion check in datatypes definitions
 - [ ] Higher-kinded type parameters for datatypes
 - [ ] Records/variants
 - [ ] Val Rep: Boxed or Unboxed
+- [ ] Try to write `mapTRMC` using ST
 
 BUGS:
 - [ ] Fix duplicate definitions import bug

@@ -24,7 +24,7 @@ object Value:
     case SApp(spine: Spine, arg: Val, icit: Icit)
     case SProj(spine: Spine, proj: ProjType)
     case SSplice(spine: Spine)
-    case SPrim(spine: Spine, name: PrimName, args: List[(Val, Icit)])
+    case SPrim(spine: Spine, name: PrimName, ix: Int, args: List[(Val, Icit)])
     case SMatch(
         spine: Spine,
         dty: VTy,
@@ -38,7 +38,7 @@ object Value:
       case SApp(sp, _, _)         => 1 + sp.size
       case SProj(sp, _)           => 1 + sp.size
       case SSplice(sp)            => 1 + sp.size
-      case SPrim(sp, _, _)        => 1 + sp.size
+      case SPrim(sp, _, _, _)     => 1 + sp.size
       case SMatch(sp, _, _, _, _) => 1 + sp.size
 
     def isEmpty: Boolean = this match

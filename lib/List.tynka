@@ -1,5 +1,6 @@
 import "lib/Base"
 import "lib/IO"
+import "lib/Con"
 
 data List A
   | Nil
@@ -52,7 +53,7 @@ def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
       let start := Con/:: (f hd) Nil;
       List/foldlIO start (\pointer hd. do {IO/bind}
         let next := Con/:: (f hd) Nil;
-        foreignIO Unit "mutateConUnit:(::):1" pointer (exposeCon next);
+        Con/unsafeMutateIO pointer "1" next;
         IO/return next
       ) tl;
       IO/return start

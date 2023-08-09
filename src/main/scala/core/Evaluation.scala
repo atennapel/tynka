@@ -7,6 +7,7 @@ import Metas.*
 import Globals.*
 
 import scala.annotation.tailrec
+import scala.runtime.VolatileIntRef
 
 object Evaluation:
   extension (c: Clos)
@@ -67,21 +68,61 @@ object Evaluation:
       VGlobal(x, SSplice(sp), opq, () => vsplice(v()))
     case _ => impossible()
 
-  private def vprimelim(x: PrimName, as: List[(Val, Icit)], v: Val): Val =
-    (x, force(v), as) match
+  private def vprimelim(
+      x: PrimName,
+      i: Int,
+      as: List[(Val, Icit)],
+      v: Val
+  ): Val =
+    (x, force(v), as.map((v, i) => (force(v), i))) match
       case (PEqLabel, VStringLit(a), List((VStringLit(b), _))) =>
         if a == b then
           vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => t)))
         else vlam("R", VUMeta(), r => vlam("t", r, t => vlam("f", r, f => f)))
+      case (PEqLabel, VStringLit(_), List((a, _))) =>
+        vprimelim(PEqLabel, 1 - i, List((v, Expl)), a)
+
       case (PAppendLabel, VStringLit(""), List((b, _))) => b
       case (PAppendLabel, _, List((VStringLit(""), _))) => v
       case (PAppendLabel, VStringLit(a), List((VStringLit(b), _))) =>
         VStringLit(a + b)
+      case (PAppendLabel, VStringLit(_), List((a, _))) =>
+        vprimelim(PAppendLabel, 1 - i, List((v, Expl)), a)
 
-      case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, as))
-      case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, as))
+      case (
+            PConHasIndex,
+            VStringLit(c),
+            List((VStringLit(i), _))
+          ) =>
+        (i.toIntOption, getGlobalCon(Name(c))) match
+          case (Some(i), Some(e)) if i >= 0 && i < e._2.size => VUnitType()
+          case _                                             => vcvoid
+      case (PConHasIndex, VStringLit(_), List((a, _))) =>
+        vprimelim(PConHasIndex, 1 - i, List((v, Expl)), a)
+
+      case (
+            PConParamType,
+            VTCon(x, ps),
+            List((VStringLit(c), _), (VStringLit(i), _))
+          ) =>
+        (getGlobalCon(Name(c)), i.toIntOption) match
+          case (Some(e), Some(i)) if i >= 0 && i < e._2.size =>
+            eval(e._2(i))(ps.reverse)
+          case _ => vcvoid
+      case (PConParamType, VTCon(_, _), List((c, _), (i, _))) =>
+        (c, i) match
+          case (VFlex(_, _), _) =>
+            vprimelim(PConParamType, 1, List((v, Expl), (i, Expl)), c)
+          case _ => vprimelim(PConParamType, 2, List((v, Expl), (c, Expl)), i)
+      case (PConParamType, VStringLit(_), List((a, _), (cOri, _))) =>
+        if i == 1 then
+          vprimelim(PConParamType, 2, List((a, Expl), (v, Expl)), cOri)
+        else vprimelim(PConParamType, 0, List((cOri, Expl), (v, Expl)), a)
+
+      case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, i, as))
+      case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, i, as))
       case (_, VGlobal(y, sp, opq, v), _) =>
-        VGlobal(y, SPrim(sp, x, as), opq, () => vprimelim(x, as, v()))
+        VGlobal(y, SPrim(sp, x, i, as), opq, () => vprimelim(x, i, as, v()))
       case _ => impossible()
 
   private def vmatch(
@@ -108,7 +149,7 @@ object Evaluation:
     case SApp(sp, a, i)              => vapp(vspine(v, sp), a, i)
     case SSplice(sp)                 => vsplice(vspine(v, sp))
     case SProj(sp, proj)             => vproj(vspine(v, sp), proj)
-    case SPrim(sp, x, as)            => vprimelim(x, as, vspine(v, sp))
+    case SPrim(sp, x, i, as)         => vprimelim(x, i, as, vspine(v, sp))
     case SMatch(sp, dty, rty, cs, o) => vmatch(dty, rty, cs, o, vspine(v, sp))
 
   private def vmeta(id: MetaId): Val = getMeta(id) match
@@ -128,7 +169,11 @@ object Evaluation:
         "a",
         VIrrelevant,
         a =>
-          vlam("b", VIrrelevant, b => vprimelim(PEqLabel, List((b, Expl)), a))
+          vlam(
+            "b",
+            VIrrelevant,
+            b => vprimelim(PEqLabel, 0, List((b, Expl)), a)
+          )
       )
     case PAppendLabel =>
       vlam(
@@ -138,7 +183,34 @@ object Evaluation:
           vlam(
             "b",
             VIrrelevant,
-            b => vprimelim(PAppendLabel, List((b, Expl)), a)
+            b => vprimelim(PAppendLabel, 0, List((b, Expl)), a)
+          )
+      )
+    case PConHasIndex =>
+      vlam(
+        "C",
+        VIrrelevant,
+        c =>
+          vlam(
+            "i",
+            VIrrelevant,
+            i => vprimelim(PConHasIndex, 0, List((i, Expl)), c)
+          )
+      )
+    case PConParamType =>
+      vlam(
+        "A",
+        VIrrelevant,
+        a =>
+          vlam(
+            "C",
+            VIrrelevant,
+            c =>
+              vlam(
+                "i",
+                VIrrelevant,
+                i => vprimelim(PConParamType, 0, List((c, Expl), (i, Expl)), a)
+              )
           )
       )
     case _ => VPrim(x)
@@ -196,14 +268,15 @@ object Evaluation:
 
   // quotation
   @tailrec
-  def force(v: Val, unfold: Unfold = UnfoldAll): Val = v match
-    case VFlex(id, sp) =>
-      getMeta(id) match
-        case Solved(_, v, _, _)   => force(vspine(v, sp), unfold)
-        case Unsolved(_, _, _, _) => v
-    case VGlobal(_, _, opq, v) if !opq && unfold == UnfoldAll =>
-      force(v(), UnfoldAll)
-    case _ => v
+  def force(v: Val, unfold: Unfold = UnfoldAll): Val =
+    v match
+      case VFlex(id, sp) =>
+        getMeta(id) match
+          case Solved(_, v, _, _)   => force(vspine(v, sp), unfold)
+          case Unsolved(_, _, _, _) => v
+      case VGlobal(_, _, opq, v) if !opq && unfold == UnfoldAll =>
+        force(v(), UnfoldAll)
+      case _ => v
 
   private def quote(hd: Tm, sp: Spine, unfold: Unfold)(implicit l: Lvl): Tm =
     sp match
@@ -212,11 +285,13 @@ object Evaluation:
       case SProj(tm, proj) =>
         Proj(quote(hd, tm, unfold), proj, Irrelevant, Irrelevant)
       case SSplice(tm) => quote(hd, tm, unfold).splice
-      case SPrim(sp, x, args) =>
-        val as = args.foldLeft(Prim(x)) { case (f, (a, i)) =>
-          App(f, quote(a, unfold), i)
+      case SPrim(sp, x, i, args) =>
+        val qhd = (quote(hd, sp, unfold), Expl)
+        val qargs = args.map((v, i) => (quote(v, unfold), i))
+        val all = qargs.take(i) ++ List(qhd) ++ qargs.drop(i)
+        all.foldLeft(Prim(x)) { case (f, (a, i)) =>
+          App(f, a, i)
         }
-        App(as, quote(hd, sp, unfold), Expl)
       case SMatch(sp, dty, rty, cs, other) =>
         val qcs = cs.map((x, i, b) => (x, i, quote(b, unfold)))
         Match(
@@ -376,6 +451,50 @@ object Evaluation:
         ),
         SMeta
       )
+    // Label -> Label -> Meta
+    case PConHasIndex =>
+      (vfun(VLabel(), vfun(VLabel(), VUMeta())), SMeta)
+    // VTy -> Label -> Label -> VTy
+    case PConParamType =>
+      (vfun(VVTy(), vfun(VLabel(), vfun(VLabel(), VVTy()))), SMeta)
+    // {A : VTy} -> {C : Label} -> ^(Con A C) -> (i : Label) -> ConHasIndex C i -> ^(ConParamType A C i)
+    case PConField =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "C",
+              VLabel(),
+              c =>
+                vfun(
+                  VLift(VVal(), VConType(a, c)),
+                  vpi(
+                    "i",
+                    VLabel(),
+                    i =>
+                      vfun(
+                        vprimelim(PConHasIndex, 0, List((i, Expl)), c),
+                        VLift(
+                          VVal(),
+                          vprimelim(
+                            PConParamType,
+                            0,
+                            List((c, Expl), (i, Expl)),
+                            a
+                          )
+                        )
+                      )
+                  )
+                )
+            )
+        ),
+        SMeta
+      )
 
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))
+
+  // (R : Meta) -> R
+  val vcvoid: Val = vpi("R", VUMeta(), r => r)

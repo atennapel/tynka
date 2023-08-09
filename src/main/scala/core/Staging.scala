@@ -10,6 +10,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable.ListMap
 import jvmir.JvmName.escape
+import core.Globals.getGlobalCon
 
 object Staging:
   // evaluation
@@ -80,8 +81,15 @@ object Staging:
           else VLam1(r => VLam1(a => VLam1(b => b)))
         case (PAppendLabel, List(VStringLit1(a), VStringLit1(b))) =>
           VStringLit1(a + b)
-        case (PConsumeLinearUnit, List(_, _, v)) => v
-        case _                                   => VPrim1(x, as ++ List(a))
+        case (PConsumeLinearUnit, List(_, _, v))                  => v
+        case (PConHasIndex, List(VStringLit1(c), VStringLit1(i))) => VType1
+        case (
+              PConParamType,
+              List(VTCon1(_, ps), VStringLit1(c), VStringLit1(i))
+            ) =>
+          val env = ps.foldRight(Empty)((v, e) => Def1(e, v))
+          eval1(getGlobalCon(Name(c)).get._2(i.toInt))(env)
+        case _ => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()
@@ -246,7 +254,7 @@ object Staging:
           case _           => impossible()
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
-      case _                                          => impossible()
+      case _ => println(v); impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
     v match
@@ -347,6 +355,14 @@ object Staging:
 
       case VSplicePrim0(PMkCon, List(_, _, v))     => quote(vsplice0(v))
       case VSplicePrim0(PConExpose, List(_, _, v)) => quote(vsplice0(v))
+      case VSplicePrim0(
+            PConField,
+            List(ta, VStringLit1(cx), c, VStringLit1(i), _)
+          ) =>
+        val dx = quoteVTy(ta) match
+          case IR.TCon(x) => x
+          case _          => impossible()
+        IR.Field(dx, cx, quote(vsplice0(c)), i.toInt)
 
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)

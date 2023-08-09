@@ -842,10 +842,7 @@ object JvmGenerator:
             gen(v)
             mg.putField(gen(td), s"a$i", gen(tv))
           else
-            val precon = spl.tail.mkString(":").reverse
-            val con =
-              if precon.startsWith("(") then precon.tail.init
-              else precon
+            val con = escape(spl.tail.mkString(":").reverse)
             val x = td match
               case TCon(x)       => x
               case TConCon(x, _) => x
@@ -866,10 +863,7 @@ object JvmGenerator:
             mg.putField(gen(td), s"a$i", gen(tv))
             mg.push(false)
           else
-            val precon = spl.tail.mkString(":").reverse
-            val con =
-              if precon.startsWith("(") then precon.tail.init
-              else precon
+            val con = escape(spl.tail.mkString(":").reverse)
             val x = td match
               case TCon(x)       => x
               case TConCon(x, _) => x
@@ -890,10 +884,7 @@ object JvmGenerator:
             gen(v)
             mg.putField(gen(td), s"a$i", gen(tv))
           else
-            val precon = spl.tail.mkString(":").reverse
-            val con =
-              if precon.startsWith("(") then precon.tail.init
-              else precon
+            val con = escape(spl.tail.mkString(":").reverse)
             val x = td match
               case TConCon(x, _) => x
               case TCon(x)       => impossible()
@@ -913,10 +904,7 @@ object JvmGenerator:
             mg.putField(gen(td), s"a$i", gen(tv))
             mg.push(false)
           else
-            val precon = spl.tail.mkString(":").reverse
-            val con =
-              if precon.startsWith("(") then precon.tail.init
-              else precon
+            val con = escape(spl.tail.mkString(":").reverse)
             val x = td match
               case TConCon(x, _) => x
               case TCon(x)       => impossible()

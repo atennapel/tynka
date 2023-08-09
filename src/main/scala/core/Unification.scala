@@ -164,8 +164,8 @@ object Unification:
       case SSplice(t)    => go(t).map((l, r) => (l, SSplice(r)))
       case SProj(sp, p) =>
         or(go(sp), Some((sp, SId))).map((l, r) => (l, SProj(r, p)))
-      case SPrim(sp, x, args) =>
-        or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, args)))
+      case SPrim(sp, x, i, args) =>
+        or(go(sp), Some((sp, SId))).map((l, r) => (l, SPrim(r, x, i, args)))
       case SMatch(sp, dty, rty, cs, other) =>
         or(go(sp), Some((sp, SId))).map((l, r) =>
           (l, SMatch(r, dty, rty, cs, other))
@@ -178,9 +178,13 @@ object Unification:
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SSplice(sp)      => goSp(t, sp).splice
       case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant, Irrelevant)
-      case SPrim(sp, x, args) =>
-        val as = args.foldLeft(Prim(x)) { case (f, (a, i)) => App(f, go(a), i) }
-        App(as, goSp(t, sp), Expl)
+      case SPrim(sp, x, i, args) =>
+        val qhd = (goSp(t, sp), Expl)
+        val qargs = args.map((v, i) => (go(v), i))
+        val all = qargs.take(i) ++ List(qhd) ++ qargs.drop(i)
+        all.foldLeft(Prim(x)) { case (f, (a, i)) =>
+          App(f, a, i)
+        }
       case SMatch(sp, dty, rty, cs, other) =>
         val qcs = cs.map((x, i, b) => (x, i, go(b)))
         Match(go(dty), go(rty), goSp(t, sp), qcs, other.map(go))
@@ -279,7 +283,8 @@ object Unification:
             case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => go(s1, s2)
             case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => goProj(s1, s2, n)
             case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => goProj(s1, s2, n)
-            case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
+            case (SPrim(a, x, i, as1), SPrim(b, y, j, as2))
+                if x == y && i == j =>
               go(a, b)
               as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
             case _ => throw UnifyError(s"solve ?$m2, spine mismatch")
@@ -366,7 +371,7 @@ object Unification:
       case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
       case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
       case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
-      case (SPrim(a, x, as1), SPrim(b, y, as2)) if x == y =>
+      case (SPrim(a, x, i, as1), SPrim(b, y, j, as2)) if x == y && i == j =>
         unify(a, b)
         as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
       case (SMatch(s1, dt1, rt1, cs1, o1), SMatch(s2, dt2, rt2, cs2, o2))
