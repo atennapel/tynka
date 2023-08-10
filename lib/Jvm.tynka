@@ -19,6 +19,19 @@ def Int/geq = Int/jvmBranch "156"
 def Int/gt = Int/jvmBranch "157"
 def Int/leq = Int/jvmBranch "158"
 
+-- long
+def Long = Foreign "J"
+
+def Long/fromInt (n : Int) : Long = foreign Long "op:133" n
+
+def Long/jvmBinop op (a b : Long) = foreign Long (appendLabel "op:" op) a b
+def Long/add = Long/jvmBinop "97"
+def Long/sub = Long/jvmBinop "101"
+def Long/mul = Long/jvmBinop "105"
+def Long/div = Long/jvmBinop "109"
+def Long/mod = Long/jvmBinop "113"
+def Long/neg = Long/jvmBinop "117"
+
 -- Char
 def Char = Foreign "C"
 

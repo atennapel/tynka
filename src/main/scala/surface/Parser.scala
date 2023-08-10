@@ -187,10 +187,11 @@ object Parser:
     private lazy val fix: Parsley[Tm] = positioned(
       ("fix" *> "(" *> bind <~> bind <~> "." *> tm <* ")" <~> projAtom <~> many(
         arg
-      ) <~> option(lam)).map { case (((((g, x), b), arg), args), opt) =>
-        val fn = Fix(g, x, b, arg)
-        (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
-          .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
+      ) <~> option(lam <|> doP <|> ifP <|> matchP)).map {
+        case (((((g, x), b), arg), args), opt) =>
+          val fn = Fix(g, x, b, arg)
+          (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
+            .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
       }
     )
 
@@ -381,7 +382,7 @@ object Parser:
       )
 
     private lazy val appAtom: Parsley[Tm] = positioned(
-      (projAtom <~> many(arg) <~> option(lam <|> doP))
+      (projAtom <~> many(arg) <~> option(lam <|> doP <|> ifP <|> matchP))
         .map { case ((fn, args), opt) =>
           (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
             .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }

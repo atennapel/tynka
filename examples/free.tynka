@@ -1,29 +1,9 @@
-def VTy = Ty Val
+import "lib/Prelude"
+import "lib/Free"
 
-data Unit := MkUnit
-
-def Int = Foreign "I"
-def (+) a b = foreign Int "op:96" a b
-
-def Functor (F : Meta -> Meta) = {A B : Meta} -> (A -> B) -> F A -> F B
-
--- church-encoded free monad
-def Free (F : Meta -> Meta) (A : VTy) = (cv : CV) (R : Ty cv) -> (A -> R) -> (F R -> R) -> R
-
-def handle
-  {F : Meta -> Meta} {A : VTy} {cv : CV} {R : Ty cv}
-  (c : Free F A) (pure : A -> R) (impure : F R -> R) : R =
-  c _ R pure impure
-
-def return {F} {A : VTy} (x : A) : Free F A = \cv R pure impure. pure x
-
-def (>>=) {F A B} (x : Free F A) (k : A -> Free F B) : Free F B =
-  \cv R pure impure. x _ R (\a. k a _ R pure impure) impure
-
-def (>>) {F A B} (x : Free F A) (k : Free F B) : Free F B = (>>=) {F} x \_. k
-
-def lift {F : Meta -> Meta} {A : VTy} (fmap : Functor F) (x : F A) : Free F A =
-  \cv R pure impure. impure (fmap pure x)
+def (+) a b = Int/add a b
+def (>>=) = Free/bind
+def return = Free/return
 
 -- church-encoded state monad
 def StateF (S : VTy) (A : Meta) = (cv : CV) (R : Ty cv) -> ((S -> A) -> R) -> (S -> A -> R) -> R 
@@ -33,16 +13,15 @@ def StateF/handle
   (get : (S -> A) -> R) (put : S -> A -> R) (s : StateF S A) : R =
   s _ R get put
 
-def StateF/Functor {S : VTy} : Functor (StateF S) =
+def StateF/Functor {S : VTy} : FunctorM (StateF S) =
   \f x. \cv R get put. x _ R (\k. get (\x. f (k x))) (\s k. put s (f k))
 
 def State S A = Free (StateF S) A
 
-def get {S : VTy} : State S S = lift StateF/Functor (\cv R get put. get (\s. s))
-def put {S : VTy} (s : S) : State S Unit = lift StateF/Functor (\cv R get put. put s MkUnit)
+def get {S : VTy} : State S S = Free/lift StateF/Functor (\cv R get put. get (\s. s))
+def put {S : VTy} (s : S) : State S Unit = Free/lift StateF/Functor (\cv R get put. put s U)
 
 -- concrete State monad
-data Pair A B := MkPair A B
 def StateI (S A : VTy) = S -> Pair S A
 def returnI {S A : VTy} (a : A) : StateI S A = \s. (s, a)
 def getI {S} : StateI S S = \s. (s, s)
@@ -59,12 +38,12 @@ def example : State Int Int = do
   return y
 
 def handleConstant {S A : VTy} (c : S) (s : State S A) : A =
-  handle s (\x. x) \. StateF/handle
+  Free/handle s (\x. x) \. StateF/handle
     (\k. k c)
     (\_ k. k)
 
 def handleConcrete {S A : VTy} (s : State S A) : StateI S A =
-  handle s (\x. returnI x) \. StateF/handle
+  Free/handle s (\x. returnI x) \. StateF/handle
     (\k. bindI getI k)
     (\x k. bindI (putI x) \_. k)
 

@@ -3,13 +3,13 @@ def CTy = Ty Comp
 
 data Void
 
-def absurd {cv : CV} {A : Ty cv} (v : Void) : A = match v
+def absurd {cv} {A : Ty cv} (v : Void) : A = match v
 
 data Unit := U
 
 data Bool := False | True
 
-def cond {cv : CV} {A : Ty cv} (a b : A) (c : Bool) : A =
+def cond {cv} {A : Ty cv} (a b : A) (c : Bool) : A =
   if c then a else b
 
 def (!) b = if b then False else True

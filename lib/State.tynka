@@ -19,3 +19,6 @@ def State/bind {S A B : VTy} (c : State S A) (f : A -> State S B) : State S B =
 
 def State/seq {S A B : VTy} (c : State S A) (f : State S B) : State S B =
   \s. f (c s).1
+
+def State/fix {S A : VTy} (action : State S A -> State S A) : State S A =
+  fix (go _. action (go U)) U
