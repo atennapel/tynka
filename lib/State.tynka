@@ -22,3 +22,11 @@ def State/seq {S A B : VTy} (c : State S A) (f : State S B) : State S B =
 
 def State/fix {S A : VTy} (action : State S A -> State S A) : State S A =
   fix (go _. action (go U)) U
+
+def State/updateN {S : VTy} (n : Int) (f : S -> S) : State S Unit =
+  fix (rec n.
+    if Int/leq n 0 then State/return U
+    else do {State/bind}
+      State/update f;
+      rec (Int/sub n 1)
+  ) n

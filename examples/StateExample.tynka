@@ -2,29 +2,16 @@ import "lib/Prelude"
 import "lib/State"
 
 def (+) = Int/add
-def (-) = Int/sub
-def (<=) = Int/leq
-
-def return = State/return
-def (>>=) = State/bind
+def (>>>) = State/seq
 def (<$>) = State/map
-
-def get = State/get
-def update = State/update
 
 def FibState = Pair Int Int
 
 def fibStep (st : FibState) : FibState =
-  match st | MkPair x1 x2. MkPair x2 (x1 + x2)
+  Pair/case st \x1 x2. MkPair x2 (x1 + x2)
 
 def fibState (n : Int) : State FibState Int =
-  fix (rec n.
-    if n <= 0 then do
-      fst <$> get
-    else do
-      update fibStep;
-      rec (n - 1)
-  ) n
+  State/updateN n fibStep >>> (fst <$> State/get)
 
 def fib (n : Int) : Int := State/exec (fibState n) (0, 1)
 
