@@ -28,7 +28,10 @@ def Free/rec {F} {A B : VTy}
   (decide : {cv} {R : Ty cv} -> A -> R -> (B -> R) -> R) : Free F B =
   \cv R pure impure. fix (go _. action cv R (\x. decide x (go U) pure) impure) U
 
-def Free/recEither {F} {A : VTy} (action : Either Unit A -> (A -> Either Unit A) -> Free F (Either Unit A)) : Free F A =
+def Free/recEither {F} {A : VTy} (action : Free F (Either Unit A)) : Free F A =
   \cv R pure impure. fix (go _.
-    action (Left U) (\x. Right x) cv R
+    action cv R
       (\e. match e | Left _. go U | Right x. pure x) impure) U
+
+def Free/recLoop {F} {A : VTy} (action : Either Unit A -> (A -> Either Unit A) -> Free F (Either Unit A)) : Free F A =
+  Free/recEither (action (Left U) Right)
