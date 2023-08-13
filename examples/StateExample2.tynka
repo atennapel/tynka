@@ -1,0 +1,15 @@
+import "lib/Prelude"
+import "lib/State2"
+
+def (+) = Int/add
+def (>>>) = State2/seq
+def (<$>) = State2/map
+
+def fibStep (a b : Int) : Pair Int Int = MkPair b (a + b)
+
+def fibState (n : Int) : State2 Int Int Int =
+  State2/loopN n (State2/updateBoth fibStep) >>> State2/get1
+
+def fib (n : Int) : Int := State2/exec (fibState n) 0 1
+
+def main := putLn (fib 8)

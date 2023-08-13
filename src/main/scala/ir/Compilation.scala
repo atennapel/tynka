@@ -169,7 +169,7 @@ object Compilation:
       localgen: LocalGen,
       defname: GName
   ): Tm =
-    tm match
+    val res = tm match
       case Var(x, t)    => tm
       case Global(x, t) => tm
       case IntLit(n)    => tm
@@ -200,8 +200,14 @@ object Compilation:
             else if c == 1 || isSmall(v) then conv(b.subst(Map(x -> v)))
             else if !t.io && t.ps.isEmpty then
               val (vs, spine) = eta(bt.params)
-              Let(x, t, TDef(bt.io, bt.rt), v, conv(b.apps(spine)))
-                .lams(vs, TDef(bt.io, bt.rt))
+              val body = conv(b.apps(spine))
+              val c = body.fvs.count((y, _) => x == y)
+              if c == 0 then body.lams(vs, TDef(bt.io, bt.rt))
+              else if c == 1 || isSmall(v) then
+                conv(body.subst(Map(x -> v))).lams(vs, TDef(bt.io, bt.rt))
+              else
+                Let(x, t, TDef(bt.io, bt.rt), v, body)
+                  .lams(vs, TDef(bt.io, bt.rt))
             else
               val (vs, spine) = eta(t.params)
               val fv = v.fvs.map((x, t) => (x, t.ty)).distinctBy((y, _) => y)
@@ -257,7 +263,13 @@ object Compilation:
             cs.toMap.get(x) match
               case Some(b) => conv(b.subst(Map(mx -> v)))
               case None    => conv(other.get)
-          case v @ cscrut =>
+          case v @ Let(x, tx, tb, lv, lb) =>
+            conv(Let(x, tx, rty, lv, Match(dty, rty, mx, lb, cs, other)))
+          case cscrut if cs.size == 1 && other.isEmpty =>
+            conv(Let(mx, TDef(TCon(dty)), rty, cscrut, cs.head._2))
+          case cscrut if cs.size == 0 && other.isDefined =>
+            conv(Let(mx, TDef(TCon(dty)), rty, cscrut, other.get))
+          case cscrut =>
             val (vs, spine) = eta(rty.params)
             Match(
               dty,
@@ -341,6 +353,8 @@ object Compilation:
             StringLit(a + b)
 
           case (l, gas) => Foreign(io, rt, l, gas.zip(as.map(_._2)))
+    // println(s"$tm\n~>\n$res\n")
+    res
 
   private def isSmall(v: Tm): Boolean = v match
     case Var(_, _)      => true

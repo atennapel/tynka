@@ -29,6 +29,10 @@ def curry {A B : VTy} {cv} {C : Ty cv} (f : Pair A B -> C) : A -> B -> C =
 def uncurry {A B : VTy} {cv} {C : Ty cv} (f : A -> B -> C) : Pair A B -> C =
   \p. Pair/case p f
 
+data Tuple3 A B C := MkTuple3 A B C
+data Tuple4 A B C D := MkTuple4 A B C D
+data Tuple5 A B C D E := MkTuple5 A B C D E
+
 data Either A B := Left A | Right B
 
 data Option A := None | Some A

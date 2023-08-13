@@ -179,7 +179,7 @@ object Syntax:
       case StringLit(v) => s"\"$v\""
 
       case GlobalApp(x, _, tc, as) =>
-        s"(${if tc then "[tailcall] " else ""}$x(${as.mkString(", ")}))"
+        s"$x${if tc then "[tailcall]" else ""}(${as.mkString(", ")})"
 
       case Con(_, "Z", Nil) => "0"
       case full @ Con(_, "S", as @ List(n)) =>

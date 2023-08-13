@@ -27,6 +27,7 @@ TODO:
 - [x] Opaque definitions
 - [x] Safe field access in Con
 - [x] Access to Con in pattern matching
+- [ ] Add IdM, BoolM and IFixM to Meta-level
 - [ ] Linear pairs
 - [ ] Modules
 - [ ] Remove implicit generalization
