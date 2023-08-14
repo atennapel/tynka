@@ -75,7 +75,8 @@ object Pretty:
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Var(ix) =>
       val x = ns(ix.expose)
-      if ns.take(ix.expose).contains(x) then s"${ns(ix.expose)}@$ix"
+      if ns.take(ix.expose).contains(x) then
+        s"${ns(ix.expose)}@${ns.size - ix.expose - 1}"
       else s"$x"
     case Global(x) if ns.contains(x) => s"$x@"
     case Global(x)                   => s"$x"

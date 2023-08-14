@@ -1,0 +1,110 @@
+import "lib/Prelude"
+import "lib/Meta"
+
+def CurryM (S : ListM VTy) (A : VTy) =
+  ListM/foldr ^A (\hd tl. ^hd -> tl) S
+
+def CurryMM (S : ListM VTy) (A : Meta) =
+  ListM/foldr A (\hd tl. ^hd -> tl) S
+
+def TupleM (S : ListM VTy) =
+  ListM/foldr () (\hd tl. ^hd ** tl) S
+
+def CurryC (S : ListM VTy) (A : CTy) : CTy =
+  ListM/foldr A (\hd tl. hd -> tl) S
+
+def CurryS (S : ListM VTy) (A : VTy) : CTy =
+  ListM/foldr (Unit -> A) (\hd tl. hd -> tl) S
+
+def CurryS/return {S : ListM VTy} {A : VTy} (x : A) : CurryS S A =
+  ListM/elim (\S'. CurryS S' A)
+    (\_. x)
+    (\_ _ ind _. ind)
+    S
+
+def TupleS (S : ListM VTy) (A : VTy) : VTy =
+  ListM/foldr A (\hd tl. Pair hd tl) S
+
+def TupleS/last {S : ListM VTy} {A} (t : TupleS S A) : A =
+  ListM/elim (\S. TupleS S A -> A)
+    (\x. x)
+    (\_ _ ind t. ind t.2)
+    S t 
+
+def StateN (S : ListM VTy) (A : VTy) = CurryS S (TupleS S A)
+
+def StateN' (S S' : ListM VTy) (A : VTy) = CurryS S (TupleS S' A)
+
+def StateN/run {S A} (c : StateN S A) : CurryM S (TupleS S A) =
+  ListM/elim (\S'. StateN' S' S A -> CurryM S' (TupleS S A))
+    (\c. c U)
+    (\_ _ ind c a. ind (c a))
+    S c
+
+def StateN/exec {S A} (c : StateN S A) : CurryM S A =
+  ListM/elim (\S'. StateN' S' S A -> CurryM S' A)
+    (\c. TupleS/last (c U))
+    (\_ _ ind c a. ind (c a))
+    S c
+
+def StateN/return {S} {A : VTy} (a : A) : StateN S A =
+  ListM/elim (\S'. (TupleS S' A -> TupleS S A) -> StateN' S' S A)
+    (\up _. up a)
+    (\A _ ind up s. ind (\t. up (MkPair s t)))
+    S (\x. x)
+
+def TupleS/apply {S} {A B} (t : TupleS S A) (f : A -> StateN S B) : TupleS S B =
+  ListM/elim (\S'. TupleS S' A -> (A -> StateN' S' S B) -> TupleS S B)
+    (\v f. f v U)
+    (\_ _ ind t f. ind (snd t) (\v. f v (fst t)))
+    S t f
+
+def StateN/bind {S} {A B : VTy} (c : StateN S A) (f : A -> StateN S B) : StateN S B =
+  ListM/elim (\S'. StateN' S' S A -> StateN' S' S B)
+    (\t _. let res := t U; TupleS/apply res f)
+    (\_ _ ind c s. ind (c s))
+    S c
+
+def StateN/map {S} {A B : VTy} (f : A -> B) (c : StateN S A) : StateN S B =
+  StateN/bind c \x. StateN/return (f x)
+
+def StateN/seq {S} {A B : VTy} (c : StateN S A) (f : StateN S B) : StateN S B =
+  StateN/bind c \_. f
+
+def CurryS/consTuple {S} {A R : VTy} (a : A) (c : CurryS S (TupleS S R)) : CurryS S (TupleS (ConsM A S) R) =
+  ListM/elim (\S'. CurryS S' (TupleS S R) -> CurryS S' (TupleS (ConsM A S) R))
+    (\r _. MkPair a (r U))
+    (\_ _ ind c s. ind (c s))
+    S c
+
+def StateN/get {S} : StateN S (TupleS S Unit) =
+  ListM/elim (\S'. (TupleS S' Unit -> TupleS S Unit) -> StateN S' (TupleS S Unit))
+    (\f _. f U)
+    (\_ _ ind up s. CurryS/consTuple s (ind \x. up (MkPair s x)))
+    S (\x. x)
+
+def StateN/put {S} : CurryC S (StateN S Unit) =
+  ListM/elim (\S'. (TupleS S' Unit -> TupleS S Unit) -> CurryC S' (StateN S Unit))
+    (\f. CurryS/return (f U))
+    (\_ _ ind up s. ind (\x. up (MkPair s x)))
+    S (\x. x)
+
+def TupleS/fromTupleM {S} (t : TupleM S) : TupleS S Unit =
+  ListM/elim (\S'. TupleM S' -> (TupleS S' Unit -> TupleS S Unit) -> TupleS S Unit)
+    (\_ f. f U)
+    (\_ _ ind t f. ind t.2 (\x. f (MkPair t.1 x)))
+    S t (\x. x)
+
+def StateN/update {S} (f : CurryMM S (TupleM S)) : StateN S Unit =
+  ListM/elim (\S'. CurryMM S' (TupleM S) -> StateN' S' S Unit)
+    (\vs _. TupleS/fromTupleM vs)
+    (\_ _ ind f s. ind (f s))
+    S f
+
+def StateN/loopN {S} {A : VTy} (n : Int) (action : StateN S A) : StateN S Unit =
+  fix (rec n.
+    if Int/leq n 0 then StateN/return {S} U
+    else do {StateN/bind}
+      action;
+      rec (Int/sub n 1)
+  ) n

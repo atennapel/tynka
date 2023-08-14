@@ -101,7 +101,7 @@ def NatM/neq (a b : NatM) : BoolM = notM (NatM/eq a b)
 def ListMF A R = EitherM ((head : A) (tail : R) ** ()) ()
 def ListM A = FixM (ListMF A)
 def NilM {A} : ListM A = InM {ListMF A} (RightM [])
-def ConsM {A} (head : A) (tail : ListM A) : ListM A = InM {ListMF A} (LeftM [head, tail])
+def ConsM {A} (head : A) (tail : ListM A) : ListM A = InM {ListMF A} (LeftM {B = ()} [head, tail])
 
 def ListM/elim {A}
   (P : ListM A -> Meta)
@@ -111,7 +111,7 @@ def ListM/elim {A}
   = FixM/elim {ListMF A} P (\rec y. EitherM/elim (\s. P (InM {ListMF A} s))
       (\d. cons d.head d.tail (rec d.tail)) (\_. nil) y) x
 
-def ListM/foldr {A R} (nil : R) (cons : A -> R -> R) (list : ListM A) : R
+def ListM/foldr {R A} (nil : R) (cons : A -> R -> R) (list : ListM A) : R
   = ListM/elim (\_. R) nil (\hd _ tl. cons hd tl) list
 
 def ListM/map {A B} (fn : A -> B) (list : ListM A) : ListM B

@@ -9,7 +9,7 @@ def State/get {S} : State S S = \s. (s, s)
 def State/put {S : VTy} (s : S) : State S Unit = \_. (s, [])
 def State/update {S : VTy} (f : S -> S) : State S Unit = \s. (f s, [])
 
-def State/return {S A : VTy} (a : A) : State S A = \s. (s, a) 
+def State/return {S A : VTy} (a : A) : State S A = \s. (s, a)
 
 def State/map {S A B : VTy} (f : A -> B) (c : State S A) : State S B =
   \s. match c s | MkPair s' res. (s', f res)

@@ -1,0 +1,20 @@
+import "lib/Prelude"
+import "lib/StateN"
+import "lib/Meta"
+
+def (+) = Int/add
+def return = StateN/return
+def (>>=) = StateN/bind
+def (>>>) = StateN/seq
+def (<$>) = StateN/map
+
+def State : ListM VTy = ConsM Int (ConsM Int NilM)
+
+def fibStep (a b : Int) : Int ** Int ** () = [b, a + b]
+
+def fibState (n : Int) : StateN State Int =
+  StateN/loopN n (StateN/update {State} fibStep) >>> (fst <$> StateN/get {State})
+
+def fib (n : Int) : Int := StateN/exec (fibState n) 0 1
+
+def main := putLn (fib 8)

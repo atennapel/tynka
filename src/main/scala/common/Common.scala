@@ -33,7 +33,7 @@ object Common:
   case class Name(x: String):
     override def toString: String =
       if !isOperator then x else s"($x)"
-    def isOperator: Boolean = !x.head.isLetter
+    def isOperator: Boolean = !x.head.isLetter && x.head != '_'
     def expose: String = x
 
   enum Bind:

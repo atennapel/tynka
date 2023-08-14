@@ -28,7 +28,8 @@ TODO:
 - [x] Safe field access in Con
 - [x] Access to Con in pattern matching
 - [x] Add IdM, BoolM and IFixM to Meta-level
-- [ ] Try to write n-ary State monad
+- [x] Try to write n-ary State monad
+- [ ] Optimize StateN
 - [ ] Try to inline pure tail recursive functions
 - [ ] Linear pairs
 - [ ] Modules
