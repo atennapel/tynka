@@ -27,7 +27,9 @@ TODO:
 - [x] Opaque definitions
 - [x] Safe field access in Con
 - [x] Access to Con in pattern matching
-- [ ] Add IdM, BoolM and IFixM to Meta-level
+- [x] Add IdM, BoolM and IFixM to Meta-level
+- [ ] Try to write n-ary State monad
+- [ ] Try to inline pure tail recursive functions
 - [ ] Linear pairs
 - [ ] Modules
 - [ ] Remove implicit generalization

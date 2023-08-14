@@ -193,6 +193,19 @@ object Common:
     case PConParamType
     case PConField
 
+    case PBoolM
+    case PTrueM
+    case PFalseM
+    case PElimBoolM
+
+    case PHId
+    case PRefl
+    case PElimHId
+
+    case PIFixM
+    case PIInM
+    case PElimIFixM
+
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -222,6 +235,19 @@ object Common:
       case PConHasIndex  => "ConHasIndex"
       case PConParamType => "ConParamType"
       case PConField     => "fieldCon"
+
+      case PBoolM     => "BoolM"
+      case PTrueM     => "TrueM"
+      case PFalseM    => "FalseM"
+      case PElimBoolM => "elimBoolM"
+
+      case PHId     => "HId"
+      case PRefl    => "Refl"
+      case PElimHId => "elimHId"
+
+      case PIFixM     => "IFixM"
+      case PIInM      => "IInM"
+      case PElimIFixM => "elimIFixM"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -246,7 +272,17 @@ object Common:
         "exposeCon",
         "ConHasIndex",
         "ConParamType",
-        "fieldCon"
+        "fieldCon",
+        "BoolM",
+        "TrueM",
+        "FalseM",
+        "elimBoolM",
+        "HId",
+        "Refl",
+        "elimHId",
+        "IFixM",
+        "IInM",
+        "elimIFixM"
       )
         .map(Name.apply)
 
@@ -278,5 +314,18 @@ object Common:
       case "ConHasIndex"  => Some(PConHasIndex)
       case "ConParamType" => Some(PConParamType)
       case "fieldCon"     => Some(PConField)
+
+      case "BoolM"     => Some(PBoolM)
+      case "TrueM"     => Some(PTrueM)
+      case "FalseM"    => Some(PFalseM)
+      case "elimBoolM" => Some(PElimBoolM)
+
+      case "HId"     => Some(PHId)
+      case "Refl"    => Some(PRefl)
+      case "elimHId" => Some(PElimHId)
+
+      case "IFixM"     => Some(PIFixM)
+      case "IInM"      => Some(PIInM)
+      case "elimIFixM" => Some(PElimIFixM)
 
       case _ => None

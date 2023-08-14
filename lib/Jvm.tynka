@@ -10,6 +10,8 @@ def Int/mul = Int/jvmBinop "104"
 def Int/div = Int/jvmBinop "108"
 def Int/mod = Int/jvmBinop "112"
 def Int/neg = Int/jvmBinop "116"
+def Int/inc = Int/add 1
+def Int/dec n = Int/sub n 1
 
 def Int/jvmBranch op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
 def Int/eq = Int/jvmBranch "153"
@@ -31,9 +33,14 @@ def Long/mul = Long/jvmBinop "105"
 def Long/div = Long/jvmBinop "109"
 def Long/mod = Long/jvmBinop "113"
 def Long/neg = Long/jvmBinop "117"
+def Long/inc = Long/add (Long/fromInt 1)
+def Long/dec n = Long/sub n (Long/fromInt 1)
 
 -- Char
 def Char = Foreign "C"
+
+def Char/fromInt (c : Int) : Char =
+  foreign Char "cast" c
 
 def Char/jvmBinop op (a b : Char) = foreign Char (appendLabel "op:" op) a b
 def Char/add = Char/jvmBinop "96"
@@ -42,6 +49,8 @@ def Char/mul = Char/jvmBinop "104"
 def Char/div = Char/jvmBinop "108"
 def Char/mod = Char/jvmBinop "112"
 def Char/neg = Char/jvmBinop "116"
+def Char/inc = Char/add (Char/fromInt 1)
+def Char/dec n = Char/sub n (Char/fromInt 1)
 
 def Char/jvmBranch op (a b : Char) = foreign Bool (appendLabel "branch:" op) a b
 def Char/eq = Char/jvmBranch "153"
@@ -50,9 +59,6 @@ def Char/lt = Char/jvmBranch "155"
 def Char/geq = Char/jvmBranch "156"
 def Char/gt = Char/jvmBranch "157"
 def Char/leq = Char/jvmBranch "158"
-
-def Char/fromInt (c : Int) : Char =
-  foreign Char "cast" c
 
 -- JVM specifics
 def JavaVoid = Foreign "V"

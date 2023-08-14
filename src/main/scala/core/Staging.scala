@@ -89,8 +89,31 @@ object Staging:
             ) =>
           val env = ps.foldRight(Empty)((v, e) => Def1(e, v))
           eval1(getGlobalCon(Name(c)).get._2(i.toInt))(env)
-        case (PUnsafeLinearFunction, List(_, _, f)) => f
-        case _                                      => VPrim1(x, as ++ List(a))
+        case (PUnsafeLinearFunction, List(_, _, f))            => f
+        case (PElimBoolM, List(_, t, _, VPrim1(PTrueM, Nil)))  => t
+        case (PElimBoolM, List(_, _, f, VPrim1(PFalseM, Nil))) => f
+        case (PElimHId, List(_, _, _, refl, _, VPrim1(PRefl, List(_, _)))) =>
+          refl
+        // elimIFix {I} {F} P alg {i} (IIn {I} {F} {i} x) ~> alg (\{j} y. elimIFix {I} {F} p alg {j} y) {i} x
+        case (
+              PElimIFixM,
+              List(i, f, p, alg, ii, VPrim1(PIInM, List(_, _, _, x)))
+            ) =>
+          vapp1(
+            vapp1(
+              vapp1(
+                alg,
+                VLam1(j =>
+                  VLam1(y =>
+                    vapp1(VPrim1(PElimIFixM, List(i, f, p, alg, j)), y)
+                  )
+                )
+              ),
+              ii
+            ),
+            x
+          )
+        case _ => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()

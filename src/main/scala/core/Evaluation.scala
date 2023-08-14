@@ -119,10 +119,41 @@ object Evaluation:
           vprimelim(PConParamType, 2, List((a, Expl), (v, Expl)), cOri)
         else vprimelim(PConParamType, 0, List((cOri, Expl), (v, Expl)), a)
 
+      case (PElimBoolM, VTrueM(), List(_, (t, _), _))  => t
+      case (PElimBoolM, VFalseM(), List(_, _, (f, _))) => f
+
+      case (PElimHId, VRefl(_, _), List(_, _, _, (refl, _), _)) =>
+        refl
+
+      // elimIFix {I} {F} P alg {i} (IIn {I} {F} {i} x) ~> alg (\{j} y. elimIFix {I} {F} p alg {j} y) {i} x
+      case (
+            PElimIFixM,
+            VIIn(_, _, i, x),
+            List((it, _), (f, _), (p, _), (alg, _), _)
+          ) =>
+        vappE(
+          vappI(
+            vappE(
+              alg,
+              vlamIrrI(
+                "j",
+                j =>
+                  vlamIrr(
+                    "y",
+                    y => vprimelim(PElimIFixM, -1, as.init :+ (j, Impl), y)
+                  )
+              )
+            ),
+            i
+          ),
+          x
+        )
+
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, i, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, i, as))
       case (_, VGlobal(y, sp, opq, v), _) =>
         VGlobal(y, SPrim(sp, x, i, as), opq, () => vprimelim(x, i, as, v()))
+
       case _ => impossible()
 
   private def vmatch(
@@ -165,54 +196,146 @@ object Evaluation:
 
   private def vprim(x: PrimName): Val = x match
     case PEqLabel =>
-      vlam(
+      vlamIrr(
         "a",
-        VIrrelevant,
         a =>
-          vlam(
+          vlamIrr(
             "b",
-            VIrrelevant,
             b => vprimelim(PEqLabel, 0, List((b, Expl)), a)
           )
       )
     case PAppendLabel =>
-      vlam(
+      vlamIrr(
         "a",
-        VIrrelevant,
         a =>
-          vlam(
+          vlamIrr(
             "b",
-            VIrrelevant,
             b => vprimelim(PAppendLabel, 0, List((b, Expl)), a)
           )
       )
     case PConHasIndex =>
-      vlam(
+      vlamIrr(
         "C",
-        VIrrelevant,
         c =>
-          vlam(
+          vlamIrr(
             "i",
-            VIrrelevant,
             i => vprimelim(PConHasIndex, 0, List((i, Expl)), c)
           )
       )
     case PConParamType =>
-      vlam(
+      vlamIrr(
         "A",
-        VIrrelevant,
         a =>
-          vlam(
+          vlamIrr(
             "C",
-            VIrrelevant,
             c =>
-              vlam(
+              vlamIrr(
                 "i",
-                VIrrelevant,
                 i => vprimelim(PConParamType, 0, List((c, Expl), (i, Expl)), a)
               )
           )
       )
+
+    case PElimBoolM =>
+      vlamIrr(
+        "P",
+        p =>
+          vlamIrr(
+            "t",
+            t =>
+              vlamIrr(
+                "f",
+                f =>
+                  vlamIrr(
+                    "b",
+                    b =>
+                      vprimelim(
+                        PElimBoolM,
+                        -1,
+                        List((p, Expl), (t, Expl), (f, Expl)),
+                        b
+                      )
+                  )
+              )
+          )
+      )
+
+    case PElimHId =>
+      vlamIrrI(
+        "A",
+        a =>
+          vlamIrrI(
+            "x",
+            x =>
+              vlamIrr(
+                "P",
+                p =>
+                  vlamIrr(
+                    "refl",
+                    refl =>
+                      vlamIrrI(
+                        "y",
+                        y =>
+                          vlamIrr(
+                            "p",
+                            pp =>
+                              vprimelim(
+                                PElimHId,
+                                -1,
+                                List(
+                                  (a, Impl),
+                                  (x, Impl),
+                                  (p, Expl),
+                                  (refl, Expl),
+                                  (y, Impl)
+                                ),
+                                pp
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+
+    case PElimIFixM =>
+      vlamIrrI(
+        "I",
+        i =>
+          vlamIrrI(
+            "F",
+            f =>
+              vlamIrr(
+                "P",
+                p =>
+                  vlamIrr(
+                    "alg",
+                    alg =>
+                      vlamIrrI(
+                        "i",
+                        ii =>
+                          vlamIrr(
+                            "x",
+                            x =>
+                              vprimelim(
+                                PElimIFixM,
+                                -1,
+                                List(
+                                  (i, Impl),
+                                  (f, Impl),
+                                  (p, Expl),
+                                  (alg, Expl),
+                                  (ii, Impl)
+                                ),
+                                x
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+
     case _ => VPrim(x)
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
@@ -296,6 +419,13 @@ object Evaluation:
       case SProj(tm, proj) =>
         Proj(quote(hd, tm, unfold), proj, Irrelevant, Irrelevant)
       case SSplice(tm) => quote(hd, tm, unfold).splice
+      case SPrim(sp, x, -1, args) =>
+        val qhd = (quote(hd, sp, unfold), Expl)
+        val qargs = args.map((v, i) => (quote(v, unfold), i))
+        val all = qargs ++ List(qhd)
+        all.foldLeft(Prim(x)) { case (f, (a, i)) =>
+          App(f, a, i)
+        }
       case SPrim(sp, x, i, args) =>
         val qhd = (quote(hd, sp, unfold), Expl)
         val qargs = args.map((v, i) => (quote(v, unfold), i))
@@ -517,6 +647,176 @@ object Evaluation:
                         )
                       )
                   )
+                )
+            )
+        ),
+        SMeta
+      )
+
+    case PBoolM  => (VUMeta(), SMeta)
+    case PTrueM  => (VBoolM(), SMeta)
+    case PFalseM => (VBoolM(), SMeta)
+    // elimBoolM : (P : BoolM -> Meta) -> P TrueM -> P FalseM -> (b : BoolM) -> P b
+    case PElimBoolM =>
+      (
+        vpi(
+          "P",
+          vfun(VBoolM(), VUMeta()),
+          p =>
+            vfun(
+              vappE(p, VTrueM()),
+              vfun(vappE(p, VFalseM()), vpi("b", VBoolM(), b => vappE(p, b)))
+            )
+        ),
+        SMeta
+      )
+
+    // Id : {A : Meta} -> {B : Meta} -> A -> B -> Meta
+    case PHId =>
+      (
+        vpiI(
+          "A",
+          VUMeta(),
+          a => vpiI("B", VUMeta(), b => vfun(a, vfun(b, VUMeta())))
+        ),
+        SMeta
+      )
+    // Refl : {A : Meta} -> {x : A} -> Id {A} {A} x x
+    case PRefl =>
+      (vpiI("A", VUMeta(), a => vpiI("x", a, x => VHId(a, a, x, x))), SMeta)
+    /*
+    {A : Meta} {x : A}
+    (P : {y : A} -> Id {A} {A} x y -> Meta)
+    (refl : P {x} (Refl {A} {x}))
+    {y : A}
+    (p : Id {A} {A} x y)
+    -> P {y} p
+     */
+    case PElimHId =>
+      (
+        vpiI(
+          "A",
+          VUMeta(),
+          a =>
+            vpiI(
+              "x",
+              a,
+              x =>
+                vpi(
+                  "P",
+                  vpiI("y", a, y => vfun(VHId(a, a, x, y), VUMeta())),
+                  p =>
+                    vfun(
+                      vappE(vappI(p, x), VRefl(a, x)),
+                      vpiI(
+                        "y",
+                        a,
+                        y =>
+                          vpi(
+                            "p",
+                            VHId(a, a, x, y),
+                            pp => vappE(vappI(p, y), pp)
+                          )
+                      )
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+
+    // {I : Meta} -> ((I -> Meta) -> I -> Meta) -> I -> Meta
+    case PIFixM =>
+      (
+        vpiI(
+          "I",
+          VUMeta(),
+          i =>
+            val f = vfun(i, VUMeta())
+            vfun(vfun(f, f), f)
+        ),
+        SMeta
+      )
+    // {I : Meta} -> {F : (I -> Meta) -> I -> Meta} -> {i : I} -> F (IFix {I} F) i -> IFix {I} F i
+    case PIInM =>
+      (
+        vpiI(
+          "I",
+          VUMeta(),
+          i =>
+            val g = vfun(i, VUMeta())
+            vpiI(
+              "F",
+              vfun(g, g),
+              f =>
+                vpiI(
+                  "i",
+                  i,
+                  ii =>
+                    vfun(vappE(vappE(f, VIFixM0(i, f)), ii), VIFixM(i, f, ii))
+                )
+            )
+        ),
+        SMeta
+      )
+    /*
+    {I : Meta}
+    {F : (I -> Meta) -> I -> Meta}
+    (P : {i : I} -> IFix {I} F i -> Meta)
+    ({j : I} -> (z : IFix {I} F j) -> P {j} z) -> {i : I} -> (y : F (IFix {I} F) i) -> P {i} (IIn {I} {F} {i} y)
+    {i : I}
+    (x : IFix {I} F i)
+    -> P {i} x
+     */
+    case PElimIFixM =>
+      (
+        vpiI(
+          "I",
+          VUMeta(),
+          i =>
+            val g = vfun(i, VUMeta())
+            vpiI(
+              "F",
+              vfun(g, g),
+              f =>
+                vpi(
+                  "P",
+                  vpiI("i", i, ii => vfun(VIFixM(i, f, ii), VUMeta())),
+                  p =>
+                    vfun(
+                      vfun(
+                        vpiI(
+                          "j",
+                          i,
+                          j =>
+                            vpi(
+                              "z",
+                              VIFixM(i, f, j),
+                              z => vappE(vappI(p, j), z)
+                            )
+                        ),
+                        vpiI(
+                          "i",
+                          i,
+                          ii =>
+                            vpi(
+                              "y",
+                              vappE(vappE(f, VIFixM0(i, f)), ii),
+                              y => vappE(vappI(p, i), VIIn(i, f, ii, y))
+                            )
+                        )
+                      ),
+                      vpiI(
+                        "i",
+                        i,
+                        ii =>
+                          vpi(
+                            "x",
+                            VIFixM(i, f, ii),
+                            x => vappE(vappI(p, ii), x)
+                          )
+                      )
+                    )
                 )
             )
         ),

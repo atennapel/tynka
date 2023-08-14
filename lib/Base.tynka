@@ -38,11 +38,3 @@ data Either A B := Left A | Right B
 data Option A := None | Some A
 
 data Nat := Z | S Nat
-
-opaque def Id {A : Meta} (x y : A) : Meta =
-  (P : A -> Meta) -> P x -> P y
-def Refl {A} (x : A) : Id x x = unfold Id; \P x. x
-def cast {A} {x y : A} (P : A -> Meta) (p : Id x y) (a : P x) : P y =
-  unfold Id; p P a
-def coerce {X Y : Meta} (p : Id X Y) (a : X) : Y =
-  cast (\x. x) p a

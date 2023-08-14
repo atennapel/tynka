@@ -178,6 +178,13 @@ object Unification:
       case SApp(fn, arg, i) => App(goSp(t, fn), go(arg), i)
       case SSplice(sp)      => goSp(t, sp).splice
       case SProj(hd, proj)  => Proj(goSp(t, hd), proj, Irrelevant, Irrelevant)
+      case SPrim(sp, x, -1, args) =>
+        val qhd = (goSp(t, sp), Expl)
+        val qargs = args.map((v, i) => (go(v), i))
+        val all = qargs ++ List(qhd)
+        all.foldLeft(Prim(x)) { case (f, (a, i)) =>
+          App(f, a, i)
+        }
       case SPrim(sp, x, i, args) =>
         val qhd = (goSp(t, sp), Expl)
         val qargs = args.map((v, i) => (go(v), i))
@@ -370,7 +377,7 @@ object Unification:
       case (SSplice(s1), SSplice(s2))       => unify(s1, s2)
       case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => unify(s1, s2)
       case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => unifyProj(s1, s2, n)
-      case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s1, s2, n)
+      case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => unifyProj(s2, s1, n)
       case (SPrim(a, x, i, as1), SPrim(b, y, j, as2)) if x == y && i == j =>
         unify(a, b)
         as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }

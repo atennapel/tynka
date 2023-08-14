@@ -86,6 +86,10 @@ object Value:
     VLam(name(x), Expl, ty, CFun(f))
   def vlamI(x: String, ty: VTy, f: Val => Val): Val =
     VLam(name(x), Impl, ty, CFun(f))
+  def vlamIrr(x: String, f: Val => Val): Val =
+    VLam(name(x), Expl, VIrrelevant, CFun(f))
+  def vlamIrrI(x: String, f: Val => Val): Val =
+    VLam(name(x), Impl, VIrrelevant, CFun(f))
   def vpi(x: String, t: Val, f: Val => Val): Val =
     VPi(Many, name(x), Expl, t, CFun(f))
   def vpi1(x: String, t: Val, f: Val => Val): Val =
@@ -211,4 +215,92 @@ object Value:
     def unapply(value: Val): Option[(Val, Val)] = value match
       case VRigid(HPrim(PCon), SApp(SApp(SId, t, Expl), c, Expl)) =>
         Some((t, c))
+      case _ => None
+
+  object VBoolM:
+    def apply(): Val = VRigid(HPrim(PBoolM), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PBoolM), SId) => true
+      case _                          => false
+
+  object VTrueM:
+    def apply(): Val = VRigid(HPrim(PTrueM), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PTrueM), SId) => true
+      case _                          => false
+
+  object VFalseM:
+    def apply(): Val = VRigid(HPrim(PFalseM), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PFalseM), SId) => true
+      case _                           => false
+
+  object VHId:
+    def apply(a: Val, b: Val, x: Val, y: Val): Val =
+      VRigid(
+        HPrim(PHId),
+        SApp(SApp(SApp(SApp(SId, a, Impl), b, Impl), x, Expl), y, Expl)
+      )
+    def unapply(value: Val): Option[(Val, Val, Val, Val)] = value match
+      case VRigid(
+            HPrim(PHId),
+            SApp(SApp(SApp(SApp(SId, a, Impl), b, Impl), x, Expl), y, Expl)
+          ) =>
+        Some((a, b, x, y))
+      case _ => None
+
+  object VRefl:
+    def apply(a: Val, x: Val): Val =
+      VRigid(
+        HPrim(PRefl),
+        SApp(SApp(SId, a, Impl), x, Impl)
+      )
+    def unapply(value: Val): Option[(Val, Val)] = value match
+      case VRigid(
+            HPrim(PRefl),
+            SApp(SApp(SId, a, Impl), x, Impl)
+          ) =>
+        Some((a, x))
+      case _ => None
+
+  object VIFixM:
+    def apply(i: Val, f: Val, ii: Val): Val =
+      VRigid(
+        HPrim(PIFixM),
+        SApp(SApp(SApp(SId, i, Impl), f, Expl), ii, Expl)
+      )
+    def unapply(value: Val): Option[(Val, Val, Val)] = value match
+      case VRigid(
+            HPrim(PIFixM),
+            SApp(SApp(SApp(SId, i, Impl), f, Expl), ii, Expl)
+          ) =>
+        Some((i, f, ii))
+      case _ => None
+
+  object VIFixM0:
+    def apply(i: Val, f: Val): Val =
+      VRigid(
+        HPrim(PIFixM),
+        SApp(SApp(SId, i, Impl), f, Expl)
+      )
+    def unapply(value: Val): Option[(Val, Val)] = value match
+      case VRigid(
+            HPrim(PIFixM),
+            SApp(SApp(SId, i, Impl), f, Expl)
+          ) =>
+        Some((i, f))
+      case _ => None
+
+  object VIIn:
+    def apply(i: Val, f: Val, ii: Val, x: Val): Val =
+      VRigid(
+        HPrim(PIInM),
+        SApp(SApp(SApp(SApp(SId, i, Impl), f, Impl), ii, Impl), x, Expl)
+      )
+    def unapply(value: Val): Option[(Val, Val, Val, Val)] = value match
+      case VRigid(
+            HPrim(PIInM),
+            SApp(SApp(SApp(SApp(SId, i, Impl), f, Impl), ii, Impl), x, Expl)
+          ) =>
+        Some((i, f, ii, x))
       case _ => None
