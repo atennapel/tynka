@@ -1,0 +1,37 @@
+import "lib/Prelude"
+
+def CPair A B = (cv : CV) (R : Ty cv) -> (A -> B -> R) -> R
+def StateM (S A : VTy) = ^S -> CPair S A
+
+def StateM/run {S A} (c : StateM S A) (s : S) : Pair S A =
+  let s' := s; c s' _ _ \s a. MkPair s a
+def StateM/exec {S A} (c : StateM S A) (s : S) : A =
+  let s' := s; c s' _ _ \s a. a
+
+def StateM/get {S} : StateM S S = \s _ _ p. p s s
+def StateM/put {S : VTy} (s : S) : StateM S Unit = \_ _ _ p. p s U
+def StateM/update {S : VTy} (f : S -> S) : StateM S Unit = \s _ _ p. p (f s) U
+
+def StateM/return {S A : VTy} (a : A) : StateM S A = \s _ _ p. p s a
+
+def StateM/bind {S A B : VTy} (c : StateM S A) (f : A -> StateM S B) : StateM S B =
+  \s cv R p. c s _ _ \s a. f a s cv R p
+
+def StateM/map {S A B : VTy} (f : A -> B) (c : StateM S A) : StateM S B =
+  StateM/bind c \x. StateM/return (f x)
+
+def StateM/seq {S A B : VTy} (c : StateM S A) (f : StateM S B) : StateM S B =
+  StateM/bind c \_. f
+
+def StateM/rec {S A}
+  (action : StateM S (Either Unit A)) : StateM S A =
+  \s cv R p. fix (go s. action s _ _ \s a. match a | Left _. go s | Right v. p s v) s
+
+def StateM/updateN {S : VTy} (n : Int) (f : S -> S) : StateM S Unit =
+  \s cv R p.
+    fix (rec n. \s.
+      if Int/leq n 0 then p s U
+      else
+        StateM/update f s cv R \s _.
+          rec (Int/sub n 1) s
+    ) n s
