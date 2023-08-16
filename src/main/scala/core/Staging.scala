@@ -34,13 +34,17 @@ object Staging:
     case VPair1(fst: Val1, snd: Val1)
     case VTCon1(x: Name, args: List[Val1])
     case VStringLit1(v: String)
+    case VRowEmpty1
+    case VRowExtend1(l: Val1, t: Val1, r: Val1)
+    case VFixId1(x: String, v: Val1)
   import Val1.*
 
   private var gensymId = 0
-  private def gensym(): Val1 =
-    val v = VStringLit1(s"$$$gensymId$$")
+  private def gensymStr(): String =
+    val v = s"$$$gensymId$$"
     gensymId += 1
     v
+  private def gensym(): Val1 = VStringLit1(gensymStr())
 
   private enum Val0:
     case VVar0(lvl: Lvl)
@@ -113,7 +117,8 @@ object Staging:
             ),
             x
           )
-        case _ => VPrim1(x, as ++ List(a))
+        case (PRowExtend, List(l, t, r)) => VRowExtend1(l, t, r)
+        case _                           => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()
@@ -131,6 +136,7 @@ object Staging:
   private def eval1(t: Tm)(implicit env: Env): Val1 = t match
     case Var(x)                   => vvar1(x)
     case Global(x)                => eval1(getGlobal(x).get.tm)
+    case Prim(PRowEmpty)          => VRowEmpty1
     case Prim(x)                  => VPrim1(x, Nil)
     case Lam(_, _, _, b)          => VLam1(clos1(b))
     case App(f, a, _)             => vapp1(eval1(f), eval1(a))
@@ -213,7 +219,12 @@ object Staging:
       typeCache: mutable.Map[Name, DData] = mutable.Map.empty,
       typeOrder: mutable.ArrayBuffer[Name] = mutable.ArrayBuffer.empty,
       cache: mutable.Map[(Name, List[String]), IR.GName] = mutable.Map.empty,
-      defCache: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty
+      defCache: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty,
+      anonDefs: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty,
+      variantCache: mutable.Map[List[(String, IR.Ty)], IR.GName] =
+        mutable.Map.empty,
+      recordCache: mutable.Map[List[(String, IR.Ty)], IR.GName] =
+        mutable.Map.empty
   ):
     def addDef(ddef: DData): Unit =
       typeCache += ddef.name -> ddef
@@ -260,25 +271,72 @@ object Staging:
           defCache += IR.DData(x, qcs)
           x
 
+    private def flattenRow(v: Val1): List[(String, Val1)] = v match
+      case VRowEmpty1 => Nil
+      case VRowExtend1(l, t, r) =>
+        l match
+          case VStringLit1(x) => (x, t) :: flattenRow(r)
+          case _              => impossible()
+      case _ => impossible()
+
+    private def normalizeRow(row: Val1): List[(String, IR.Ty)] =
+      flattenRow(row).sortBy((x, _) => x).map((x, v) => (x, quoteVTy(v)(this)))
+
+    def getVariant(row: Val1): IR.GName =
+      val r = normalizeRow(row)
+      variantCache.get(r) match
+        case Some(x) => x
+        case _ =>
+          val x = gensymStr()
+          variantCache += (r -> x)
+          anonDefs += IR.DData(x, r.map((x, t) => (x, List(t))))
+          x
+
+    def getRecord(row: Val1): IR.GName =
+      val r = normalizeRow(row)
+      recordCache.get(r) match
+        case Some(x) => x
+        case _ =>
+          val x = gensymStr()
+          recordCache += (r -> x)
+          anonDefs += IR.DData(
+            x,
+            List((s"Mk$x", r.map(_._2)))
+          )
+          x
+
+    def getFix(f: Val1): IR.GName =
+      val x = gensymStr()
+      val r = normalizeRow(vapp1(f, VFixId1(x, f)))
+      variantCache += (r -> x)
+      // TODO: cache Fix types
+      anonDefs += IR.DData(x, r.map((x, t) => (x, List(t))))
+      x
+
+    def anonDefCons(x: IR.GName): List[IR.GName] =
+      anonDefs.find(d => d.name == x).get.cs.map(_._1)
+
     def defs: List[IR.Def] =
-      for {
+      (for {
         dx <- typeOrder.toList
         entry <- cache.filter { case ((y, _), _) => dx == y }
         data <- defCache.find(d => d.name == entry._2)
-      } yield data
+      } yield data) ++ anonDefs
 
   private def quoteVTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.Ty =
     v match
-      case VTCon1(x, as) =>
-        val dx = dmono.get(x, as)
-        IR.TCon(dx)
+      case VTCon1(x, as) => IR.TCon(dmono.get(x, as))
       case VPrim1(PCon, List(t, VStringLit1(c))) =>
         quoteVTy(t) match
           case IR.TCon(dx) => IR.TConCon(dx, c)
           case _           => impossible()
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
-      case _ => println(v); impossible()
+      case VPrim1(PRec, List(row)) => IR.TCon(dmono.getRecord(row))
+      case VPrim1(PVar, List(row)) => IR.TCon(dmono.getVariant(row))
+      case VPrim1(PFix, List(f))   => IR.TCon(dmono.getFix(f))
+      case VFixId1(x, v)           => IR.TCon(x)
+      case _                       => impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
     v match
@@ -399,8 +457,23 @@ object Staging:
           as.map((a, t) => (quote(a), quoteVTy(t)))
         )
 
-      case VPrim0(_)           => impossible()
-      case VSplicePrim0(x, as) => println((x, as)); impossible()
+      case VPrim0(PRecEmpty) =>
+        val dx = dmono.getRecord(VRowEmpty1)
+        IR.Con(dx, s"Mk$dx", Nil)
+
+      case VSplicePrim0(PVarInject, List(r, t, l @ VStringLit1(c), v)) =>
+        val dx = dmono.getVariant(VRowExtend1(l, t, r))
+        IR.Con(dx, c, List(quote(vsplice0(v))))
+
+      case VSplicePrim0(PFixIn, List(f, _, _, VStringLit1(c), v, _)) =>
+        val dx = dmono.getFix(f)
+        IR.Con(dx, c, List(quote(vsplice0(v))))
+
+      case VSplicePrim0(PFixOut, List(_, v)) =>
+        quote(vsplice0(v))
+
+      case VPrim0(x)           => println(x); impossible()
+      case VSplicePrim0(x, as) => println(s"$x $as"); impossible()
 
   // staging
   private def stageCTy(t: Ty)(implicit dmono: DataMonomorphizer): IR.TDef =

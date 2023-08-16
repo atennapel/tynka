@@ -18,7 +18,7 @@ import parsley.io.given
 
 object Main:
   @main def run(filename0: String, options: String*): Unit =
-    setDebug(false)
+    setDebug(true)
     try
       val etimeStart = System.nanoTime()
       val (filename, eds) = load(filename0)

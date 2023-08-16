@@ -31,6 +31,7 @@ TODO:
 - [x] Try to write n-ary State monad
 - [x] Row types
 - [ ] Record, variants and Fix staging
+- [ ] Optimize record, variants and fix staging
 - [ ] Sugar for rows, records, variants and Fix
 - [ ] Remove native datatypes in favor of Fix
 - [ ] Remove implicit generalization
