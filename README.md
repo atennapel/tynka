@@ -29,11 +29,13 @@ TODO:
 - [x] Access to Con in pattern matching
 - [x] Add IdM, BoolM and IFixM to Meta-level
 - [x] Try to write n-ary State monad
-- [ ] Optimize StateN
-- [ ] Try to inline pure tail recursive functions
-- [ ] Linear pairs
-- [ ] Modules
+- [x] Row types
+- [ ] Record, variants and Fix staging
+- [ ] Sugar for rows, records, variants and Fix
+- [ ] Remove native datatypes in favor of Fix
 - [ ] Remove implicit generalization
+- [ ] Modules
+- [ ] Linear pairs
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions

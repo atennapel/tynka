@@ -206,6 +206,26 @@ object Common:
     case PIInM
     case PElimIFixM
 
+    case PRow
+    case PRowEmpty
+    case PRowExtend
+
+    case PRec
+    case PRecEmpty
+    case PRecExtend
+    case PRecSelect
+    case PRecRestrict
+
+    case PVar
+    case PVarEmpty
+    case PVarInject
+    case PVarElim
+    case PVarEmbed
+
+    case PFix
+    case PFixIn
+    case PFixOut
+
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -248,6 +268,26 @@ object Common:
       case PIFixM     => "IFixM"
       case PIInM      => "IInM"
       case PElimIFixM => "elimIFixM"
+
+      case PRow       => "Row"
+      case PRowEmpty  => "emptyRow"
+      case PRowExtend => "extendRow"
+
+      case PRec         => "Rec"
+      case PRecEmpty    => "emptyRec"
+      case PRecExtend   => "extendRec"
+      case PRecSelect   => "selectRec"
+      case PRecRestrict => "restrictRec"
+
+      case PVar       => "Var"
+      case PVarEmpty  => "emptyVar"
+      case PVarInject => "injectVar"
+      case PVarElim   => "elimVar"
+      case PVarEmbed  => "embedVar"
+
+      case PFix    => "Fix"
+      case PFixIn  => "InFix"
+      case PFixOut => "outFix"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -282,7 +322,23 @@ object Common:
         "elimHId",
         "IFixM",
         "IInM",
-        "elimIFixM"
+        "elimIFixM",
+        "Row",
+        "emptyRow",
+        "extendRow",
+        "Rec",
+        "emptyRec",
+        "extendRec",
+        "selectRec",
+        "restrictRec",
+        "Var",
+        "emptyVar",
+        "injectVar",
+        "elimVar",
+        "embedVar",
+        "Fix",
+        "InFix",
+        "outFix"
       )
         .map(Name.apply)
 
@@ -327,5 +383,25 @@ object Common:
       case "IFixM"     => Some(PIFixM)
       case "IInM"      => Some(PIInM)
       case "elimIFixM" => Some(PElimIFixM)
+
+      case "Row"       => Some(PRow)
+      case "emptyRow"  => Some(PRowEmpty)
+      case "extendRow" => Some(PRowExtend)
+
+      case "Rec"         => Some(PRec)
+      case "emptyRec"    => Some(PRecEmpty)
+      case "extendRec"   => Some(PRecExtend)
+      case "selectRec"   => Some(PRecSelect)
+      case "restrictRec" => Some(PRecRestrict)
+
+      case "Var"       => Some(PVar)
+      case "emptyVar"  => Some(PVarEmpty)
+      case "injectVar" => Some(PVarInject)
+      case "elimVar"   => Some(PVarElim)
+      case "embedVar"  => Some(PVarEmbed)
+
+      case "Fix"    => Some(PFix)
+      case "InFix"  => Some(PFixIn)
+      case "outFix" => Some(PFixOut)
 
       case _ => None

@@ -304,3 +304,50 @@ object Value:
           ) =>
         Some((i, f, ii, x))
       case _ => None
+
+  object VRow:
+    def apply(): Val = VRigid(HPrim(PRow), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PRow), SId) => true
+      case _                        => false
+
+  object VRowEmpty:
+    def apply(): Val = VRigid(HPrim(PRowEmpty), SId)
+    def unapply(value: Val): Boolean = value match
+      case VRigid(HPrim(PRowEmpty), SId) => true
+      case _                             => false
+
+  object VRowExtend:
+    def apply(l: Val, t: Val, r: Val): Val =
+      VRigid(
+        HPrim(PRowExtend),
+        SApp(SApp(SApp(SId, l, Expl), t, Expl), r, Expl)
+      )
+    def unapply(value: Val): Option[(Val, Val, Val)] = value match
+      case VRigid(
+            HPrim(PRowExtend),
+            SApp(SApp(SApp(SId, l, Expl), t, Expl), r, Expl)
+          ) =>
+        Some((l, t, r))
+      case _ => None
+
+  object VRec:
+    def apply(r: Val): Val =
+      VRigid(HPrim(PRec), SApp(SId, r, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PRec), SApp(SId, r, Expl)) => Some(r)
+      case _                                       => None
+
+  object VVarV:
+    def apply(r: Val): Val =
+      VRigid(HPrim(PVar), SApp(SId, r, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PVar), SApp(SId, r, Expl)) => Some(r)
+      case _                                       => None
+
+  object VFixV:
+    def apply(f: Val): Val =
+      VRigid(HPrim(PFix), SApp(SId, f, Expl))
+    def unapply(value: Val): Option[Val] = value match
+      case VRigid(HPrim(PFix), SApp(SId, f, Expl)) => Some(f)
+      case _                                       => None

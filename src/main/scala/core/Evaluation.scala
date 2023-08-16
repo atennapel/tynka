@@ -823,6 +823,227 @@ object Evaluation:
         SMeta
       )
 
+    case PRow      => (VUMeta(), SMeta)
+    case PRowEmpty => (VRow(), SMeta)
+    case PRowExtend =>
+      (vfun(VLabel(), vfun(VVTy(), vfun(VRow(), VRow()))), SMeta)
+
+    case PRec => (vfun(VRow(), VVTy()), SMeta)
+    // Rec REmpty
+    case PRecEmpty => (VRec(VRowEmpty()), SVTy())
+    // {R : Row} {A : VTy} (L : Label) -> A -> Rec R -> Rec (RExtend L A R)
+    case PRecExtend =>
+      (
+        vpiI(
+          "R",
+          VRow(),
+          r =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpi(
+                  "L",
+                  VLabel(),
+                  l =>
+                    vfun(
+                      VLift(VVal(), a),
+                      vfun(
+                        VLift(VVal(), VRec(r)),
+                        VLift(VVal(), VRec(VRowExtend(l, a, r)))
+                      )
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+    // {R : Row} {A : VTy} (L : Label) -> Rec (RExtend L A R) -> A
+    case PRecSelect =>
+      (
+        vpiI(
+          "R",
+          VRow(),
+          r =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpi(
+                  "L",
+                  VLabel(),
+                  l =>
+                    vfun(
+                      VLift(VVal(), VRec(VRowExtend(l, a, r))),
+                      VLift(VVal(), a)
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+    // {R : Row} {A : VTy} (L : Label) -> Rec (RExtend L A R) -> Rec R
+    case PRecRestrict =>
+      (
+        vpiI(
+          "R",
+          VRow(),
+          r =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpi(
+                  "L",
+                  VLabel(),
+                  l =>
+                    vfun(
+                      VLift(VVal(), VRec(VRowExtend(l, a, r))),
+                      VLift(VVal(), VRec(r))
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+
+    case PVar => (vfun(VRow(), VVTy()), SMeta)
+    // {cv : CV} {B : Ty cv} -> ^(Var REmpty) -> ^B
+    case PVarEmpty =>
+      (
+        vpiI(
+          "cv",
+          VCV(),
+          cv =>
+            vpiI(
+              "B",
+              VUTy(cv),
+              b => vfun(VLift(VVal(), VVarV(VRowEmpty())), VLift(cv, b))
+            )
+        ),
+        SMeta
+      )
+    // {R : Row} {A : VTy} (L : Label) -> ^A -> ^(Var (RExtend L A R))
+    case PVarInject =>
+      (
+        vpiI(
+          "R",
+          VRow(),
+          r =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpi(
+                  "L",
+                  VLabel(),
+                  l =>
+                    vfun(
+                      VLift(VVal(), a),
+                      VLift(VVal(), VVarV(VRowExtend(l, a, r)))
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+    // {R : Row} {A : VTy} {cv : CV} {B : Ty cv} (L : Label) -> (^A -> ^B) -> (^(Var R) -> ^B) -> ^(Var (RExtend L A R)) -> ^B
+    case PVarElim =>
+      (
+        vpiI(
+          "R",
+          VRow(),
+          r =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpiI(
+                  "cv",
+                  VCV(),
+                  cv =>
+                    vpiI(
+                      "B",
+                      VUTy(cv),
+                      b =>
+                        vpi(
+                          "L",
+                          VLabel(),
+                          l =>
+                            val lb = VLift(cv, b)
+                            vfun(
+                              vfun(VLift(VVal(), a), lb),
+                              vfun(
+                                vfun(VLift(VVal(), VVarV(r)), lb),
+                                vfun(
+                                  VLift(VVal(), VVarV(VRowExtend(l, a, r))),
+                                  lb
+                                )
+                              )
+                            )
+                        )
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+    // {R : Row} {A : VTy} (L : Label) -> ^(Var R) -> ^(Var (RExtend L A R))
+    case PVarEmbed =>
+      (
+        vpiI(
+          "R",
+          VRow(),
+          r =>
+            vpiI(
+              "A",
+              VVTy(),
+              a =>
+                vpi(
+                  "L",
+                  VLabel(),
+                  l =>
+                    vfun(
+                      VLift(VVal(), VVarV(r)),
+                      VLift(VVal(), VVarV(VRowExtend(l, a, r)))
+                    )
+                )
+            )
+        ),
+        SMeta
+      )
+
+    // (VTy -> Row) -> VTy
+    case PFix => (vfun(vfun(VVTy(), VRow()), VVTy()), SMeta)
+    // {F : VTy -> Row} -> ^(Var (F (Fix F))) -> ^(Fix F)
+    case PFixIn =>
+      (
+        vpiI(
+          "F",
+          vfun(VVTy(), VRow()),
+          f =>
+            vfun(
+              VLift(VVal(), VVarV(vappE(f, VFixV(f)))),
+              VLift(VVal(), VFixV(f))
+            )
+        ),
+        SMeta
+      )
+    // {F : VTy -> Row} -> ^(Fix F) -> ^(Var (F (Fix F)))
+    case PFixOut =>
+      (
+        vpiI(
+          "F",
+          vfun(VVTy(), VRow()),
+          f =>
+            vfun(
+              VLift(VVal(), VFixV(f)),
+              VLift(VVal(), VVarV(vappE(f, VFixV(f))))
+            )
+        ),
+        SMeta
+      )
+
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))
 

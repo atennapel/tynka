@@ -408,6 +408,35 @@ object Unification:
       case _ =>
         throw UnifyError(s"cannot unify ${quoteS(a)} ~ ${quoteS(b)}")
 
+  private def searchRow(x: Val, r: VTy)(implicit
+      l: Lvl,
+      unfold: Set[Name]
+  ): (VTy, VTy) = force(r) match
+    case VRowExtend(l2, t2, r2) =>
+      force(l2) match
+        case v if x == v => (t2, r2)
+        case VStringLit(_) =>
+          val (ot, or) = searchRow(x, r2)
+          (ot, VRowExtend(l2, t2, or))
+        case _ =>
+          throw UnifyError(
+            s"row unification failed: ${quote(x)} in ${quote(r)}"
+          )
+    case VFlex(m, sp) =>
+      val u = getMetaUnsolved(m)
+      def buildType(t: Ty, rt: Ty): Ty = t match
+        case Pi(u, x, i, t, b) =>
+          Pi(u, x, i, t, buildType(b, rt))
+        case _ => rt
+      val mtty = buildType(u.cty, U(STy(Prim(PVal))))
+      val mt = VFlex(freshMeta(eval(mtty)(Nil), mtty, SMeta), sp)
+      val mrty = buildType(u.cty, Prim(PRow))
+      val mr = VFlex(freshMeta(eval(mrty)(Nil), mrty, SMeta), sp)
+      unify(r, VRowExtend(x, mt, mr))
+      (mt, mr)
+    case _ =>
+      throw UnifyError(s"row unification failed: ${quote(x)} in ${quote(r)}")
+
   def unify(a: Val, b: Val)(implicit l: Lvl, unfold: Set[Name]): Unit =
     debug(s"unify ${quote(a)} ~ ${quote(b)}")
     (force(a, UnfoldMetas), force(b, UnfoldMetas)) match
@@ -423,6 +452,13 @@ object Unification:
         unify(a1, a2); unify(b1, b2)
       case (VLam(_, _, _, b1), VLam(_, _, _, b2)) => unify(b1, b2)
       case (VPair(a1, b1, _), VPair(a2, b2, _)) => unify(a1, a2); unify(b1, b2)
+      case (VRowExtend(l, t, r), other @ VRowExtend(_, _, _)) =>
+        debug(s"searchRow ${quote(l)} in ${quote(other)}")
+        val (t2, r2) = searchRow(force(l), other)
+        debug(s"found ${quote(l)}: ${quote(t2)} and ${quote(r2)}")
+        // TODO: side-condition to ensure termination?
+        unify(t, t2)
+        unify(r, r2)
       case (VRigid(h1, s1), VRigid(h2, s2)) if h1 == h2 => unify(s1, s2)
       case (VLift(cv1, ty1), VLift(cv2, ty2)) =>
         unify(cv1, cv2); unify(ty1, ty2)
