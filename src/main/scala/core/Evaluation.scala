@@ -1015,39 +1015,16 @@ object Evaluation:
 
     // (VTy -> Row) -> VTy
     case PFix => (vfun(vfun(VVTy(), VRow()), VVTy()), SMeta)
-    // In : {F : VTy -> Row} {R : Row} {A : VTy} (L : Label) -> ^A -> Id {Row} {Row} (F (Fix F)) (ext L A R) -> ^(Fix F)
+    // In : {F : VTy -> Row} -> ^(Var (F (Fix F))) -> ^(Fix F)
     case PFixIn =>
       (
         vpiI(
           "F",
           vfun(VVTy(), VRow()),
           f =>
-            vpiI(
-              "R",
-              VRow(),
-              r =>
-                vpiI(
-                  "A",
-                  VVTy(),
-                  a =>
-                    vpi(
-                      "L",
-                      VLabel(),
-                      l =>
-                        vfun(
-                          VLift(VVal(), a),
-                          vfun(
-                            VHId(
-                              VRow(),
-                              VRow(),
-                              vappE(f, VFixV(f)),
-                              VRowExtend(l, a, r)
-                            ),
-                            VLift(VVal(), VFixV(f))
-                          )
-                        )
-                    )
-                )
+            vfun(
+              VLift(VVal(), VVarV(vappE(f, VFixV(f)))),
+              VLift(VVal(), VFixV(f))
             )
         ),
         SMeta
