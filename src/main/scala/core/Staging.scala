@@ -42,7 +42,7 @@ object Staging:
 
   private var gensymId = 0
   private def gensymStr(): String =
-    val v = s"$$$gensymId$$"
+    val v = s"$$$gensymId"
     gensymId += 1
     v
   private def gensym(): Val1 = VStringLit1(gensymStr())
@@ -322,6 +322,12 @@ object Staging:
     def anonDefCons(x: IR.GName): List[IR.GName] =
       anonDefs.find(d => d.name == x).get.cs.map(_._1)
 
+    def recordRow(x: IR.GName): List[(IR.GName, IR.Ty)] =
+      recordCache.find((_, y) => x == y).get._1
+
+    def variantRow(x: IR.GName): List[(IR.GName, IR.Ty)] =
+      variantCache.find((_, y) => x == y).get._1
+
     def defs: List[IR.Def] =
       (for {
         dx <- typeOrder.toList
@@ -467,13 +473,120 @@ object Staging:
       case VPrim0(PRecEmpty) =>
         val dx = dmono.getRecord(VRowEmpty1)
         IR.Con(dx, s"Mk$dx", Nil)
-      case VSplicePrim0(PRecExtend, List(r, a, l, v, t)) =>
+      case VSplicePrim0(PRecExtend, List(r, a, l @ VStringLit1(y), v, t)) =>
+        val dr = dmono.getRecord(r)
         val dx = dmono.getRecord(VRowExtend1(l, a, r))
-        IR.Con(dx, s"Mk$dx", List())
+        val row = dmono.recordRow(dx)
+        val i = row.indexWhere((x, _) => x == y)
+        val x = fresh()
+        val range = 0 until (row.size - 1)
+        val drt = IR.TDef(IR.TCon(dr))
+        val copy = (range
+          .take(i)
+          .map(i => IR.Field(dr, s"Mk$dr", IR.Var(x, drt), i)) ++ List(
+          quote(vsplice0(v))
+        ) ++ range
+          .drop(i)
+          .map(i => IR.Field(dr, s"Mk$dr", IR.Var(x, drt), i))).toList
+        IR.Let(
+          x,
+          drt,
+          IR.TDef(IR.TCon(dx)),
+          quote(vsplice0(t)),
+          IR.Con(dx, s"Mk$dx", copy)
+        )
+      case VSplicePrim0(PRecSelect, List(r, a, l @ VStringLit1(x), v)) =>
+        val dx = dmono.getRecord(VRowExtend1(l, a, r))
+        val i = dmono.recordRow(dx).indexWhere((y, _) => x == y)
+        IR.Field(dx, s"Mk$dx", quote(vsplice0(v)), i)
+      case VSplicePrim0(PRecRestrict, List(r, a, l @ VStringLit1(y), v)) =>
+        val dr = dmono.getRecord(r)
+        val dx = dmono.getRecord(VRowExtend1(l, a, r))
+        val row = dmono.recordRow(dx)
+        val i = row.indexWhere((x, _) => x == y)
+        val x = fresh()
+        val range = 0 until row.size
+        val dxt = IR.TDef(IR.TCon(dx))
+        val copy = (range
+          .take(i)
+          .map(i => IR.Field(dx, s"Mk$dx", IR.Var(x, dxt), i)) ++ range
+          .drop(i + 1)
+          .map(i => IR.Field(dx, s"Mk$dx", IR.Var(x, dxt), i))).toList
+        IR.Let(
+          x,
+          dxt,
+          IR.TDef(IR.TCon(dx)),
+          quote(vsplice0(v)),
+          IR.Con(dr, s"Mk$dr", copy)
+        )
 
       case VSplicePrim0(PVarInject, List(r, t, l @ VStringLit1(c), v)) =>
         val dx = dmono.getVariant(VRowExtend1(l, t, r))
         IR.Con(dx, c, List(quote(vsplice0(v))))
+      case VSplicePrim0(PVarEmpty, List(cv, b, v)) =>
+        val dx = dmono.getVariant(VRowEmpty1)
+        val x = fresh()
+        IR.Match(dx, quoteCTy(b), x, quote(vsplice0(v)), Nil, None)
+      case VSplicePrim0(PVarEmbed, List(r, a, l, v)) =>
+        val dr = dmono.getVariant(r)
+        val row = dmono.variantRow(dr)
+        val dx = dmono.getVariant(VRowExtend1(l, a, r))
+        val x = fresh()
+        val rt = IR.TDef(IR.TCon(dx))
+        val drt = IR.TDef(IR.TCon(dr))
+        val cs = row.map { (cx, ct) =>
+          val y = fresh()
+          val tm = IR.Con(dx, cx, List(IR.Field(dr, cx, IR.Var(x, drt), 0)))
+          (cx, tm)
+        }
+        IR.Match(dr, rt, x, quote(vsplice0(v)), cs, None)
+      case VSplicePrim0(
+            PVarElim,
+            List(r, a, _, b, lb @ VStringLit1(cx), f, g, v)
+          ) =>
+        val dr = dmono.getVariant(r)
+        val dx = dmono.getVariant(VRowExtend1(lb, a, r))
+        val rt = quoteCTy(b)
+        val x = fresh()
+        val y = fresh()
+        val ta = IR.TDef(quoteVTy(a))
+        val qf = IR.Let(
+          y,
+          ta,
+          rt,
+          IR.Field(dx, cx, IR.Var(x, IR.TDef(IR.TCon(dx))), 0),
+          quote(vsplice0(vapp1(f, VQuote1(VVar0(l)))))(
+            l + 1,
+            (y, ta) :: ns,
+            fresh,
+            dmono
+          )
+        )
+        val z = fresh()
+        val tdr = IR.TDef(IR.TCon(dr))
+        val shrunk = IR.Var(x, IR.TDef(IR.TCon(dx))) // TODO: shrink variant
+        val qg = IR.Let(
+          z,
+          tdr,
+          rt,
+          shrunk,
+          quote(vsplice0(vapp1(g, VQuote1(VVar0(l)))))(
+            l + 1,
+            (z, tdr) :: ns,
+            fresh,
+            dmono
+          )
+        )
+        IR.Match(dx, rt, x, quote(vsplice0(v)), List((cx, qf)), Some(qg))
+
+      /*
+      val qk = quote(vsplice0(vapp1(k, VQuote1(VVar0(l)))))(
+          l + 1,
+          (x, IR.TDef(qt1)) :: ns,
+          fresh,
+          dmono
+        )
+       */
 
       case VSplicePrim0(PFixIn, List(f, v)) =>
         val dx = dmono.getFix(f)
@@ -481,8 +594,8 @@ object Staging:
       case VSplicePrim0(PFixOut, List(_, v)) =>
         quote(vsplice0(v))
 
-      case VPrim0(x)           => println(x); impossible()
-      case VSplicePrim0(x, as) => println(s"$x $as"); impossible()
+      case VPrim0(x)           => impossible()
+      case VSplicePrim0(x, as) => impossible()
 
   // staging
   private def stageCTy(t: Ty)(implicit dmono: DataMonomorphizer): IR.TDef =
