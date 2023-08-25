@@ -244,7 +244,8 @@ object Staging:
         case _                                => false
 
   private case class DataMonomorphizer(
-      cache: mutable.Map[VData1, IR.GName] = mutable.Map.empty,
+      cache: mutable.ArrayBuffer[(VData1, IR.GName)] =
+        mutable.ArrayBuffer.empty,
       defsCache: mutable.ArrayBuffer[IR.Def] = mutable.ArrayBuffer.empty
   ):
     def get(d: VData1): IR.GName =
@@ -252,12 +253,8 @@ object Staging:
         case Some(x) => x
         case None =>
           cache
-            .get(d)
-            .orElse(
-              cache
-                .find((d2, _) => d == d2 || conv(d, d2)(lvl0))
-                .map((_, x) => x)
-            ) match
+            .find((d2, _) => d == d2 || conv(d, d2)(lvl0))
+            .map((_, x) => x) match
             case Some(x) => x
             case None =>
               val x = s"D${gensymStr()}"
