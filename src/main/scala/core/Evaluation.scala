@@ -102,14 +102,14 @@ object Evaluation:
 
       case (
             PConParamType,
-            VTCon(x, ps),
+            d @ VData(x, cs, e),
             List((VStringLit(c), _), (VStringLit(i), _))
           ) =>
-        (getGlobalCon(Name(c)), i.toIntOption) match
-          case (Some(e), Some(i)) if i >= 0 && i < e._2.size =>
-            eval(e._2(i))(ps.reverse)
+        (cs.find((y, _) => y.expose == c), i.toIntOption) match
+          case (Some((_, as)), Some(i)) if i >= 0 && i < as.size =>
+            eval(as(i)._2)(d :: e)
           case _ => vcvoid
-      case (PConParamType, VTCon(_, _), List((c, _), (i, _))) =>
+      case (PConParamType, VData(_, _, _), List((c, _), (i, _))) =>
         (c, i) match
           case (VFlex(_, _), _) =>
             vprimelim(PConParamType, 1, List((v, Expl), (i, Expl)), c)
@@ -366,8 +366,8 @@ object Evaluation:
     case Foreign(io, rt, cmd, as) =>
       VForeign(io, eval(rt), eval(cmd), as.map((a, t) => (eval(a), eval(t))))
 
-    case TCon(x, as)         => VTCon(x, as.map(eval))
-    case Con(x, cx, tas, as) => VCon(x, cx, tas.map(eval), as.map(eval))
+    case Data(dx, cs)  => VData(dx, cs, env)
+    case Con(x, t, as) => VCon(x, eval(t), as.map(eval))
     case Match(dty, rty, scrut, cs, other) =>
       vmatch(
         eval(dty),
@@ -484,12 +484,22 @@ object Evaluation:
       case VLift(cv, t) => Lift(quote(cv, unfold), quote(t, unfold))
       case VQuote(t)    => quote(t, unfold).quote
 
-      case VTCon(x, as) => TCon(x, as.map(a => quote(a, unfold)))
-      case VCon(x, cx, tas, as) =>
+      case VData(x, cs, env) =>
+        Data(
+          x,
+          cs.map((c, as) =>
+            (
+              c,
+              as.map((x, t) =>
+                (x, quote(eval(t)(VVar(l) :: env), unfold)(l + 1))
+              )
+            )
+          )
+        )
+      case VCon(x, t, as) =>
         Con(
           x,
-          cx,
-          tas.map(a => quote(a, unfold)),
+          quote(t, unfold),
           as.map(a => quote(a, unfold))
         )
 

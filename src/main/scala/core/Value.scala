@@ -72,8 +72,8 @@ object Value:
     case VLift(cv: VTy, tm: VTy)
     case VQuote(tm: Val)
 
-    case VTCon(name: Name, args: List[Val])
-    case VCon(name: Name, con: Name, targs: List[Val], args: List[Val])
+    case VData(x: Bind, cs: List[(Name, List[(Bind, Tm)])], env: Env)
+    case VCon(c: Name, t: Val, as: List[Val])
 
     case VForeign(io: Boolean, rt: VTy, l: Val, args: List[(Val, VTy)])
 

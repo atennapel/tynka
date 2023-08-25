@@ -25,6 +25,7 @@ object Parser:
         "let",
         "fix",
         "data",
+        "con",
         "match",
         "Meta",
         "Ty",
@@ -150,7 +151,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> unfoldP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> unfoldP <|> dataP <|> conP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(Many, DontBind, Expl, l, r)))
@@ -206,6 +207,23 @@ object Parser:
         .map { case (((io, rt), l), as) =>
           Foreign(io, rt, l, as)
         }
+    )
+
+    private lazy val dataP: Parsley[Tm] = positioned(
+      ("data" *> option(bind) <~> ("." <|> "|") *> sepBy(
+        identOrOp <~> many(
+          attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
+            (DontBind, t)
+          )
+        ),
+        "|"
+      )).map((x, cs) => Data(x.getOrElse(DontBind), cs))
+    )
+
+    private lazy val conP: Parsley[Tm] = positioned(
+      ("con" *> identOrOp <~> option("{" *> tm <* "}") <~> many(projAtom)).map {
+        case ((c, t), as) => Con(c, t, as)
+      }
     )
 
     private lazy val matchP: Parsley[Tm] = positioned(
@@ -460,7 +478,7 @@ object Parser:
 
     // definitions
     lazy val defs: Parsley[Defs] =
-      many(defP <|> dataP <|> importP).map(Defs.apply)
+      many(defP <|> dataDefP <|> importP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
       (pos <~> option("opaque") <~> "def" *> identOrOp <~> many(
@@ -479,7 +497,7 @@ object Parser:
           )
         }
 
-    private lazy val dataP: Parsley[Def] =
+    private lazy val dataDefP: Parsley[Def] =
       (pos <~> "data" *> identOrOp <~> many(
         identOrOp
       ) <~> option(

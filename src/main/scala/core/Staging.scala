@@ -32,7 +32,7 @@ object Staging:
     case VQuote1(v: Val0)
     case VType1
     case VPair1(fst: Val1, snd: Val1)
-    case VTCon1(x: Name, args: List[Val1])
+    case VData1(x: Bind, cs: List[(Name, List[(Bind, Tm)])], env: Env)
     case VStringLit1(v: String)
     case VRowEmpty1
     case VRowExtend1(l: Val1, t: Val1, r: Val1)
@@ -61,7 +61,7 @@ object Staging:
         other: Option[Val0]
     )
     case VLet0(ty: Val1, bty: Val1, value: Val0, body: Val0 => Val0)
-    case VCon0(x: Name, con: Name, tas: List[Val1], as: List[Val0])
+    case VCon0(c: Name, t: Val1, as: List[Val0])
     case VStringLit0(v: String)
     case VIntLit0(v: Int)
     case VForeign0(io: Boolean, ty: Val1, cmd: String, as: List[(Val0, Val1)])
@@ -88,10 +88,11 @@ object Staging:
         case (PConHasIndex, List(VStringLit1(c), VStringLit1(i))) => VType1
         case (
               PConParamType,
-              List(VTCon1(_, ps), VStringLit1(c), VStringLit1(i))
+              List(d @ VData1(_, cs, e), VStringLit1(c), VStringLit1(i))
             ) =>
-          val env = ps.foldRight(Empty)((v, e) => Def1(e, v))
-          eval1(getGlobalCon(Name(c)).get._2(i.toInt))(env)
+          eval1(cs.find((y, as) => y.expose == c).get._2(i.toInt)._2)(
+            Def1(e, d)
+          )
         case (PUnsafeLinearFunction, List(_, _, f))            => f
         case (PElimBoolM, List(_, t, _, VPrim1(PTrueM, Nil)))  => t
         case (PElimBoolM, List(_, _, f, VPrim1(PFalseM, Nil))) => f
@@ -143,7 +144,7 @@ object Staging:
     case Let(_, _, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
     case Pair(fst, snd, _)        => VPair1(eval1(fst), eval1(snd))
     case Quote(t)                 => VQuote1(eval0(t))
-    case TCon(x, as)              => VTCon1(x, as.map(eval1))
+    case Data(x, cs)              => VData1(x, cs, env)
     case Wk(t)                    => eval1(t)(env.tail)
     case StringLit(v)             => VStringLit1(v)
     case Fun(_, t1, _, t2)        => VFun1(eval1(t1), eval1(t2))
@@ -195,11 +196,11 @@ object Staging:
     case App(f, a, _) => VApp0(eval0(f), eval0(a))
     case Let(_, x, t, _, bt, v, b) =>
       VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
-    case Splice(t)           => vsplice0(eval1(t))
-    case Con(x, cx, tas, as) => VCon0(x, cx, tas.map(eval1), as.map(eval0))
-    case Wk(t)               => eval0(t)(env.tail)
-    case StringLit(v)        => VStringLit0(v)
-    case IntLit(v)           => VIntLit0(v)
+    case Splice(t)     => vsplice0(eval1(t))
+    case Con(x, t, as) => VCon0(x, eval1(t), as.map(eval0))
+    case Wk(t)         => eval0(t)(env.tail)
+    case StringLit(v)  => VStringLit0(v)
+    case IntLit(v)     => VIntLit0(v)
     case Foreign(io, rt, cmd, as) =>
       val l = eval1(cmd) match
         case VStringLit1(v) => v
@@ -322,7 +323,7 @@ object Staging:
 
   private def quoteVTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.Ty =
     v match
-      case VTCon1(x, as) => IR.TCon(dmono.get(x, as))
+      // TODO: case VTCon1(x, as) => IR.TCon(dmono.get(x, as))
       case VPrim1(PCon, List(t, VStringLit1(c))) =>
         quoteVTy(t) match
           case IR.TCon(dx) => IR.TConCon(dx, c)
@@ -411,9 +412,9 @@ object Staging:
           quote(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh, dmono)
         )
 
-      case VCon0(x, cx, tas, as) =>
-        val dx = dmono.get(x, tas)
-        IR.Con(dx, cx.expose, as.map(quote))
+      case VCon0(x, t, as) => ???
+      /* TODO:   val dx = dmono.get(x, tas)
+        IR.Con(dx, cx.expose, as.map(quote)) */
 
       case VSplicePrim0(PReturnIO, List(ty, v)) =>
         IR.ReturnIO(quote(vsplice0(v)))

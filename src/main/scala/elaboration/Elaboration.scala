@@ -486,6 +486,27 @@ object Elaboration:
         val STy(vrcv) = stage: @unchecked
         checkMatch(scrut, cs, other, ctx.quote(ty), ty, vrcv)
 
+      case (S.Con(c, None, as), VData(dx, cs, e)) if !stage.isMeta =>
+        cs.find((c2, _) => c == c2) match
+          case None =>
+            error(
+              s"constructor $c not found in expected type ${ctx.pretty(ty)}"
+            )
+          case Some((_, ts)) if as.size != ts.size =>
+            error(
+              s"invalid amount of arguments for constructor $c for expected type ${ctx
+                  .pretty(ty)}: expected ${ts.size}, but got ${as.size}"
+            )
+          case Some((_, ts)) =>
+            var u = ctx.uses
+            val eas = as.zip(ts.map(_._2)).map { (a, t) =>
+              val (ea, eu) = check(a, eval(t)(ty :: e), SVTy())
+              u += eu
+              ea
+            }
+            (Con(c, ctx.quote(ty), eas), u)
+
+      /* TODO:
       case (S.Var(Name("[]"), _), VTCon(dx, as)) if !stage.isMeta =>
         val nilary = getGlobalData(dx).get._2.filter((_, as) => as.isEmpty)
         if nilary.isEmpty then
@@ -517,7 +538,7 @@ object Elaboration:
         val ctxConsTypes = datatypeCtx(datainfo._1, as)
         val (efst, u1) = check(fst, ctxConsTypes.eval(cas(0)), SVTy())
         val (esnd, u2) = check(snd, ctxConsTypes.eval(cas(1)), SVTy())
-        (Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd)), u1 + u2)
+        (Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd)), u1 + u2)*/
 
       case (S.Quote(t), VLift(cv, a)) =>
         val (et, u) = check(t, a, STy(cv))
@@ -625,7 +646,7 @@ object Elaboration:
           .foldLeft(Global(name))((f, a) => App(f, a, Expl))
         unify(vscrutty, ctx.eval(data))
         checkMatch(scrut, cs, other, rty, vrty, vrcv)
-      case VTCon(dx, as) =>
+      /* TODO: case VTCon(dx, as) =>
         val (dps, cons) = getGlobalData(dx).get
         val ctxConsTypes = datatypeCtx(dps, as)
         val used = mutable.Set[Name]()
@@ -687,7 +708,7 @@ object Elaboration:
             eother.map(_._1)
           ),
           uses
-        )
+        ) */
       case _ =>
         error(
           s"expected a datatype in match but got ${ctx.pretty(vscrutty)}"
@@ -979,9 +1000,9 @@ object Elaboration:
             (Proj(et, Snd, Irrelevant, Irrelevant), rt, SMeta, ut)
           case (VLift(_, inner), _) =>
             force(inner) match
-              case VTCon(_, _) => infer(S.Proj(S.Splice(t), p))
-              case _           => error(s"cannot project a lifted type")
-          case (VTCon(dx, as), p) =>
+              case VData(_, _, _) => infer(S.Proj(S.Splice(t), p))
+              case _              => error(s"cannot project a lifted type")
+          /* TODO: case (VData(dx, as, _), p) =>
             val datainfo = getGlobalData(dx).get
             val candidates = datainfo._2.filter((_, as) => as.size == 2)
             if candidates.isEmpty then
@@ -1027,7 +1048,7 @@ object Elaboration:
                   SVTy()
                 )
                 (em, pty, SVTy(), ut)
-              case _ => impossible()
+              case _ => impossible() */
           case (tty, _) =>
             st match
               case SMeta =>
@@ -1082,6 +1103,28 @@ object Elaboration:
         val cv = ctx.eval(newCV())
         val (et2, a2) = adjustStage(et, a, SMeta, STy(cv))
         (et2, a2, STy(cv), u)
+
+      case S.Data(x, cs) =>
+        val newctx = ctx.bind(Many, x, VVTy(), SMeta)
+        var u = ctx.uses
+        val ecs = cs.map((c, as) =>
+          (
+            c,
+            as.map { (x, a) =>
+              val (ea, eu) = check(a, VVTy(), SMeta)(newctx)
+              u += eu.tail
+              (x, ea)
+            }
+          )
+        )
+        (Data(x, ecs), VVTy(), SMeta, u)
+
+      case S.Con(c, None, as) => error("cannot infer con without expected type")
+      case tmc @ S.Con(c, Some(t), as) =>
+        val (et, u) = checkVTy(t)
+        val vt = ctx.eval(et)
+        val (ec, u2) = check(tmc, vt, SVTy())
+        (ec, vt, SVTy(), u + u2)
 
       case S.Foreign(io, rt, l, as) =>
         val (ert, u1) = checkVTy(rt)
@@ -1170,13 +1213,16 @@ object Elaboration:
     case Quote(tm)    => Quote(replaceMeta(id, tm, ix))
     case Splice(tm)   => Splice(replaceMeta(id, tm, ix))
     case Wk(tm)       => Wk(replaceMeta(id, tm, ix))
-    case TCon(name, args) => TCon(name, args.map(replaceMeta(id, _, ix)))
-    case Con(name, con, targs, args) =>
+    case Data(x, cs) =>
+      Data(
+        x,
+        cs.map((c, as) => (c, as.map((x, t) => (x, replaceMeta(id, t, ix)))))
+      )
+    case Con(x, t, as) =>
       Con(
-        name,
-        con,
-        targs.map(replaceMeta(id, _, ix)),
-        args.map(replaceMeta(id, _, ix))
+        x,
+        replaceMeta(id, t, ix),
+        as.map(replaceMeta(id, _, ix))
       )
     case Pair(fst, snd, ty) =>
       Pair(
@@ -1266,8 +1312,8 @@ object Elaboration:
         val ed = DDef(x, ety, estage, etm)
         debug(s"elaborated $ed")
         List(ed)
-      case S.DData(pos, dx, ps, cs) =>
-        implicit val ctx: Ctx = Ctx.empty(pos)
+      case S.DData(pos, dx, ps, cs) => ???
+      /* TODO: implicit val ctx: Ctx = Ctx.empty(pos)
         if getGlobalData(dx).isDefined then error(s"duplicate datatype $dx")
 
         // generate tcon
@@ -1399,7 +1445,7 @@ object Elaboration:
         setGlobalData(dx, ps, ccs.map(_._1))
 
         List(DData(dx, ps, ccs.map(_._1)), DDef(dx, tconty, SMeta, tcon)) ++ ccs
-          .flatMap(_._2)
+          .flatMap(_._2)*/
 
   def elaborate(module: String, uri: String, ds: S.Defs): Defs =
     debug(s"elaborate $module $uri")

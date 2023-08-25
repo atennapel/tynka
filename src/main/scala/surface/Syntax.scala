@@ -92,6 +92,8 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case Data(x: Bind, cs: List[(Name, List[(Bind, Ty)])])
+    case Con(c: Name, t: Option[Ty], as: List[Tm])
     case Match(
         scrut: Tm,
         cs: List[(PosInfo, Name, Option[Name], List[Bind], Tm)],
@@ -130,6 +132,10 @@ object Syntax:
       case Lift(ty)       => ty.free
       case Quote(tm)      => tm.free
       case Splice(tm)     => tm.free
+      case Data(x, cs) =>
+        cs.flatMap((_, as) => as.flatMap((_, t) => t.free))
+          .filterNot(_ == x.toName)
+      case Con(_, t, as) => t.fold(Nil)(_.free) ++ as.flatMap(_.free)
       case Match(scrut, cs, other) =>
         scrut.free ++ cs
           .map((_, _, cx, ps, t) =>
@@ -186,6 +192,13 @@ object Syntax:
       case Foreign(true, rt, l, Nil)  => s"(foreignIO $rt $l)"
       case Foreign(true, rt, l, as) => s"(foreignIO $rt $l ${as.mkString(" ")})"
 
+      case Data(x, Nil) => s"(data $x.)"
+      case Data(x, as) =>
+        s"(data $x. ${as.map((c, as) => s"$c ${as.map((x, t) => s"($x : $t)").mkString(" ")}").mkString(" | ")})"
+      case Con(c, None, Nil)    => s"(con $c)"
+      case Con(c, None, as)     => s"(con $c ${as.mkString(" ")})"
+      case Con(c, Some(t), Nil) => s"(con $c {$t})"
+      case Con(c, Some(t), as)  => s"(con $c {$t} ${as.mkString(" ")})"
       case Match(scrut, cs, other) =>
         s"(match $scrut ${cs
             .map((_, c, cx, ps, b) =>

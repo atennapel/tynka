@@ -109,15 +109,11 @@ object Pretty:
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"
 
-    case TCon(x, Nil) => s"tcon $x"
-    case TCon(x, as)  => s"tcon $x ${as.map(prettyParen(_)).mkString(" ")}"
-    case Con(x, cx, Nil, Nil) => s"con $x $cx"
-    case Con(x, cx, Nil, as) =>
-      s"con $x $cx ${as.map(prettyParen(_)).mkString(" ")}"
-    case Con(x, cx, tas, Nil) =>
-      s"con $x $cx (${tas.map(prettyParen(_)).mkString(" ")})"
-    case Con(x, cx, tas, as) =>
-      s"con $x $cx (${tas.map(prettyParen(_)).mkString(" ")}) ${as.map(prettyParen(_)).mkString(" ")}"
+    case Data(x, Nil) => s"data $x."
+    case Data(x, as) =>
+      s"data $x. ${as.map((c, as) => s"$c ${as.map((x, t) => s"($x : $t)").mkString(" ")}").mkString(" | ")}"
+    case Con(c, t, Nil) => s"con $c {$t}"
+    case Con(c, t, as)  => s"con $c {$t} ${as.mkString(" ")}"
 
     case Match(_, _, scrut, cs, other) =>
       s"match ${prettyParen(scrut, true)} ${cs

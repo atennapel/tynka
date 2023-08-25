@@ -141,6 +141,8 @@ object Common:
 
   final case class Uses(expose: List[Usage]):
     def size: Int = expose.size
+    def head: Usage = expose.head
+    def tail: Uses = Uses(expose.tail)
 
     private def guardUsesZip(b: Uses): Unit =
       if size != b.size then impossible()

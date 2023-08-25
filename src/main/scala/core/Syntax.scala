@@ -76,8 +76,8 @@ object Syntax:
 
     case Foreign(io: Boolean, rt: Ty, cmd: Tm, args: List[(Tm, Ty)])
 
-    case TCon(name: Name, args: List[Ty])
-    case Con(name: Name, con: Name, targs: List[Ty], args: List[Tm])
+    case Data(x: Bind, cs: List[(Name, List[(Bind, Ty)])])
+    case Con(c: Name, t: Ty, as: List[Tm])
     case Match(
         dty: Ty,
         rty: Ty,
@@ -130,11 +130,9 @@ object Syntax:
       case Lift(cv, tm)            => cv.metas ++ tm.metas
       case Quote(tm)               => tm.metas
       case Splice(tm)              => tm.metas
-      case TCon(name, args) => args.map(_.metas).foldLeft(Set.empty)(_ ++ _)
-      case Con(name, con, targs, args) =>
-        targs.map(_.metas).foldLeft(Set.empty[MetaId])(_ ++ _) ++ args
-          .map(_.metas)
-          .foldLeft(Set.empty[MetaId])(_ ++ _)
+      case Data(_, cs) =>
+        cs.flatMap((_, as) => as.flatMap((_, t) => t.metas)).toSet
+      case Con(con, ty, args) => ty.metas ++ args.flatMap(_.metas)
       case Match(dty, rty, scrut, cs, other) =>
         dty.metas ++ rty.metas ++ scrut.metas ++ cs
           .map((_, _, _, t) => t.metas)
@@ -186,13 +184,11 @@ object Syntax:
       case Foreign(io, rt, cmd, as) =>
         s"(foreign${if io then "IO" else ""} $rt $cmd ${as.map(_._1).mkString(" ")})"
 
-      case TCon(name, Nil)      => s"(tcon $name)"
-      case TCon(name, as)       => s"(tcon $name ${as.mkString(" ")})"
-      case Con(x, cx, Nil, Nil) => s"(con $x $cx)"
-      case Con(x, cx, Nil, as)  => s"(con $x $cx ${as.mkString(" ")})"
-      case Con(x, cx, tas, Nil) => s"(con $x $cx (${tas.mkString(" ")}))"
-      case Con(x, cx, tas, as) =>
-        s"(con $x $cx (${tas.mkString(" ")}) ${as.mkString(" ")})"
+      case Data(x, Nil) => s"(data $x.)"
+      case Data(x, as) =>
+        s"(data $x. ${as.map((c, as) => s"$c ${as.map((x, t) => s"($x : $t)").mkString(" ")}").mkString(" | ")})"
+      case Con(c, t, Nil) => s"(con $c {$t})"
+      case Con(c, t, as)  => s"(con $c {$t} ${as.mkString(" ")})"
 
       case Match(_, _, scrut, cs, other) =>
         s"(match $scrut ${cs

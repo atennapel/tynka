@@ -240,8 +240,19 @@ object Unification:
       case VLift(cv, t) => Lift(go(cv), go(t))
       case VQuote(t)    => go(t).quote
 
-      case VTCon(x, as)         => TCon(x, as.map(go))
-      case VCon(x, cx, tas, as) => Con(x, cx, tas.map(go), as.map(go))
+      case VData(x, cs, env) =>
+        Data(
+          x,
+          cs.map((c, as) =>
+            (
+              c,
+              as.map((x, t) =>
+                (x, go(eval(t)(VVar(psub.cod) :: env))(psub.lift))
+              )
+            )
+          )
+        )
+      case VCon(x, t, as) => Con(x, go(t), as.map(go))
 
       case VForeign(io, rt, cmd, as) =>
         Foreign(io, go(rt), go(cmd), as.map((a, t) => (go(a), go(t))))
@@ -469,11 +480,27 @@ object Unification:
         val w = VVar(l + 1)
         unify(f1(v, w), f2(v, w))(l + 1, unfold)
         unify(arg1, arg2)
-      case (VTCon(x, as1), VTCon(y, as2)) if x == y && as1.size == as2.size =>
-        as1.zip(as2).foreach((v, w) => unify(v, w))
-      case (VCon(x, cx, tas1, as1), VCon(y, cy, tas2, as2))
-          if x == y && cx == cy && tas1.size == tas2.size && as1.size == as2.size =>
-        tas1.zip(tas2).foreach((v, w) => unify(v, w))
+      case (VData(x, cs1, e1), VData(y, cs2, e2)) if cs1.size == cs2.size =>
+        if !cs1.forall((c, as1) =>
+            cs2.find((y, as2) => y == c && as1.size == as2.size).isDefined
+          )
+        then throw UnifyError(s"unification failed: ${quote(a)} ~ ${quote(b)}")
+        if !cs2.forall((c, as1) =>
+            cs1.find((y, as2) => y == c && as1.size == as2.size).isDefined
+          )
+        then throw UnifyError(s"unification failed: ${quote(a)} ~ ${quote(b)}")
+        cs1.foreach { (c, as1) =>
+          val as2 = cs2.find((y, as2) => c == y).get._2
+          as1.zip(as2).map { case ((_, v1), (_, v2)) =>
+            unify(eval(v1)(VVar(l) :: e1), eval(v2)(VVar(l) :: e2))(
+              l + 1,
+              unfold
+            )
+          }
+        }
+      case (VCon(x, t1, as1), VCon(y, t2, as2))
+          if x == y && as1.size == as2.size =>
+        unify(t1, t2)
         as1.zip(as2).foreach((v, w) => unify(v, w))
       case (VForeign(io1, rt1, cmd1, as1), VForeign(io2, rt2, cmd2, as2))
           if io1 == io2 && as1.size == as2.size =>

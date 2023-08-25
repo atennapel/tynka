@@ -80,8 +80,9 @@ object Zonking:
     case Foreign(io, rt, cmd, as) =>
       Foreign(io, zonk(rt), zonk(cmd), as.map((a, t) => (zonk(a), zonk(t))))
 
-    case TCon(x, as)         => TCon(x, as.map(zonk))
-    case Con(x, cx, tas, as) => Con(x, cx, tas.map(zonk), as.map(zonk))
+    case Data(x, cs) =>
+      Data(x, cs.map((c, as) => (c, as.map((x, a) => (x, zonkLift(a))))))
+    case Con(x, t, as) => Con(x, zonk(t), as.map(zonk))
     case Match(dty, rty, scrut, cs, other) =>
       Match(
         zonk(dty),
