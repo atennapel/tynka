@@ -1013,37 +1013,6 @@ object Evaluation:
         SMeta
       )
 
-    // (VTy -> Row) -> VTy
-    case PFix => (vfun(vfun(VVTy(), VRow()), VVTy()), SMeta)
-    // In : {F : VTy -> Row} -> ^(Var (F (Fix F))) -> ^(Fix F)
-    case PFixIn =>
-      (
-        vpiI(
-          "F",
-          vfun(VVTy(), VRow()),
-          f =>
-            vfun(
-              VLift(VVal(), VVarV(vappE(f, VFixV(f)))),
-              VLift(VVal(), VFixV(f))
-            )
-        ),
-        SMeta
-      )
-    // {F : VTy -> Row} -> ^(Fix F) -> ^(Var (F (Fix F)))
-    case PFixOut =>
-      (
-        vpiI(
-          "F",
-          vfun(VVTy(), VRow()),
-          f =>
-            vfun(
-              VLift(VVal(), VFixV(f)),
-              VLift(VVal(), VVarV(vappE(f, VFixV(f))))
-            )
-        ),
-        SMeta
-      )
-
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))
 

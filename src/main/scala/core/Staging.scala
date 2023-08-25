@@ -36,8 +36,6 @@ object Staging:
     case VStringLit1(v: String)
     case VRowEmpty1
     case VRowExtend1(l: Val1, t: Val1, r: Val1)
-    case VFixToken1
-    case VFixCon1(x: String)
   import Val1.*
 
   private var gensymId = 0
@@ -225,8 +223,7 @@ object Staging:
       variantCache: mutable.Map[List[(String, IR.Ty)], IR.GName] =
         mutable.Map.empty,
       recordCache: mutable.Map[List[(String, IR.Ty)], IR.GName] =
-        mutable.Map.empty,
-      fixCache: mutable.Map[List[(String, IR.Ty)], IR.GName] = mutable.Map.empty
+        mutable.Map.empty
   ):
     def addDef(ddef: DData): Unit =
       typeCache += ddef.name -> ddef
@@ -307,18 +304,6 @@ object Staging:
           )
           x
 
-    def getFix(f: Val1): IR.GName =
-      val r = normalizeRow(vapp1(f, VFixToken1))
-      fixCache.get(r) match
-        case Some(x) => x
-        case _ =>
-          val x = gensymStr()
-          val r2 = normalizeRow(vapp1(f, VFixCon1(x)))
-          variantCache += (r2 -> x)
-          fixCache += (r -> x)
-          anonDefs += IR.DData(x, r2.map((x, t) => (x, List(t))))
-          x
-
     def anonDefCons(x: IR.GName): List[IR.GName] =
       anonDefs.find(d => d.name == x).get.cs.map(_._1)
 
@@ -346,9 +331,6 @@ object Staging:
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
       case VPrim1(PRec, List(row)) => IR.TCon(dmono.getRecord(row))
       case VPrim1(PVar, List(row)) => IR.TCon(dmono.getVariant(row))
-      case VPrim1(PFix, List(f))   => IR.TCon(dmono.getFix(f))
-      case VFixToken1              => IR.TCon("FIXTOKEN")
-      case VFixCon1(x)             => IR.TCon(x)
       case _                       => impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
@@ -578,21 +560,6 @@ object Staging:
           )
         )
         IR.Match(dx, rt, x, quote(vsplice0(v)), List((cx, qf)), Some(qg))
-
-      /*
-      val qk = quote(vsplice0(vapp1(k, VQuote1(VVar0(l)))))(
-          l + 1,
-          (x, IR.TDef(qt1)) :: ns,
-          fresh,
-          dmono
-        )
-       */
-
-      case VSplicePrim0(PFixIn, List(f, v)) =>
-        val dx = dmono.getFix(f)
-        quote(vsplice0(v))
-      case VSplicePrim0(PFixOut, List(_, v)) =>
-        quote(vsplice0(v))
 
       case VPrim0(x)           => impossible()
       case VSplicePrim0(x, as) => impossible()

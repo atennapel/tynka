@@ -222,10 +222,6 @@ object Common:
     case PVarElim
     case PVarEmbed
 
-    case PFix
-    case PFixIn
-    case PFixOut
-
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -284,10 +280,6 @@ object Common:
       case PVarInject => "injectVar"
       case PVarElim   => "elimVar"
       case PVarEmbed  => "embedVar"
-
-      case PFix    => "Fix"
-      case PFixIn  => "InFix"
-      case PFixOut => "outFix"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -335,10 +327,7 @@ object Common:
         "emptyVar",
         "injectVar",
         "elimVar",
-        "embedVar",
-        "Fix",
-        "InFix",
-        "outFix"
+        "embedVar"
       )
         .map(Name.apply)
 
@@ -399,9 +388,5 @@ object Common:
       case "injectVar" => Some(PVarInject)
       case "elimVar"   => Some(PVarElim)
       case "embedVar"  => Some(PVarEmbed)
-
-      case "Fix"    => Some(PFix)
-      case "InFix"  => Some(PFixIn)
-      case "outFix" => Some(PFixOut)
 
       case _ => None

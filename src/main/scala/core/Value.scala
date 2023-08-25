@@ -344,10 +344,3 @@ object Value:
     def unapply(value: Val): Option[Val] = value match
       case VRigid(HPrim(PVar), SApp(SId, r, Expl)) => Some(r)
       case _                                       => None
-
-  object VFixV:
-    def apply(f: Val): Val =
-      VRigid(HPrim(PFix), SApp(SId, f, Expl))
-    def unapply(value: Val): Option[Val] = value match
-      case VRigid(HPrim(PFix), SApp(SId, f, Expl)) => Some(f)
-      case _                                       => None
