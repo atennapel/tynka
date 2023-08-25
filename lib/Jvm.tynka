@@ -62,7 +62,6 @@ def Char/leq = Char/jvmBranch "158"
 
 -- JVM specifics
 def JavaVoid = Foreign "V"
-def JavaArgs = Foreign "[Ljava/lang/String;"
 def JavaObject = Foreign "Ljava/lang/Object;"
 
 -- exceptions
@@ -101,6 +100,8 @@ def Str/case {cv : CV} {A : Ty cv} (x : Str) (ifEmpty : A) (ifNonEmpty : Char ->
     ifEmpty
   else
     ifNonEmpty (Str/unsafeIndex 0 x) (Str/unsafeSubstringFrom 1 x)
+
+def JavaMain = Array Str -> IO Unit
 
 -- etc
 def parseInt (s : Str) : Option Int :=

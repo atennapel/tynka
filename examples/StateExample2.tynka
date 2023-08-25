@@ -12,4 +12,4 @@ def fibState (n : Int) : State2 Int Int Int =
 
 def fib (n : Int) : Int := State2/exec (fibState n) 0 1
 
-def main := putLn (fib 8)
+def main (_ : Array Str) := putLn (fib 8)

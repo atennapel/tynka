@@ -101,7 +101,7 @@ def prog2 : Free StackF Int =
 
 def res := handle prog 100000 (Long/fromInt 0) 0
 
-def main :=
+def main (_ : Array Str) :=
   match res
   | Left msg. putLn msg
   | Right p. match p | MkPair st w. match st | MkPair s a.

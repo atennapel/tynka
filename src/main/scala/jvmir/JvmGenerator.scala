@@ -102,8 +102,14 @@ object JvmGenerator:
 
     // generate main
     val mainexists = ds.defs.exists {
-      case DDef("main", false, TDef(Some(Nil), _), _) => true
-      case _                                          => false
+      case DDef(
+            "main",
+            false,
+            TDef(Some(List(TArray(TForeign("Ljava/lang/String;")))), _),
+            _
+          ) =>
+        true
+      case _ => false
     }
     if mainexists then
       val m = new Method(
@@ -113,9 +119,14 @@ object JvmGenerator:
       )
       val main: GeneratorAdapter =
         new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC, m, null, null, cw)
+      main.loadArg(0)
       main.invokeStatic(
         ctx.moduleType,
-        new Method("main", Type.BOOLEAN_TYPE, List().toArray)
+        new Method(
+          "main",
+          Type.BOOLEAN_TYPE,
+          List(Type.getType("[Ljava/lang/String;")).toArray
+        )
       )
       main.pop()
       main.visitInsn(RETURN)
