@@ -209,14 +209,6 @@ object Value:
       case VRigid(HPrim(PForeignType), SApp(SId, t, Expl)) => Some(t)
       case _                                               => None
 
-  object VConType:
-    def apply(t: Val, c: Val): Val =
-      VRigid(HPrim(PCon), SApp(SApp(SId, t, Expl), c, Expl))
-    def unapply(value: Val): Option[(Val, Val)] = value match
-      case VRigid(HPrim(PCon), SApp(SApp(SId, t, Expl), c, Expl)) =>
-        Some((t, c))
-      case _ => None
-
   object VBoolM:
     def apply(): Val = VRigid(HPrim(PBoolM), SId)
     def unapply(value: Val): Boolean = value match
@@ -304,43 +296,3 @@ object Value:
           ) =>
         Some((i, f, ii, x))
       case _ => None
-
-  object VRow:
-    def apply(): Val = VRigid(HPrim(PRow), SId)
-    def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PRow), SId) => true
-      case _                        => false
-
-  object VRowEmpty:
-    def apply(): Val = VRigid(HPrim(PRowEmpty), SId)
-    def unapply(value: Val): Boolean = value match
-      case VRigid(HPrim(PRowEmpty), SId) => true
-      case _                             => false
-
-  object VRowExtend:
-    def apply(l: Val, t: Val, r: Val): Val =
-      VRigid(
-        HPrim(PRowExtend),
-        SApp(SApp(SApp(SId, l, Expl), t, Expl), r, Expl)
-      )
-    def unapply(value: Val): Option[(Val, Val, Val)] = value match
-      case VRigid(
-            HPrim(PRowExtend),
-            SApp(SApp(SApp(SId, l, Expl), t, Expl), r, Expl)
-          ) =>
-        Some((l, t, r))
-      case _ => None
-
-  object VRec:
-    def apply(r: Val): Val =
-      VRigid(HPrim(PRec), SApp(SId, r, Expl))
-    def unapply(value: Val): Option[Val] = value match
-      case VRigid(HPrim(PRec), SApp(SId, r, Expl)) => Some(r)
-      case _                                       => None
-
-  object VVarV:
-    def apply(r: Val): Val =
-      VRigid(HPrim(PVar), SApp(SId, r, Expl))
-    def unapply(value: Val): Option[Val] = value match
-      case VRigid(HPrim(PVar), SApp(SId, r, Expl)) => Some(r)
-      case _                                       => None

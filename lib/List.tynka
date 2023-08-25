@@ -1,10 +1,10 @@
 import "lib/Base"
 import "lib/IO"
-import "lib/Constructor"
+-- import "lib/Constructor"
 
 data List A
   | Nil
-  | (::) A (List A)
+  | (::) A List
 
 def List/isEmpty {A : VTy} (l : List A) : Bool =
   match l
@@ -45,6 +45,7 @@ def List/traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
 def List/foldlIO {A B : VTy} (start : B) (f : B -> A -> IO B) (l : List A) : IO B =
   List/foldr (\acc. IO/return acc) (\hd tl acc. IO/bind (f acc hd) tl) l start
 
+{-
 def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
   match l
   | Nil. Nil
@@ -57,3 +58,4 @@ def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
         IO/return next
       ) tl;
       IO/return start
+-}

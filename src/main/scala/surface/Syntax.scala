@@ -29,7 +29,7 @@ object Syntax:
         pos: PosInfo,
         name: Name,
         ps: List[Name],
-        cs: List[(PosInfo, Name, List[Ty])]
+        cs: List[(PosInfo, Name, List[(Bind, Ty)])]
     )
 
     override def toString: String = this match
@@ -92,7 +92,7 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
-    case Data(x: Bind, cs: List[(Name, List[(Bind, Ty)])])
+    case Data(x: Bind, cs: List[(PosInfo, Name, List[(Bind, Ty)])])
     case Con(c: Name, t: Option[Ty], as: List[Tm])
     case Match(
         scrut: Tm,
@@ -133,7 +133,7 @@ object Syntax:
       case Quote(tm)      => tm.free
       case Splice(tm)     => tm.free
       case Data(x, cs) =>
-        cs.flatMap((_, as) => as.flatMap((_, t) => t.free))
+        cs.flatMap((_, _, as) => as.flatMap((_, t) => t.free))
           .filterNot(_ == x.toName)
       case Con(_, t, as) => t.fold(Nil)(_.free) ++ as.flatMap(_.free)
       case Match(scrut, cs, other) =>
@@ -194,7 +194,7 @@ object Syntax:
 
       case Data(x, Nil) => s"(data $x.)"
       case Data(x, as) =>
-        s"(data $x. ${as.map((c, as) => s"$c ${as.map((x, t) => s"($x : $t)").mkString(" ")}").mkString(" | ")})"
+        s"(data $x. ${as.map((_, c, as) => s"$c ${as.map((x, t) => s"($x : $t)").mkString(" ")}").mkString(" | ")})"
       case Con(c, None, Nil)    => s"(con $c)"
       case Con(c, None, as)     => s"(con $c ${as.mkString(" ")})"
       case Con(c, Some(t), Nil) => s"(con $c {$t})"

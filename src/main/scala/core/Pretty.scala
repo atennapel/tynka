@@ -140,11 +140,5 @@ object Pretty:
       s"def $x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
     case DDef(x, t, STy(_), v) =>
       s"def $x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
-    case DData(x, ps, Nil) =>
-      s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
-    case DData(x, ps, cs) =>
-      s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs
-          .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.map(t => prettyParen(t)(ps.reverse)).mkString(" ")}")
-          .mkString(" | ")}"
 
   def pretty(ds: Defs): String = ds.toList.map(pretty).mkString("\n")

@@ -211,13 +211,18 @@ object Parser:
 
     private lazy val dataP: Parsley[Tm] = positioned(
       ("data" *> option(bind) <~> ("." <|> "|") *> sepBy(
-        identOrOp <~> many(
+        pos <~> identOrOp <~> many(
           attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
             (DontBind, t)
           )
         ),
         "|"
-      )).map((x, cs) => Data(x.getOrElse(DontBind), cs))
+      )).map((x, cs) =>
+        Data(
+          x.getOrElse(DontBind),
+          cs.map { case ((pos, x), as) => (pos, x, as) }
+        )
+      )
     )
 
     private lazy val conP: Parsley[Tm] = positioned(
@@ -371,8 +376,9 @@ object Parser:
       positioned(
         ("if" *> tm <~> "then" *> (pos <~> tm) <~> "else" *> (pos <~> tm))
           .map { case ((c, (pt, t)), (pf, f)) =>
+            val x = Name("b")
             Match(
-              c,
+              Let(Many, x, true, Some(Var(Name("Bool"))), c, Var(x)),
               List(
                 (pt, Name("True"), None, Nil, t),
                 (pf, Name("False"), None, Nil, f)
@@ -502,7 +508,11 @@ object Parser:
         identOrOp
       ) <~> option(
         (":=" <|> "|") *> sepBy(
-          pos <~> identOrOp <~> many(projAtom),
+          pos <~> identOrOp <~> many(
+            attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
+              (DontBind, t)
+            )
+          ),
           "|"
         )
       ))

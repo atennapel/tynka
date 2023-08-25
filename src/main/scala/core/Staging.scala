@@ -10,7 +10,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.immutable.ListMap
 import jvmir.JvmName.escape
-import core.Globals.getGlobalCon
 
 object Staging:
   // evaluation
@@ -26,16 +25,20 @@ object Staging:
   import Env.*
 
   private enum Val1:
+    case VVar1(lvl: Lvl)
     case VPrim1(x: PrimName, args: List[Val1])
     case VFun1(t1: Val1, t2: Val1)
     case VLam1(fn: Val1 => Val1)
     case VQuote1(v: Val0)
     case VType1
     case VPair1(fst: Val1, snd: Val1)
-    case VData1(x: Bind, cs: List[(Name, List[(Bind, Tm)])], env: Env)
+    case VData1(
+        x: Bind,
+        cs: List[(Name, List[(Bind, Tm)])],
+        env: Env,
+        cache: Option[String]
+    )
     case VStringLit1(v: String)
-    case VRowEmpty1
-    case VRowExtend1(l: Val1, t: Val1, r: Val1)
   import Val1.*
 
   private var gensymId = 0
@@ -84,15 +87,7 @@ object Staging:
           else VLam1(r => VLam1(a => VLam1(b => b)))
         case (PAppendLabel, List(VStringLit1(a), VStringLit1(b))) =>
           VStringLit1(a + b)
-        case (PConsumeLinearUnit, List(_, _, v))                  => v
-        case (PConHasIndex, List(VStringLit1(c), VStringLit1(i))) => VType1
-        case (
-              PConParamType,
-              List(d @ VData1(_, cs, e), VStringLit1(c), VStringLit1(i))
-            ) =>
-          eval1(cs.find((y, as) => y.expose == c).get._2(i.toInt)._2)(
-            Def1(e, d)
-          )
+        case (PConsumeLinearUnit, List(_, _, v))               => v
         case (PUnsafeLinearFunction, List(_, _, f))            => f
         case (PElimBoolM, List(_, t, _, VPrim1(PTrueM, Nil)))  => t
         case (PElimBoolM, List(_, _, f, VPrim1(PFalseM, Nil))) => f
@@ -117,8 +112,7 @@ object Staging:
             ),
             x
           )
-        case (PRowExtend, List(l, t, r)) => VRowExtend1(l, t, r)
-        case _                           => VPrim1(x, as ++ List(a))
+        case _ => VPrim1(x, as ++ List(a))
     case (VQuote1(f), VQuote1(a))    => VQuote1(VApp0(f, a))
     case (VQuote1(f), VPrim1(p, as)) => VQuote1(VApp0(f, VSplicePrim0(p, as)))
     case _                           => impossible()
@@ -133,29 +127,29 @@ object Staging:
   private def clos1(t: Tm)(implicit env: Env): Val1 => Val1 =
     v => eval1(t)(Def1(env, v))
 
-  private def eval1(t: Tm)(implicit env: Env): Val1 = t match
-    case Var(x)                   => vvar1(x)
-    case Global(x)                => eval1(getGlobal(x).get.tm)
-    case Prim(PRowEmpty)          => VRowEmpty1
-    case Prim(x)                  => VPrim1(x, Nil)
-    case Lam(_, _, _, b)          => VLam1(clos1(b))
-    case App(f, a, _)             => vapp1(eval1(f), eval1(a))
-    case Proj(t, p, _, _)         => vproj1(eval1(t), p)
-    case Let(_, _, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
-    case Pair(fst, snd, _)        => VPair1(eval1(fst), eval1(snd))
-    case Quote(t)                 => VQuote1(eval0(t))
-    case Data(x, cs)              => VData1(x, cs, env)
-    case Wk(t)                    => eval1(t)(env.tail)
-    case StringLit(v)             => VStringLit1(v)
-    case Fun(_, t1, _, t2)        => VFun1(eval1(t1), eval1(t2))
+  private def eval1(t: Tm)(implicit env: Env): Val1 =
+    t match
+      case Var(x)                   => vvar1(x)
+      case Global(x)                => eval1(getGlobal(x).get.tm)
+      case Prim(x)                  => VPrim1(x, Nil)
+      case Lam(_, _, _, b)          => VLam1(clos1(b))
+      case App(f, a, _)             => vapp1(eval1(f), eval1(a))
+      case Proj(t, p, _, _)         => vproj1(eval1(t), p)
+      case Let(_, _, _, _, _, v, b) => eval1(b)(Def1(env, eval1(v)))
+      case Pair(fst, snd, _)        => VPair1(eval1(fst), eval1(snd))
+      case Quote(t)                 => VQuote1(eval0(t))
+      case Data(x, cs)              => VData1(x, cs, env, None)
+      case Wk(t)                    => eval1(t)(env.tail)
+      case StringLit(v)             => VStringLit1(v)
+      case Fun(_, t1, _, t2)        => VFun1(eval1(t1), eval1(t2))
 
-    case U(_)              => VType1
-    case Pi(_, _, _, _, _) => VType1
-    case Sigma(_, _, _)    => VType1
-    case Lift(_, _)        => VType1
-    case Irrelevant        => VType1
+      case U(_)              => VType1
+      case Pi(_, _, _, _, _) => VType1
+      case Sigma(_, _, _)    => VType1
+      case Lift(_, _)        => VType1
+      case Irrelevant        => VType1
 
-    case _ => impossible()
+      case _ => impossible()
 
   private def vvar0(ix: Ix)(implicit env: Env): Val0 =
     def go(e: Env, i: Int): Val0 = (e, i) match
@@ -173,40 +167,41 @@ object Staging:
   private def clos0(t: Tm)(implicit env: Env): Val0 => Val0 =
     v => eval0(t)(Def0(env, v))
 
-  private def eval0(t: Tm)(implicit env: Env): Val0 = t match
-    case Var(x)             => vvar0(x)
-    case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
-    case Prim(x)            => VPrim0(x)
-    case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
-    case Fix(ty, rty, g, x, b, arg) =>
-      VFix0(
-        eval1(ty),
-        eval1(rty),
-        (v, w) => eval0(b)(Def0(Def0(env, v), w)),
-        eval0(arg)
-      )
-    case Match(dty, rty, scrut, cs, o) =>
-      VMatch0(
-        eval1(dty),
-        eval1(rty),
-        eval0(scrut),
-        cs.map((x, c, i, t) => (x, c, i, eval0(t))),
-        o.map(eval0)
-      )
-    case App(f, a, _) => VApp0(eval0(f), eval0(a))
-    case Let(_, x, t, _, bt, v, b) =>
-      VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
-    case Splice(t)     => vsplice0(eval1(t))
-    case Con(x, t, as) => VCon0(x, eval1(t), as.map(eval0))
-    case Wk(t)         => eval0(t)(env.tail)
-    case StringLit(v)  => VStringLit0(v)
-    case IntLit(v)     => VIntLit0(v)
-    case Foreign(io, rt, cmd, as) =>
-      val l = eval1(cmd) match
-        case VStringLit1(v) => v
-        case _              => impossible()
-      VForeign0(io, eval1(rt), l, as.map((a, t) => (eval0(a), eval1(t))))
-    case _ => impossible()
+  private def eval0(t: Tm)(implicit env: Env): Val0 =
+    t match
+      case Var(x)             => vvar0(x)
+      case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
+      case Prim(x)            => VPrim0(x)
+      case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
+      case Fix(ty, rty, g, x, b, arg) =>
+        VFix0(
+          eval1(ty),
+          eval1(rty),
+          (v, w) => eval0(b)(Def0(Def0(env, v), w)),
+          eval0(arg)
+        )
+      case Match(dty, rty, scrut, cs, o) =>
+        VMatch0(
+          eval1(dty),
+          eval1(rty),
+          eval0(scrut),
+          cs.map((x, c, i, t) => (x, c, i, eval0(t))),
+          o.map(eval0)
+        )
+      case App(f, a, _) => VApp0(eval0(f), eval0(a))
+      case Let(_, x, t, _, bt, v, b) =>
+        VLet0(eval1(t), eval1(bt), eval0(v), clos0(b))
+      case Splice(t)     => vsplice0(eval1(t))
+      case Con(x, t, as) => VCon0(x, eval1(t), as.map(eval0))
+      case Wk(t)         => eval0(t)(env.tail)
+      case StringLit(v)  => VStringLit0(v)
+      case IntLit(v)     => VIntLit0(v)
+      case Foreign(io, rt, cmd, as) =>
+        val l = eval1(cmd) match
+          case VStringLit1(v) => v
+          case _              => impossible()
+        VForeign0(io, eval1(rt), l, as.map((a, t) => (eval0(a), eval1(t))))
+      case _ => impossible()
 
   // quotation
   private type NS = List[(IR.LName, IR.TDef)]
@@ -215,124 +210,82 @@ object Staging:
   private val primitives = "BCDFIJSZ".split("")
   private def descriptorIsPrimitive(d: String): Boolean = primitives.contains(d)
 
+  private def conv(a: Val1, b: Val1)(implicit l: Lvl): Boolean =
+    if a == b then true
+    else
+      (a, b) match
+        case (VVar1(la), VVar1(lb)) => la == lb
+        case (VData1(x, cs1, e1, Some(sx)), VData1(y, cs2, e2, Some(sy)))
+            if sx == sy =>
+          true
+        case (VData1(x, cs1, e1, _), VData1(y, cs2, e2, _))
+            if cs1.size == cs2.size =>
+          cs1
+            .sortBy((x, _) => x.expose)
+            .zip(cs2.sortBy((x, _) => x.expose))
+            .forall {
+              case ((cx1, as1), (cx2, as2))
+                  if cx1 == cx2 && as1.size == as2.size =>
+                as1.zip(as2).forall { case ((_, t1), (_, t2)) =>
+                  conv(
+                    eval1(t1)(Def1(e1, VVar1(l))),
+                    eval1(t2)(Def1(e2, VVar1(l)))
+                  )(
+                    l + 1
+                  )
+                }
+              case _ => false
+            }
+        case (VPrim1(x, as1), VPrim1(y, as2))
+            if x == y && as1.size == as2.size =>
+          as1.zip(as2).forall(conv)
+        case (VPair1(a1, b1), VPair1(a2, b2)) => conv(a1, a2) && conv(b1, b2)
+        case (VStringLit1(a), VStringLit1(b)) => a == b
+        case _                                => false
+
   private case class DataMonomorphizer(
-      typeCache: mutable.Map[Name, DData] = mutable.Map.empty,
-      typeOrder: mutable.ArrayBuffer[Name] = mutable.ArrayBuffer.empty,
-      cache: mutable.Map[(Name, List[String]), IR.GName] = mutable.Map.empty,
-      defCache: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty,
-      anonDefs: mutable.ArrayBuffer[IR.DData] = mutable.ArrayBuffer.empty,
-      variantCache: mutable.Map[List[(String, IR.Ty)], IR.GName] =
-        mutable.Map.empty,
-      recordCache: mutable.Map[List[(String, IR.Ty)], IR.GName] =
-        mutable.Map.empty
+      cache: mutable.Map[VData1, IR.GName] = mutable.Map.empty,
+      defsCache: mutable.ArrayBuffer[IR.Def] = mutable.ArrayBuffer.empty
   ):
-    def addDef(ddef: DData): Unit =
-      typeCache += ddef.name -> ddef
-      typeOrder += ddef.name
-
-    private def rep(t: IR.Ty): String = t match
-      case IR.TCon(x)       => repData(defCache.find(d => d.name == x).get.cs)
-      case IR.TConCon(x, _) => repData(defCache.find(d => d.name == x).get.cs)
-      case IR.TForeign(x) if descriptorIsPrimitive(x) => x
-      case IR.TForeign(x)                             => "BOX"
-      case IR.TArray(_)                               => "BOX"
-    private def repData(cs: List[(String, List[IR.Ty])]): String = cs match
-      case Nil                                  => "Z"
-      case List((_, Nil))                       => "Z"
-      case List((_, Nil), (_, Nil))             => "Z"
-      case cs if cs.forall((_, l) => l.isEmpty) => "I"
-      case List((_, List(t)))                   => rep(t)
-      case List(ts)                             => "BOX"
-      case _                                    => "BOX"
-
-    private def escapeTy(t: IR.Ty): String =
-      val r = rep(t)
-      if r == "BOX" then
-        t match
-          case IR.TCon(x)       => x
-          case IR.TConCon(x, c) => s"CON_${x}_${escape(c)}"
-          case IR.TForeign(x) =>
-            x.replace(";", "").replace("/", "_").replace("\\", "_")
-          case IR.TArray(ty) => s"ARRAY_${escapeTy(ty)}"
-      else r
-
-    def get(name: Name, cparams: List[Val1]): IR.GName =
-      val params = cparams.map(quoteVTy(_)(this)).map(escapeTy)
-      cache.get((name, params)) match
+    def get(d: VData1): IR.GName =
+      d.cache match
         case Some(x) => x
         case None =>
-          val x =
-            s"${name.expose}${if params.isEmpty then "" else "_"}${params.mkString("_")}"
-          cache += (name, params) -> x
-          implicit val env: Env = cparams.foldLeft(Empty)(Def1.apply)
-          val qcs = typeCache(name).cs.map((cx, as) =>
-            (cx.expose, as.map(a => quoteVTy(eval1(a))(this)))
-          )
-          defCache += IR.DData(x, qcs)
-          x
+          cache
+            .get(d)
+            .orElse(
+              cache
+                .find((d2, _) => d == d2 || conv(d, d2)(lvl0))
+                .map((_, x) => x)
+            ) match
+            case Some(x) => x
+            case None =>
+              val x = s"D${gensymStr()}"
+              cache += (d -> x)
+              defsCache += IR.DData(
+                x,
+                d.cs.map((cx, as) =>
+                  (
+                    cx.expose,
+                    as.map((_, t) =>
+                      quoteVTy(
+                        eval1(t)(Def1(d.env, VData1(d.x, d.cs, d.env, Some(x))))
+                      )(this)
+                    )
+                  )
+                )
+              )
+              x
 
-    private def flattenRow(v: Val1): List[(String, Val1)] = v match
-      case VRowEmpty1 => Nil
-      case VRowExtend1(l, t, r) =>
-        l match
-          case VStringLit1(x) => (x, t) :: flattenRow(r)
-          case _              => impossible()
-      case _ => impossible()
-
-    private def normalizeRow(row: Val1): List[(String, IR.Ty)] =
-      flattenRow(row).sortBy((x, _) => x).map((x, v) => (x, quoteVTy(v)(this)))
-
-    def getVariant(row: Val1): IR.GName =
-      val r = normalizeRow(row)
-      variantCache.get(r) match
-        case Some(x) => x
-        case _ =>
-          val x = gensymStr()
-          variantCache += (r -> x)
-          anonDefs += IR.DData(x, r.map((x, t) => (x, List(t))))
-          x
-
-    def getRecord(row: Val1): IR.GName =
-      val r = normalizeRow(row)
-      recordCache.get(r) match
-        case Some(x) => x
-        case _ =>
-          val x = gensymStr()
-          recordCache += (r -> x)
-          anonDefs += IR.DData(
-            x,
-            List((s"Mk$x", r.map(_._2)))
-          )
-          x
-
-    def anonDefCons(x: IR.GName): List[IR.GName] =
-      anonDefs.find(d => d.name == x).get.cs.map(_._1)
-
-    def recordRow(x: IR.GName): List[(IR.GName, IR.Ty)] =
-      recordCache.find((_, y) => x == y).get._1
-
-    def variantRow(x: IR.GName): List[(IR.GName, IR.Ty)] =
-      variantCache.find((_, y) => x == y).get._1
-
-    def defs: List[IR.Def] =
-      (for {
-        dx <- typeOrder.toList
-        entry <- cache.filter { case ((y, _), _) => dx == y }
-        data <- defCache.find(d => d.name == entry._2)
-      } yield data) ++ anonDefs
+    def defs: List[IR.Def] = defsCache.toList
 
   private def quoteVTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.Ty =
     v match
-      // TODO: case VTCon1(x, as) => IR.TCon(dmono.get(x, as))
-      case VPrim1(PCon, List(t, VStringLit1(c))) =>
-        quoteVTy(t) match
-          case IR.TCon(dx) => IR.TConCon(dx, c)
-          case _           => impossible()
+      case VData1(_, cs, e, Some(x))                  => IR.TCon(x)
+      case d @ VData1(x, cs, e, None)                 => IR.TCon(dmono.get(d))
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
-      case VPrim1(PRec, List(row)) => IR.TCon(dmono.getRecord(row))
-      case VPrim1(PVar, List(row)) => IR.TCon(dmono.getVariant(row))
-      case _                       => impossible()
+      case _                                          => impossible()
 
   private def quoteCTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.TDef =
     v match
@@ -412,9 +365,10 @@ object Staging:
           quote(b(VVar0(l)))(l + 1, (x, qt) :: ns, fresh, dmono)
         )
 
-      case VCon0(x, t, as) => ???
-      /* TODO:   val dx = dmono.get(x, tas)
-        IR.Con(dx, cx.expose, as.map(quote)) */
+      case VCon0(x, d @ VData1(_, _, _, _), as) =>
+        val dx = dmono.get(d)
+        IR.Con(dx, x.expose, as.map(quote))
+      case VCon0(_, _, _) => impossible()
 
       case VSplicePrim0(PReturnIO, List(ty, v)) =>
         IR.ReturnIO(quote(vsplice0(v)))
@@ -431,17 +385,6 @@ object Staging:
         IR.BindIO(qt1, qt2, x, quote(vsplice0(c)), qk)
       case VSplicePrim0(PRunIO, List(_, c)) => IR.RunIO(quote(vsplice0(c)))
 
-      case VSplicePrim0(PMkCon, List(_, _, v))     => quote(vsplice0(v))
-      case VSplicePrim0(PConExpose, List(_, _, v)) => quote(vsplice0(v))
-      case VSplicePrim0(
-            PConField,
-            List(ta, VStringLit1(cx), c, VStringLit1(i), _)
-          ) =>
-        val dx = quoteVTy(ta) match
-          case IR.TCon(x) => x
-          case _          => impossible()
-        IR.Field(dx, cx, quote(vsplice0(c)), i.toInt)
-
       case VIntLit0(v)    => IR.IntLit(v)
       case VStringLit0(v) => IR.StringLit(v)
 
@@ -452,115 +395,6 @@ object Staging:
           cmd,
           as.map((a, t) => (quote(a), quoteVTy(t)))
         )
-
-      case VPrim0(PRecEmpty) =>
-        val dx = dmono.getRecord(VRowEmpty1)
-        IR.Con(dx, s"Mk$dx", Nil)
-      case VSplicePrim0(PRecExtend, List(r, a, l @ VStringLit1(y), v, t)) =>
-        val dr = dmono.getRecord(r)
-        val dx = dmono.getRecord(VRowExtend1(l, a, r))
-        val row = dmono.recordRow(dx)
-        val i = row.indexWhere((x, _) => x == y)
-        val x = fresh()
-        val range = 0 until (row.size - 1)
-        val drt = IR.TDef(IR.TCon(dr))
-        val copy = (range
-          .take(i)
-          .map(i => IR.Field(dr, s"Mk$dr", IR.Var(x, drt), i)) ++ List(
-          quote(vsplice0(v))
-        ) ++ range
-          .drop(i)
-          .map(i => IR.Field(dr, s"Mk$dr", IR.Var(x, drt), i))).toList
-        IR.Let(
-          x,
-          drt,
-          IR.TDef(IR.TCon(dx)),
-          quote(vsplice0(t)),
-          IR.Con(dx, s"Mk$dx", copy)
-        )
-      case VSplicePrim0(PRecSelect, List(r, a, l @ VStringLit1(x), v)) =>
-        val dx = dmono.getRecord(VRowExtend1(l, a, r))
-        val i = dmono.recordRow(dx).indexWhere((y, _) => x == y)
-        IR.Field(dx, s"Mk$dx", quote(vsplice0(v)), i)
-      case VSplicePrim0(PRecRestrict, List(r, a, l @ VStringLit1(y), v)) =>
-        val dr = dmono.getRecord(r)
-        val dx = dmono.getRecord(VRowExtend1(l, a, r))
-        val row = dmono.recordRow(dx)
-        val i = row.indexWhere((x, _) => x == y)
-        val x = fresh()
-        val range = 0 until row.size
-        val dxt = IR.TDef(IR.TCon(dx))
-        val copy = (range
-          .take(i)
-          .map(i => IR.Field(dx, s"Mk$dx", IR.Var(x, dxt), i)) ++ range
-          .drop(i + 1)
-          .map(i => IR.Field(dx, s"Mk$dx", IR.Var(x, dxt), i))).toList
-        IR.Let(
-          x,
-          dxt,
-          IR.TDef(IR.TCon(dx)),
-          quote(vsplice0(v)),
-          IR.Con(dr, s"Mk$dr", copy)
-        )
-
-      case VSplicePrim0(PVarInject, List(r, t, l @ VStringLit1(c), v)) =>
-        val dx = dmono.getVariant(VRowExtend1(l, t, r))
-        IR.Con(dx, c, List(quote(vsplice0(v))))
-      case VSplicePrim0(PVarEmpty, List(cv, b, v)) =>
-        val dx = dmono.getVariant(VRowEmpty1)
-        val x = fresh()
-        IR.Match(dx, quoteCTy(b), x, quote(vsplice0(v)), Nil, None)
-      case VSplicePrim0(PVarEmbed, List(r, a, l, v)) =>
-        val dr = dmono.getVariant(r)
-        val row = dmono.variantRow(dr)
-        val dx = dmono.getVariant(VRowExtend1(l, a, r))
-        val x = fresh()
-        val rt = IR.TDef(IR.TCon(dx))
-        val drt = IR.TDef(IR.TCon(dr))
-        val cs = row.map { (cx, ct) =>
-          val y = fresh()
-          val tm = IR.Con(dx, cx, List(IR.Field(dr, cx, IR.Var(x, drt), 0)))
-          (cx, tm)
-        }
-        IR.Match(dr, rt, x, quote(vsplice0(v)), cs, None)
-      case VSplicePrim0(
-            PVarElim,
-            List(r, a, _, b, lb @ VStringLit1(cx), f, g, v)
-          ) =>
-        val dr = dmono.getVariant(r)
-        val dx = dmono.getVariant(VRowExtend1(lb, a, r))
-        val rt = quoteCTy(b)
-        val x = fresh()
-        val y = fresh()
-        val ta = IR.TDef(quoteVTy(a))
-        val qf = IR.Let(
-          y,
-          ta,
-          rt,
-          IR.Field(dx, cx, IR.Var(x, IR.TDef(IR.TCon(dx))), 0),
-          quote(vsplice0(vapp1(f, VQuote1(VVar0(l)))))(
-            l + 1,
-            (y, ta) :: ns,
-            fresh,
-            dmono
-          )
-        )
-        val z = fresh()
-        val tdr = IR.TDef(IR.TCon(dr))
-        val shrunk = IR.Var(x, IR.TDef(IR.TCon(dx))) // TODO: shrink variant
-        val qg = IR.Let(
-          z,
-          tdr,
-          rt,
-          shrunk,
-          quote(vsplice0(vapp1(g, VQuote1(VVar0(l)))))(
-            l + 1,
-            (z, tdr) :: ns,
-            fresh,
-            dmono
-          )
-        )
-        IR.Match(dx, rt, x, quote(vsplice0(v)), List((cx, qf)), Some(qg))
 
       case VPrim0(x)           => impossible()
       case VSplicePrim0(x, as) => impossible()
@@ -590,8 +424,7 @@ object Staging:
       val ty = stageCTy(t)
       val value = stageTm(v)
       Some(IR.DDef(x.expose, false, ty, value))
-    case d @ DData(_, _, _) => dmono.addDef(d); None
-    case _                  => None
+    case _ => None
 
   def stage(ds: Defs): IR.Defs =
     implicit val dmono: DataMonomorphizer = DataMonomorphizer()

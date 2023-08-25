@@ -188,13 +188,6 @@ object Common:
 
     case PForeignType
 
-    case PCon
-    case PMkCon
-    case PConExpose
-    case PConHasIndex
-    case PConParamType
-    case PConField
-
     case PBoolM
     case PTrueM
     case PFalseM
@@ -207,22 +200,6 @@ object Common:
     case PIFixM
     case PIInM
     case PElimIFixM
-
-    case PRow
-    case PRowEmpty
-    case PRowExtend
-
-    case PRec
-    case PRecEmpty
-    case PRecExtend
-    case PRecSelect
-    case PRecRestrict
-
-    case PVar
-    case PVarEmpty
-    case PVarInject
-    case PVarElim
-    case PVarEmbed
 
     override def toString: String = this match
       case PCV   => "CV"
@@ -247,13 +224,6 @@ object Common:
 
       case PForeignType => "Foreign"
 
-      case PCon          => "Con"
-      case PMkCon        => "MkCon"
-      case PConExpose    => "exposeCon"
-      case PConHasIndex  => "ConHasIndex"
-      case PConParamType => "ConParamType"
-      case PConField     => "fieldCon"
-
       case PBoolM     => "BoolM"
       case PTrueM     => "TrueM"
       case PFalseM    => "FalseM"
@@ -266,22 +236,6 @@ object Common:
       case PIFixM     => "IFixM"
       case PIInM      => "IInM"
       case PElimIFixM => "elimIFixM"
-
-      case PRow       => "Row"
-      case PRowEmpty  => "emptyRow"
-      case PRowExtend => "extendRow"
-
-      case PRec         => "Rec"
-      case PRecEmpty    => "emptyRec"
-      case PRecExtend   => "extendRec"
-      case PRecSelect   => "selectRec"
-      case PRecRestrict => "restrictRec"
-
-      case PVar       => "Var"
-      case PVarEmpty  => "emptyVar"
-      case PVarInject => "injectVar"
-      case PVarElim   => "elimVar"
-      case PVarEmbed  => "embedVar"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -302,11 +256,6 @@ object Common:
         "eqLabel",
         "appendLabel",
         "Foreign",
-        "Con",
-        "exposeCon",
-        "ConHasIndex",
-        "ConParamType",
-        "fieldCon",
         "BoolM",
         "TrueM",
         "FalseM",
@@ -316,20 +265,7 @@ object Common:
         "elimHId",
         "IFixM",
         "IInM",
-        "elimIFixM",
-        "Row",
-        "emptyRow",
-        "extendRow",
-        "Rec",
-        "emptyRec",
-        "extendRec",
-        "selectRec",
-        "restrictRec",
-        "Var",
-        "emptyVar",
-        "injectVar",
-        "elimVar",
-        "embedVar"
+        "elimIFixM"
       )
         .map(Name.apply)
 
@@ -356,12 +292,6 @@ object Common:
 
       case "Foreign" => Some(PForeignType)
 
-      case "Con"          => Some(PCon)
-      case "exposeCon"    => Some(PConExpose)
-      case "ConHasIndex"  => Some(PConHasIndex)
-      case "ConParamType" => Some(PConParamType)
-      case "fieldCon"     => Some(PConField)
-
       case "BoolM"     => Some(PBoolM)
       case "TrueM"     => Some(PTrueM)
       case "FalseM"    => Some(PFalseM)
@@ -374,21 +304,5 @@ object Common:
       case "IFixM"     => Some(PIFixM)
       case "IInM"      => Some(PIInM)
       case "elimIFixM" => Some(PElimIFixM)
-
-      case "Row"       => Some(PRow)
-      case "emptyRow"  => Some(PRowEmpty)
-      case "extendRow" => Some(PRowExtend)
-
-      case "Rec"         => Some(PRec)
-      case "emptyRec"    => Some(PRecEmpty)
-      case "extendRec"   => Some(PRecExtend)
-      case "selectRec"   => Some(PRecSelect)
-      case "restrictRec" => Some(PRecRestrict)
-
-      case "Var"       => Some(PVar)
-      case "emptyVar"  => Some(PVarEmpty)
-      case "injectVar" => Some(PVarInject)
-      case "elimVar"   => Some(PVarElim)
-      case "embedVar"  => Some(PVarEmbed)
 
       case _ => None

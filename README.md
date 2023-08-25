@@ -29,11 +29,7 @@ TODO:
 - [x] Access to Con in pattern matching
 - [x] Add IdM, BoolM and IFixM to Meta-level
 - [x] Try to write n-ary State monad
-- [x] Row types
-- [x] Record, variants and Fix staging
-- [ ] Optimize record, variants and fix staging
-- [ ] Sugar for rows, records, variants and Fix
-- [ ] Remove native datatypes in favor of Fix
+- [ ] Add back Con
 - [ ] Remove implicit generalization
 - [ ] Modules
 - [ ] Linear pairs

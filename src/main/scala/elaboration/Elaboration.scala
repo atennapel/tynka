@@ -321,23 +321,6 @@ object Elaboration:
         case (VLift(cv, a), b) => Some(coe(t.splice, a, STy(cv), b, st2))
         case (a, VLift(cv, b)) => Some(coe(t, a, st1, b, STy(cv)).quote)
 
-        case (VConType(t1, c1), VConType(t2, c2)) =>
-          unify(t1, t2); unify(c1, c2); None
-        // Con A C <: A => $(exposeCon {at} {c} `t)
-        case (VConType(at, c), et) =>
-          unify(at, et);
-          Some(
-            App(
-              App(
-                App(Prim(PConExpose), ctx.quote(at), Impl),
-                ctx.quote(c),
-                Impl
-              ),
-              t.quote,
-              Expl
-            ).splice
-          )
-
         case _ => justAdjust(t, a, st1, b, st2)
     go(t, a, st1, b, st2).getOrElse(t)
 
@@ -506,39 +489,35 @@ object Elaboration:
             }
             (Con(c, ctx.quote(ty), eas), u)
 
-      /* TODO:
-      case (S.Var(Name("[]"), _), VTCon(dx, as)) if !stage.isMeta =>
-        val nilary = getGlobalData(dx).get._2.filter((_, as) => as.isEmpty)
+      case (S.Var(Name("[]"), _), VData(dx, cs, e)) if !stage.isMeta =>
+        val nilary = cs.filter((_, as) => as.size == 0)
         if nilary.isEmpty then
           error(
             s"cannot check [] against ${ctx.pretty(ty)}: no nilary constructors"
           )
         if nilary.size > 1 then
           error(
-            s"cannot check [] against ${ctx.pretty(ty)}: more than one nilary constructor: ${nilary.keySet
-                .mkString(" ")}"
+            s"cannot check [] against ${ctx.pretty(ty)}: more than one nilary constructor"
           )
         val cx = nilary.head._1
-        check(S.Var(cx), ty, stage)
-      case (S.Pair(fst, snd), VTCon(dx, as)) if !stage.isMeta =>
-        val datainfo = getGlobalData(dx).get
-        val candidates = datainfo._2.filter((_, as) => as.size == 2)
+        check(S.Con(cx, None, Nil), ty, stage)
+      case (S.Pair(fst, snd), VData(dx, cs, e)) if !stage.isMeta =>
+        val candidates = cs.filter((_, as) => as.size == 2)
         if candidates.isEmpty then
           error(
             s"cannot check pair against ${ctx.pretty(ty)}: no suitable constructors"
           )
         if candidates.size > 1 then
           error(
-            s"cannot check pair against ${ctx.pretty(ty)}: more than one suitable constructor: ${candidates.keySet
-                .mkString(" ")}"
+            s"cannot check pair against ${ctx.pretty(ty)}: more than one suitable constructor"
           )
         val cinfo = candidates.head
         val cx = cinfo._1
-        val cas = cinfo._2
-        val ctxConsTypes = datatypeCtx(datainfo._1, as)
-        val (efst, u1) = check(fst, ctxConsTypes.eval(cas(0)), SVTy())
-        val (esnd, u2) = check(snd, ctxConsTypes.eval(cas(1)), SVTy())
-        (Con(dx, cx, as.map(ctx.quote(_)), List(efst, esnd)), u1 + u2)*/
+        val tfst = cinfo._2(0)._2
+        val tsnd = cinfo._2(1)._2
+        val (efst, u1) = check(fst, eval(tfst)(ty :: e), SVTy())
+        val (esnd, u2) = check(snd, eval(tsnd)(ty :: e), SVTy())
+        (Con(cx, ctx.quote(ty), List(efst, esnd)), u1 + u2)
 
       case (S.Quote(t), VLift(cv, a)) =>
         val (et, u) = check(t, a, STy(cv))
@@ -626,30 +605,9 @@ object Elaboration:
   )(implicit ctx: Ctx): (Tm, Uses) =
     val (escrut, vscrutty, uscrut) = infer(scrut, SVTy())
     force(vscrutty) match
-      case VConType(t, c) =>
-        checkMatch(
-          S.App(S.Var(Name("exposeCon")), scrut, S.ArgIcit(Expl)),
-          cs,
-          other,
-          rty,
-          vrty,
-          vrcv
-        )
-      case VFlex(_, _) =>
-        // try to figure out datatype from constructors
-        val used = cs.flatMap(c => getGlobalCon(c._2).map(_._1))
-        if used.isEmpty then error(s"match contains undefined constructors")
-        val name = used.head
-        val arity = getGlobalData(name).get._1.size
-        val data = (0 until arity).toList
-          .map(_ => newMeta(VVTy(), SMeta))
-          .foldLeft(Global(name))((f, a) => App(f, a, Expl))
-        unify(vscrutty, ctx.eval(data))
-        checkMatch(scrut, cs, other, rty, vrty, vrcv)
-      /* TODO: case VTCon(dx, as) =>
-        val (dps, cons) = getGlobalData(dx).get
-        val ctxConsTypes = datatypeCtx(dps, as)
+      case VData(dx, dcs, e) =>
         val used = mutable.Set[Name]()
+        val cons = dcs.map((cx, _) => cx).toSet
         val ecs = cs.map { (pos, cx, ocon, ps, b) =>
           implicit val ctx1: Ctx = ctx.enter(pos)
           if !cons.contains(cx) then
@@ -657,20 +615,25 @@ object Elaboration:
           if used.contains(cx) then
             error(s"constructor appears twice in match $cx")
           used += cx
-          val tas = cons(cx)
+          val tas = dcs
+            .find((cx2, as) => cx2 == cx)
+            .get
+            ._2
+            .map(_._2)
+            .map(t => eval(t)(vscrutty :: e))
           if ps.size != tas.size then
             error(
               s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
             )
           val (fnty0, ecv0) = tas
             .foldRight((vrty, vrcv)) { case (t, (rt, rcv)) =>
-              (VFun(Many, ctxConsTypes.eval(t), rcv, rt), VComp())
+              (VFun(Many, t, rcv, rt), VComp())
             }
           val (fnty, ecv) = ocon.fold((fnty0, ecv0))(conx =>
             (
               VFun(
                 Many,
-                VConType(vscrutty, VStringLit(cx.expose)),
+                vscrutty,
                 ecv0,
                 fnty0
               ),
@@ -685,7 +648,7 @@ object Elaboration:
           val (eb, u) = check(lam, fnty, STy(ecv))
           (cx, ocon.isDefined, tas.size, eb, u)
         }
-        val left = cons.keySet -- used
+        val left = cons -- used
         if other.isEmpty && left.nonEmpty then
           error(
             s"non-exhaustive match, constructors left: ${left.mkString(" ")}"
@@ -708,7 +671,7 @@ object Elaboration:
             eother.map(_._1)
           ),
           uses
-        ) */
+        )
       case _ =>
         error(
           s"expected a datatype in match but got ${ctx.pretty(vscrutty)}"
@@ -989,8 +952,11 @@ object Elaboration:
         val (tmpa, tmpb, tmpc, ut) = infer(t)
         val (et, ty, st) = insertPi((tmpa, tmpb, tmpc))
         (force(ty), p) match
-          case (_, S.Named(x)) =>
-            if st != SMeta then error(s"can only do named projection in Meta")
+          case (VLift(_, inner), _) =>
+            force(inner) match
+              case VData(_, _, _) => infer(S.Proj(S.Splice(t), p))
+              case _              => error(s"cannot project a lifted type")
+          case (_, S.Named(x)) if st.isMeta =>
             val (p, pty) = projNamed(ctx.eval(et), ty, x)
             (Proj(et, p, Irrelevant, Irrelevant), pty, SMeta, ut)
           case (VSigma(_, fstty, _), S.Fst) =>
@@ -998,30 +964,60 @@ object Elaboration:
           case (VSigma(_, _, sndty), S.Snd) =>
             val rt = sndty(vfst(ctx.eval(et)))
             (Proj(et, Snd, Irrelevant, Irrelevant), rt, SMeta, ut)
-          case (VLift(_, inner), _) =>
-            force(inner) match
-              case VData(_, _, _) => infer(S.Proj(S.Splice(t), p))
-              case _              => error(s"cannot project a lifted type")
-          /* TODO: case (VData(dx, as, _), p) =>
-            val datainfo = getGlobalData(dx).get
-            val candidates = datainfo._2.filter((_, as) => as.size == 2)
+          case (VData(dx, cs, e), S.Named(px)) =>
+            val candidates =
+              cs.filter((_, as) => as.exists((y, _) => px == y.toName))
+            if candidates.isEmpty then
+              error(
+                s"cannot project $px with type ${ctx.pretty(ty)}: no suitable constructors"
+              )
+            if candidates.size > 1 then
+              error(
+                s"cannot project $px with type ${ctx.pretty(ty)}: more than one suitable constructor"
+              )
+            val cinfo = candidates.head
+            val cx = cinfo._1
+            val cas = cinfo._2.map((x, t) => (x, eval(t)(ty :: e)))
+            val x = Name("x")
+            val i = cas.indexWhere((x, _) => px == x.toName)
+            val pty = cas(i)._2
+            val (em, ut) = check(
+              S.Match(
+                t,
+                List(
+                  (
+                    ctx.pos,
+                    cx,
+                    None,
+                    (0 until cas.size)
+                      .map(j => if i == j then DoBind(x) else DontBind)
+                      .toList,
+                    S.Var(x)
+                  )
+                ),
+                None
+              ),
+              pty,
+              SVTy()
+            )
+            (em, pty, SVTy(), ut)
+          case (VData(dx, cs, e), p) =>
+            val candidates = cs.filter((_, as) => as.size == 2)
             if candidates.isEmpty then
               error(
                 s"cannot project pair with type ${ctx.pretty(ty)}: no suitable constructors"
               )
             if candidates.size > 1 then
               error(
-                s"cannot project pair with type ${ctx.pretty(ty)}: more than one suitable constructor: ${candidates.keySet
-                    .mkString(" ")}"
+                s"cannot project pair with type ${ctx.pretty(ty)}: more than one suitable constructor"
               )
             val cinfo = candidates.head
             val cx = cinfo._1
-            val cas = cinfo._2
-            val datactx = datatypeCtx(datainfo._1, as)
+            val cas = cinfo._2.map(_._2).map(t => eval(t)(ty :: e))
             val x = Name("x")
             p match
               case S.Fst =>
-                val pty = datactx.eval(cas(0))
+                val pty = cas(0)
                 val (em, ut) = check(
                   S.Match(
                     t,
@@ -1035,7 +1031,7 @@ object Elaboration:
                 )
                 (em, pty, SVTy(), ut)
               case S.Snd =>
-                val pty = datactx.eval(cas(1))
+                val pty = cas(1)
                 val (em, ut) = check(
                   S.Match(
                     t,
@@ -1048,7 +1044,7 @@ object Elaboration:
                   SVTy()
                 )
                 (em, pty, SVTy(), ut)
-              case _ => impossible() */
+              case S.Named(px) => impossible()
           case (tty, _) =>
             st match
               case SMeta =>
@@ -1105,13 +1101,14 @@ object Elaboration:
         (et2, a2, STy(cv), u)
 
       case S.Data(x, cs) =>
+        val cons = cs.map((_, cx, _) => cx)
         val newctx = ctx.bind(Many, x, VVTy(), SMeta)
         var u = ctx.uses
-        val ecs = cs.map((c, as) =>
+        val ecs = cs.map((pos, c, as) =>
           (
             c,
             as.map { (x, a) =>
-              val (ea, eu) = check(a, VVTy(), SMeta)(newctx)
+              val (ea, eu) = check(a, VVTy(), SMeta)(newctx.enter(pos))
               u += eu.tail
               (x, ea)
             }
@@ -1312,25 +1309,17 @@ object Elaboration:
         val ed = DDef(x, ety, estage, etm)
         debug(s"elaborated $ed")
         List(ed)
-      case S.DData(pos, dx, ps, cs) => ???
-      /* TODO: implicit val ctx: Ctx = Ctx.empty(pos)
-        if getGlobalData(dx).isDefined then error(s"duplicate datatype $dx")
+      case S.DData(pos, dx, ps, cs) =>
+        implicit val ctx: Ctx = Ctx.empty(pos)
 
-        // generate tcon
         if getGlobal(dx).isDefined then error(s"duplicate datatype $dx")
         val vty = U(STy(Prim(PVal)))
-        val tconty =
-          ps.foldRight(vty)((_, t) => Pi(Many, DontBind, Expl, vty, t))
-        val tcon =
-          ps.foldRight[(Tm, Ty)](
-            (
-              TCon(dx, (0 until ps.size).reverse.map(i => Var(mkIx(i))).toList),
-              vty
-            )
-          ) { case (x, (b, t)) =>
-            val ty = Pi(Many, DontBind, Expl, vty, t)
-            (Lam(DoBind(x), Expl, ty, b), ty)
-          }._1
+        val svty = S.U(STy(S.Var(Name("Val"))))
+        val tconTm = ps.foldRight(S.Data(DoBind(dx), cs))((p, b) =>
+          S.Lam(DoBind(p), S.ArgIcit(Expl), Some(svty), b)
+        )
+        val (tcon, tconvty, _, _) = infer(tconTm)
+        val tconty = ctx.quote(tconvty)
         setGlobal(
           GlobalEntry(
             false,
@@ -1339,113 +1328,73 @@ object Elaboration:
             tconty,
             SMeta,
             ctx.eval(tcon),
-            ctx.eval(tconty),
+            tconvty,
             SMeta
           )
         )
 
         // check cases
         val ccs = {
-          implicit val casectx1: Ctx =
-            ps.foldLeft(ctx)((ctx, x) =>
-              ctx.bind(Many, DoBind(x), VVTy(), SMeta)
-            )
           val ccs = cs.map { (pos, cx, as) =>
-            implicit val casectx2: Ctx = casectx1.enter(pos)
             if getGlobal(cx).isDefined then
               error(s"duplicate datatype constructor $cx")
-            val cas = as.map { ta =>
-              // TODO: check recursion
-              val (cta, _) = check(ta, VVTy(), SMeta)
-              cta
+            val conTy = ps.foldRight(
+              S.Let(
+                Many,
+                dx,
+                true,
+                None,
+                ps.foldLeft(S.Var(dx))((f, x) =>
+                  S.App(f, S.Var(x), S.ArgIcit(Expl))
+                ),
+                as.foldRight(S.Var(dx)) { case ((x, t), b) =>
+                  S.Pi(Many, x, Expl, t, b)
+                }
+              )
+            )((p, b) => S.Pi(Many, DoBind(p), Impl, svty, b))
+            val conTm = as.zipWithIndex.foldRight(
+              S.Con(
+                cx,
+                None,
+                as.zipWithIndex.map { case ((x, _), i) =>
+                  val y = x match
+                    case DoBind(x) => x
+                    case DontBind  => Name(s"a$i")
+                  S.Var(y)
+                }
+              )
+            ) { case (((x, t), i), b) =>
+              val y = x match
+                case DoBind(x) => x
+                case DontBind  => Name(s"a$i")
+              S.Lam(DoBind(y), S.ArgIcit(Expl), None, b)
             }
 
-            // add global for datatype case
-            val gty = (0 until ps.size).reverse.foldLeft(Global(dx))((f, i) =>
-              App(f, Var(mkIx(i)), Expl)
-            )
-            val rty = Lift(Prim(PVal), gty)
-            val targs =
-              (0 until ps.size).reverse
-                .map(i => Var(mkIx(i + cas.size)))
-                .toList
-            val args =
-              (0 until cas.size).reverse.map(i => Splice(Var(mkIx(i)))).toList
-            val body = Quote(Con(dx, cx, targs, args))
-            val (con, conty) =
-              ps.foldRight[(Tm, Ty)](
-                cas.zipWithIndex.foldRight[(Tm, Ty)]((body, rty)) {
-                  case ((ty, i), (b, rt)) =>
-                    val nty =
-                      Pi(Many, DontBind, Expl, Lift(Prim(PVal), ty), Wk(rt))
-                    (Lam(DoBind(Name(s"a$i")), Expl, nty, b), nty)
-                }
-              ) { case (p, (b, rt)) =>
-                val nty = Pi(Many, DoBind(p), Impl, vty, rt)
-                (Lam(DoBind(p), Impl, nty, b), nty)
-              }
+            val (econTy, _) = check(conTy, VUMeta(), SMeta)
+            val vconTy = ctx.eval(econTy)
+            val (econTm, _) = check(conTm, vconTy, SMeta)
+            val neconTy = ctx.quote(vconTy)
 
             setGlobal(
               GlobalEntry(
                 false,
                 cx,
-                con,
-                conty,
+                econTm,
+                neconTy,
                 SMeta,
-                ctx.eval(con),
-                ctx.eval(conty),
+                ctx.eval(econTm),
+                vconTy,
                 SMeta
               )
             )
 
-            val crty = Lift(
-              Prim(PVal),
-              App(App(Prim(PCon), gty, Expl), StringLit(cx.expose), Expl)
-            )
-            val cbody = App(
-              App(App(Prim(PMkCon), gty, Impl), StringLit(cx.expose), Impl),
-              Quote(Con(dx, cx, targs, args)),
-              Expl
-            )
-            val (ccon, cconty) =
-              ps.foldRight[(Tm, Ty)](
-                cas.zipWithIndex.foldRight[(Tm, Ty)]((cbody, crty)) {
-                  case ((ty, i), (b, rt)) =>
-                    val nty =
-                      Pi(Many, DontBind, Expl, Lift(Prim(PVal), ty), Wk(rt))
-                    (Lam(DoBind(Name(s"a$i")), Expl, nty, b), nty)
-                }
-              ) { case (p, (b, rt)) =>
-                val nty = Pi(Many, DoBind(p), Impl, vty, rt)
-                (Lam(DoBind(p), Impl, nty, b), nty)
-              }
-
-            val ccx = Name(s"Con/${cx.expose}")
-            setGlobal(
-              GlobalEntry(
-                false,
-                ccx,
-                ccon,
-                cconty,
-                SMeta,
-                ctx.eval(ccon),
-                ctx.eval(cconty),
-                SMeta
-              )
-            )
-
-            (
-              (cx, cas),
-              List(DDef(cx, conty, SMeta, con), DDef(ccx, cconty, SMeta, ccon))
-            )
+            List(DDef(cx, neconTy, SMeta, econTm))
           }
+
           ccs
         }
 
-        setGlobalData(dx, ps, ccs.map(_._1))
-
-        List(DData(dx, ps, ccs.map(_._1)), DDef(dx, tconty, SMeta, tcon)) ++ ccs
-          .flatMap(_._2)*/
+        List(DDef(dx, tconty, SMeta, tcon)) ++ ccs.flatten
 
   def elaborate(module: String, uri: String, ds: S.Defs): Defs =
     debug(s"elaborate $module $uri")

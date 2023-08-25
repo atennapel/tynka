@@ -12,21 +12,10 @@ object Syntax:
 
   enum Def:
     case DDef(name: Name, ty: Ty, stage: CStage, value: Tm)
-    case DData(
-        name: Name,
-        ps: List[Name],
-        cs: List[(Name, List[Ty])]
-    )
 
     override def toString: String = this match
       case DDef(x, t, SMeta, v)  => s"def $x : $t = $v"
       case DDef(x, t, STy(_), v) => s"def $x : $t := $v"
-      case DData(x, ps, Nil) =>
-        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
-      case DData(x, ps, cs) =>
-        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs
-            .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
-            .mkString(" | ")}"
   export Def.*
 
   enum ProjType:
