@@ -321,6 +321,23 @@ object Elaboration:
         case (VLift(cv, a), b) => Some(coe(t.splice, a, STy(cv), b, st2))
         case (a, VLift(cv, b)) => Some(coe(t, a, st1, b, STy(cv)).quote)
 
+        case (VConType(t1, c1), VConType(t2, c2)) =>
+          unify(t1, t2); unify(c1, c2); None
+        // Con A C <: A => $(exposeCon {at} {c} `t)
+        case (VConType(at, c), et) =>
+          unify(at, et);
+          Some(
+            App(
+              App(
+                App(Prim(PConExpose), ctx.quote(at), Impl),
+                ctx.quote(c),
+                Impl
+              ),
+              t.quote,
+              Expl
+            ).splice
+          )
+
         case _ => justAdjust(t, a, st1, b, st2)
     go(t, a, st1, b, st2).getOrElse(t)
 
@@ -605,6 +622,15 @@ object Elaboration:
   )(implicit ctx: Ctx): (Tm, Uses) =
     val (escrut, vscrutty, uscrut) = infer(scrut, SVTy())
     force(vscrutty) match
+      case VConType(t, c) =>
+        checkMatch(
+          S.App(S.Var(Name("exposeCon")), scrut, S.ArgIcit(Expl)),
+          cs,
+          other,
+          rty,
+          vrty,
+          vrcv
+        )
       case VData(dx, dcs, e) =>
         val used = mutable.Set[Name]()
         val cons = dcs.map((cx, _) => cx).toSet
@@ -633,7 +659,7 @@ object Elaboration:
             (
               VFun(
                 Many,
-                vscrutty,
+                VConType(vscrutty, VStringLit(cx.expose)),
                 ecv0,
                 fnty0
               ),

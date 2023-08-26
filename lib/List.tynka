@@ -45,8 +45,11 @@ def List/traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
 def List/foldlIO {A B : VTy} (start : B) (f : B -> A -> IO B) (l : List A) : IO B =
   List/foldr (\acc. IO/return acc) (\hd tl acc. IO/bind (f acc hd) tl) l start
 
-{-
-def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
+def Con/:: {A : VTy} (hd : A) (tl : List A) : Con (List A) "::" =
+  foreign (Con (List A) "::") "castCon:::" (hd :: tl)
+
+-- not thread-safe
+def List/fastmap {A B : VTy} (f : A -> B) (l : List A) : List B =
   match l
   | Nil. Nil
   | (::) hd tl.
@@ -54,8 +57,7 @@ def List/mapTRMC {A B : VTy} (f : A -> B) (l : List A) : List B =
       let start := Con/:: (f hd) Nil;
       List/foldlIO start (\pointer hd. do {IO/bind}
         let next := Con/:: (f hd) Nil;
-        Con/unsafeMutateIO pointer "1" next;
+        foreignIO Unit "mutateConUnit::::1" pointer (exposeCon next);
         IO/return next
       ) tl;
       IO/return start
--}

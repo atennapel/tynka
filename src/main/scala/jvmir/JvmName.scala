@@ -35,9 +35,14 @@ object JvmName:
     nameCache.get(x) match
       case Some(y) => y
       case None =>
-        val y = x
-          .split("")
-          .map(x => chars.get(x).fold(x)(y => s"_${y}"))
-          .mkString("")
-        nameCache += (x -> y)
-        y
+        if x == "main" then
+          val y = "main$"
+          nameCache += (x -> y)
+          y
+        else
+          val y = x
+            .split("")
+            .map(x => chars.get(x).fold(x)(y => s"_${y}"))
+            .mkString("")
+          nameCache += (x -> y)
+          y

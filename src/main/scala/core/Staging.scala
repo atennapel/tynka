@@ -278,8 +278,12 @@ object Staging:
 
   private def quoteVTy(v: Val1)(implicit dmono: DataMonomorphizer): IR.Ty =
     v match
-      case VData1(_, cs, e, Some(x))                  => IR.TCon(x)
-      case d @ VData1(x, cs, e, None)                 => IR.TCon(dmono.get(d))
+      case VData1(_, cs, e, Some(x))  => IR.TCon(x)
+      case d @ VData1(x, cs, e, None) => IR.TCon(dmono.get(d))
+      case VPrim1(PCon, List(t, VStringLit1(c))) =>
+        quoteVTy(t) match
+          case IR.TCon(dx) => IR.TConCon(dx, c)
+          case _           => impossible()
       case VPrim1(PForeignType, List(VStringLit1(d))) => IR.TForeign(d)
       case VPrim1(PArray, List(t))                    => IR.TArray(quoteVTy(t))
       case _                                          => impossible()
@@ -392,6 +396,8 @@ object Staging:
           cmd,
           as.map((a, t) => (quote(a), quoteVTy(t)))
         )
+
+      case VSplicePrim0(PConExpose, List(_, _, v)) => quote(vsplice0(v))
 
       case VPrim0(x)           => impossible()
       case VSplicePrim0(x, as) => impossible()

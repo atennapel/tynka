@@ -1,35 +1,3 @@
-import "lib/Base"
-import "lib/List"
-import "lib/Constructor"
-
 opaque def Ur {cv} (A : Ty cv) = A
 def ur {cv} {A : Ty cv} (x : A) : Ur A = unfold Ur; x
 def unUr {cv} {A : Ty cv} (x : Ur A) : Ur A = unfold Ur; x
-
--- TODO: Unit is required here or else Ref Int will be represented by an Int, which cannot be mutated
-data Ref A := MkRef A Unit
-
-def MRef A = Con (Ref A) "MkRef"
-
-def new {A : VTy} {cv} {B : Ty cv} (x : A) (1 k : (1 _ : MRef A) -> Ur B) : Ur B =
-  let ref := Con/MkRef x U; k ref
-
-def set {A : VTy} (1 ref : MRef A) (x : A) : MRef A =
-  (unsafeLinearFunction {MRef A} {\_. MRef A} \ref. Con/unsafeMutate ref "0" x) ref
-
-def freeze {A : VTy} (1 ref : MRef A) : Ur A =
-  (unsafeLinearFunction {MRef A} {\_. Ur A} \ref. ur (Con/field ref "0" [])) ref
-
-def get {A : VTy} {cv} {R : Ty cv} (1 ref : MRef A) (1 k : (1 _: MRef A) -> A -> R) : R =
-  (unsafeLinearFunction {MRef A} {\_. R} \ref. k ref (Con/field ref "0" [])) ref
-
-opaque def MCon A C = Con A C
-
-def MCon/:: {A : VTy} {cv} {B : Ty cv} (hd : A) (tl : List A) (1 k : (1 _ : MCon (List A) "::") -> Ur B) : Ur B =
-  unfold MCon; let con := Con/:: hd tl; k con
-
-def MCon/freeze {A : VTy} {C} (1 con : MCon A C) : Ur (Con A C) =
-  unfold MCon; (unsafeLinearFunction {MCon A C} {\_. Ur (Con A C)} \con. ur con) con
-
-def MCon/mutate {A : VTy} {C} (1 con : MCon A C) (i : Label) (x : ConParamType A C i) : MCon A C =
-  unfold MCon; (unsafeLinearFunction {MCon A C} {\_. MCon A C} \con. Con/unsafeMutate con i x) con

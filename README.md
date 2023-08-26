@@ -29,7 +29,6 @@ TODO:
 - [x] Access to Con in pattern matching
 - [x] Add IdM, BoolM and IFixM to Meta-level
 - [x] Try to write n-ary State monad
-- [ ] Add back Con
 - [ ] Remove implicit generalization
 - [ ] Modules
 - [ ] Linear pairs

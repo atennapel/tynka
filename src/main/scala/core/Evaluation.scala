@@ -707,6 +707,24 @@ object Evaluation:
         SMeta
       )
 
+    // VTy -> Label -> VTy
+    case PCon => (vfun(VVTy(), vfun(VLabel(), VVTy())), SMeta)
+    // {A : VTy} -> {C : Label} -> ^(Con A C) -> ^A
+    case PConExpose =>
+      (
+        vpiI(
+          "A",
+          VVTy(),
+          a =>
+            vpiI(
+              "C",
+              VLabel(),
+              c => vfun(VLift(VVal(), VConType(a, c)), VLift(VVal(), a))
+            )
+        ),
+        SMeta
+      )
+
   // (R : Meta) -> R -> R -> R
   val vcbool: Val = vpi("R", VUMeta(), r => vfun(r, vfun(r, r)))
 

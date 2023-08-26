@@ -296,3 +296,11 @@ object Value:
           ) =>
         Some((i, f, ii, x))
       case _ => None
+
+  object VConType:
+    def apply(t: Val, c: Val): Val =
+      VRigid(HPrim(PCon), SApp(SApp(SId, t, Expl), c, Expl))
+    def unapply(value: Val): Option[(Val, Val)] = value match
+      case VRigid(HPrim(PCon), SApp(SApp(SId, t, Expl), c, Expl)) =>
+        Some((t, c))
+      case _ => None

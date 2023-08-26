@@ -123,7 +123,7 @@ object JvmGenerator:
       main.invokeStatic(
         ctx.moduleType,
         new Method(
-          "main",
+          escape("main"),
           Type.BOOLEAN_TYPE,
           List(Type.getType("[Ljava/lang/String;")).toArray
         )
@@ -855,8 +855,18 @@ object JvmGenerator:
             Type.getType(owner),
             Method(member, gen(rt), as.map((_, t) => gen(t)).toArray)
           )
+        case ("castCon", str, List((d, td))) =>
+          val con = escape(str)
+          val x = td match
+            case TCon(x)       => x
+            case TConCon(x, _) => x
+            case TForeign(cls) => impossible()
+            case TArray(ty)    => impossible()
+          val tc = cons(x)(str)._1
+          gen(d)
+          mg.checkCast(tc)
         case ("mutateData", str, List((d, td), (v, tv))) =>
-          val spl = str.reverse.split("\\:")
+          val spl = str.reverse.split("\\:", -1)
           val i = spl.head.reverse
           if spl.size == 1 then
             gen(d)
@@ -864,20 +874,21 @@ object JvmGenerator:
             gen(v)
             mg.putField(gen(td), s"a$i", gen(tv))
           else
-            val con = escape(spl.tail.mkString(":").reverse)
+            val con0 = spl.tail.mkString(":").reverse
+            val con = escape(con0)
             val x = td match
               case TCon(x)       => x
               case TConCon(x, _) => x
               case TForeign(cls) => impossible()
               case TArray(ty)    => impossible()
-            val tc = cons(x)(con)._1
+            val tc = cons(x)(con0)._1
             gen(d)
             mg.checkCast(tc)
             mg.dup()
             gen(v)
             mg.putField(tc, s"a$i", gen(tv))
         case ("mutateDataUnit", str, List((d, td), (v, tv))) =>
-          val spl = str.reverse.split("\\:")
+          val spl = str.reverse.split("\\:", -1)
           val i = spl.head.reverse
           if spl.size == 1 then
             gen(d)
@@ -885,20 +896,21 @@ object JvmGenerator:
             mg.putField(gen(td), s"a$i", gen(tv))
             mg.push(false)
           else
-            val con = escape(spl.tail.mkString(":").reverse)
+            val con0 = spl.tail.mkString(":").reverse
+            val con = escape(con0)
             val x = td match
               case TCon(x)       => x
               case TConCon(x, _) => x
               case TForeign(cls) => impossible()
               case TArray(ty)    => impossible()
-            val tc = cons(x)(con)._1
+            val tc = cons(x)(con0)._1
             gen(d)
             mg.checkCast(tc)
             gen(v)
             mg.putField(tc, s"a$i", gen(tv))
             mg.push(false)
         case ("mutateCon", str, List((d, td), (v, tv))) =>
-          val spl = str.reverse.split("\\:")
+          val spl = str.reverse.split("\\:", -1)
           val i = spl.head.reverse
           if spl.size == 1 then
             gen(d)
@@ -906,19 +918,20 @@ object JvmGenerator:
             gen(v)
             mg.putField(gen(td), s"a$i", gen(tv))
           else
-            val con = escape(spl.tail.mkString(":").reverse)
+            val con0 = spl.tail.mkString(":").reverse
+            val con = escape(con0)
             val x = td match
               case TConCon(x, _) => x
               case TCon(x)       => impossible()
               case TForeign(cls) => impossible()
               case TArray(ty)    => impossible()
-            val tc = cons(x)(con)._1
+            val tc = cons(x)(con0)._1
             gen(d)
             mg.dup()
             gen(v)
             mg.putField(tc, s"a$i", gen(tv))
         case ("mutateConUnit", str, List((d, td), (v, tv))) =>
-          val spl = str.reverse.split("\\:")
+          val spl = str.reverse.split("\\:", -1)
           val i = spl.head.reverse
           if spl.size == 1 then
             gen(d)
@@ -926,13 +939,14 @@ object JvmGenerator:
             mg.putField(gen(td), s"a$i", gen(tv))
             mg.push(false)
           else
-            val con = escape(spl.tail.mkString(":").reverse)
+            val con0 = spl.tail.mkString(":").reverse
+            val con = escape(con0)
             val x = td match
               case TConCon(x, _) => x
               case TCon(x)       => impossible()
               case TForeign(cls) => impossible()
               case TArray(ty)    => impossible()
-            val tc = cons(x)(con)._1
+            val tc = cons(x)(con0)._1
             gen(d)
             gen(v)
             mg.putField(tc, s"a$i", gen(tv))
@@ -955,7 +969,7 @@ object JvmGenerator:
         Right((local, t))
 
   private def splitForeign(cmd0: String): (String, String) =
-    val s = cmd0.split("\\:")
+    val s = cmd0.split("\\:", -1)
     val cmd = s.head
     val arg = s.tail.mkString(":")
     (cmd, arg)

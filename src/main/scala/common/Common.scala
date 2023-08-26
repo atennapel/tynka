@@ -201,6 +201,9 @@ object Common:
     case PIInM
     case PElimIFixM
 
+    case PCon
+    case PConExpose
+
     override def toString: String = this match
       case PCV   => "CV"
       case PVal  => "Val"
@@ -236,6 +239,9 @@ object Common:
       case PIFixM     => "IFixM"
       case PIInM      => "IInM"
       case PElimIFixM => "elimIFixM"
+
+      case PCon       => "Con"
+      case PConExpose => "exposeCon"
   export PrimName.*
   object PrimName:
     val primNames: List[Name] =
@@ -265,7 +271,9 @@ object Common:
         "elimHId",
         "IFixM",
         "IInM",
-        "elimIFixM"
+        "elimIFixM",
+        "Con",
+        "exposeCon"
       )
         .map(Name.apply)
 
@@ -304,5 +312,8 @@ object Common:
       case "IFixM"     => Some(PIFixM)
       case "IInM"      => Some(PIInM)
       case "elimIFixM" => Some(PElimIFixM)
+
+      case "Con"       => Some(PCon)
+      case "exposeCon" => Some(PConExpose)
 
       case _ => None
