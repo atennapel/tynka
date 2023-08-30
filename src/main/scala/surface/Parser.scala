@@ -527,8 +527,15 @@ object Parser:
         }
 
     private lazy val importP: Parsley[Def] =
-      (pos <~> "import" *> string).map { case (pos, m) =>
-        DImport(pos, m)
+      (pos <~> "import" *> string <~> option(
+        "(" *> ("...".map(_ => Left(())) <|> sepEndBy(
+          attempt(identOrOp <~> "=" *> identOrOp).map((x, y) =>
+            (Some(x), y)
+          ) <|> identOrOp.map(x => (None, x)),
+          ","
+        ).map(xs => Right(xs))) <* ")"
+      )).map { case ((pos, m), ids) =>
+        DImport(pos, m, ids)
       }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)

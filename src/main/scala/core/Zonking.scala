@@ -43,7 +43,7 @@ object Zonking:
 
   def zonk(t: Tm)(implicit l: Lvl, e: Env): Tm = t match
     case Var(ix)      => t
-    case Global(_)    => t
+    case Global(_, _) => t
     case Prim(x)      => t
     case Irrelevant   => t
     case IntLit(_)    => t

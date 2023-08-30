@@ -48,7 +48,7 @@ object Pretty:
       case Var(_)              => pretty(tm)
       case IntLit(_)           => pretty(tm)
       case StringLit(_)        => pretty(tm)
-      case Global(_)           => pretty(tm)
+      case Global(_, _)        => pretty(tm)
       case Prim(_)             => pretty(tm)
       case Pair(_, _, _)       => pretty(tm)
       case Proj(_, _, _, _)    => pretty(tm)
@@ -78,11 +78,10 @@ object Pretty:
       if ns.take(ix.expose).contains(x) then
         s"${ns(ix.expose)}@${ns.size - ix.expose - 1}"
       else s"$x"
-    case Global(x) if ns.contains(x) => s"$x@"
-    case Global(x)                   => s"$x"
-    case Prim(x)                     => s"$x"
-    case IntLit(x)                   => s"$x"
-    case StringLit(x)                => s"\"$x\""
+    case Global(m, x) => s"$m/$x"
+    case Prim(x)      => s"$x"
+    case IntLit(x)    => s"$x"
+    case StringLit(x) => s"\"$x\""
     case Let(u, x, t, s, _, v, b) =>
       val ss = s match
         case SMeta  => ""
@@ -136,9 +135,9 @@ object Pretty:
     case AppPruning(f, _) => s"?*${prettyParen(f)}"
 
   def pretty(d: Def): String = d match
-    case DDef(x, t, SMeta, v) =>
-      s"def $x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
-    case DDef(x, t, STy(_), v) =>
-      s"def $x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
+    case DDef(m, x, t, SMeta, v) =>
+      s"def $m/$x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
+    case DDef(m, x, t, STy(_), v) =>
+      s"def $m/$x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
 
   def pretty(ds: Defs): String = ds.toList.map(pretty).mkString("\n")

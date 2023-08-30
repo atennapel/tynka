@@ -10,13 +10,17 @@ object Syntax:
     def imports: List[String] =
       (
         defs.flatMap {
-          case DImport(_, uri) => Some(uri)
-          case _               => None
+          case DImport(_, uri, _) => Some(uri)
+          case _                  => None
         }
       )
 
   enum Def:
-    case DImport(pos: PosInfo, uri: String)
+    case DImport(
+        pos: PosInfo,
+        uri: String,
+        xs: Option[Either[Unit, List[(Option[Name], Name)]]]
+    )
     case DDef(
         pos: PosInfo,
         opaque: Boolean,
@@ -33,7 +37,13 @@ object Syntax:
     )
 
     override def toString: String = this match
-      case DImport(pos, uri) => s"import \"$uri\""
+      case DImport(pos, uri, None) => s"import \"$uri\""
+      case DImport(pos, uri, Some(Left(_))) =>
+        s"import \"$uri\" (...)"
+      case DImport(pos, uri, Some(Right(xs))) =>
+        s"import \"$uri\" (${xs
+            .map { case (Some(x), y) => s"$x = $y"; case (None, x) => s"$x" }
+            .mkString(", ")})"
       case DDef(_, opq, x, m, Some(t), v) =>
         s"${if opq then "opaque " else ""}def $x : $t ${if m then "" else ":"}= $v"
       case DDef(_, opq, x, m, None, v) =>

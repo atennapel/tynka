@@ -50,7 +50,7 @@ object Staging:
 
   private enum Val0:
     case VVar0(lvl: Lvl)
-    case VGlobal0(x: Name, ty: Val1)
+    case VGlobal0(m: String, x: Name, ty: Val1)
     case VPrim0(x: PrimName)
     case VSplicePrim0(x: PrimName, as: List[Val1])
     case VApp0(f: Val0, a: Val0)
@@ -130,7 +130,7 @@ object Staging:
   private def eval1(t: Tm)(implicit env: Env): Val1 =
     t match
       case Var(x)                   => vvar1(x)
-      case Global(x)                => eval1(getGlobal(x).get.tm)
+      case Global(m, x)             => eval1(getGlobal(m, x).get.tm)
       case Prim(x)                  => VPrim1(x, Nil)
       case Lam(_, _, _, b)          => VLam1(clos1(b))
       case App(f, a, _)             => vapp1(eval1(f), eval1(a))
@@ -169,9 +169,9 @@ object Staging:
 
   private def eval0(t: Tm)(implicit env: Env): Val0 =
     t match
-      case Var(x)             => vvar0(x)
-      case Global(x)          => VGlobal0(x, eval1(getGlobal(x).get.ty)(Empty))
-      case Prim(x)            => VPrim0(x)
+      case Var(x)       => vvar0(x)
+      case Global(m, x) => VGlobal0(m, x, eval1(getGlobal(m, x).get.ty)(Empty))
+      case Prim(x)      => VPrim0(x)
       case Lam(x, _, fnty, b) => VLam0(eval1(fnty), clos0(b))
       case Fix(ty, rty, g, x, b, arg) =>
         VFix0(
@@ -301,7 +301,8 @@ object Staging:
       case VVar0(lvl) =>
         val (x, t) = ns(lvl.toIx.expose)
         IR.Var(x, t)
-      case VGlobal0(x, t) => IR.Global(x.expose, quoteCTy(t))
+      case VGlobal0(m, x, t) =>
+        IR.Global(x.expose, quoteCTy(t)) // TODO: handle module
 
       case VApp0(f, a) => IR.App(quote(f), quote(a))
       case VLam0(ft, b) =>
@@ -422,7 +423,7 @@ object Staging:
   private def stageDef(d: Def)(implicit
       dmono: DataMonomorphizer
   ): Option[IR.Def] = d match
-    case DDef(x, t, st @ STy(_), v) =>
+    case DDef(m, x, t, st @ STy(_), v) =>
       implicit val fresh: Fresh = newFresh()
       val ty = stageCTy(t)
       val value = stageTm(v)

@@ -29,8 +29,14 @@ TODO:
 - [x] Access to Con in pattern matching
 - [x] Add IdM, BoolM and IFixM to Meta-level
 - [x] Try to write n-ary State monad
-- [ ] Remove implicit generalization
 - [ ] Modules
+  - [ ] Rewrite lib and examples to use modules
+  - [ ] Qualified imports
+  - [ ] Import hiding
+  - [ ] Exporting imports
+  - [ ] Private/public definitions
+  - [ ] Fix modules in staging/compilation
+- [ ] Remove implicit generalization
 - [ ] Linear pairs
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO
 - [ ] Support trampolines

@@ -41,6 +41,11 @@ object Elaboration:
           s"failed to unify ${ctx.pretty(a)} ~ ${ctx.pretty(b)}: ${err.msg}"
         )
 
+  // imports
+  private val imports: mutable.Set[String] = mutable.Set.empty
+  private val importedNames: mutable.Map[Name, (String, Name)] =
+    mutable.Map.empty
+
   // holes
   private final case class HoleEntry(
       ctx: Ctx,
@@ -828,9 +833,20 @@ object Elaboration:
             ctx.lookup(x) match
               case Some((vu, ix, ty, u)) => (Var(ix), ty, u, ctx.use(ix))
               case None =>
-                getGlobal(x) match
-                  case Some(e) => (Global(x), e.vty, e.vstage, ctx.uses)
-                  case None    => error(s"undefined variable $x")
+                val (module, y) =
+                  val parts = x.expose.split("/", -1)
+                  val y = Name(parts.last)
+                  val m = parts.init.mkString("/")
+                  if m.isEmpty then
+                    if importedNames.contains(y) then importedNames(y)
+                    else (ctx.module, y)
+                  else (m, y)
+                if module != ctx.module && !imports.contains(module) then
+                  error(s"module $module is not imported")
+                getGlobal(module, y) match
+                  case Some(e) =>
+                    (Global(module, y), e.vty, e.vstage, ctx.uses)
+                  case None => error(s"undefined variable $x")
 
       case S.Let(u, x, m, t, v, b) =>
         val stage1 = if m then SMeta else STy(newCV())
@@ -1223,7 +1239,7 @@ object Elaboration:
   private def replaceMeta(id: MetaId, t: Tm, ix: Ix): Tm = t match
     case Var(ix)      => t
     case Irrelevant   => t
-    case Global(name) => t
+    case Global(_, _) => t
     case Prim(name)   => t
     case IntLit(_)    => t
     case StringLit(_) => t
@@ -1312,17 +1328,34 @@ object Elaboration:
         args.map((a, b) => (replaceMeta(id, a, ix), replaceMeta(id, b, ix)))
       )
 
-  private def elaborate(d: S.Def): List[Def] =
-    debug(s"elaborate $d")
+  private def elaborate(module: String, d: S.Def): List[Def] =
+    debug(s"elaborate $module $d")
     d match
-      case S.DImport(pos, uri) => Nil
+      case S.DImport(pos, m, None) =>
+        imports += m
+        Nil
+      case S.DImport(pos, m, Some(xs_)) =>
+        imports += m
+        val xs = xs_ match
+          case Left(_)   => allNamesFromModule(m).map(x => (x, x))
+          case Right(xs) => xs.map((o, x) => (o.getOrElse(x), x))
+        xs.foreach { (x, y) =>
+          if getGlobal(module, x).isDefined || importedNames.contains(x) then
+            error(s"cannot import $x from $m, it is already defined")(
+              Ctx.empty(pos, module)
+            )
+          importedNames += (x -> (m, y))
+        }
+        Nil
       case S.DDef(pos, opq, x, m, t, v) =>
-        implicit val ctx: Ctx = Ctx.empty(pos)
-        if getGlobal(x).isDefined then error(s"duplicate global $x")
+        implicit val ctx: Ctx = Ctx.empty(pos, module)
+        if getGlobal(module, x).isDefined || importedNames.contains(x) then
+          error(s"duplicate global $x")
         val (etm, ety, estage) = elaborate(v, t, m)
         setGlobal(
           GlobalEntry(
             opq,
+            module,
             x,
             etm,
             ety,
@@ -1332,13 +1365,14 @@ object Elaboration:
             ctx.eval(estage)
           )
         )
-        val ed = DDef(x, ety, estage, etm)
+        val ed = DDef(module, x, ety, estage, etm)
         debug(s"elaborated $ed")
         List(ed)
       case S.DData(pos, dx, ps, cs) =>
-        implicit val ctx: Ctx = Ctx.empty(pos)
+        implicit val ctx: Ctx = Ctx.empty(pos, module)
 
-        if getGlobal(dx).isDefined then error(s"duplicate datatype $dx")
+        if getGlobal(module, dx).isDefined || importedNames.contains(dx) then
+          error(s"duplicate datatype $dx")
         val vty = U(STy(Prim(PVal)))
         val svty = S.U(STy(S.Var(Name("Val"))))
         val tconTm = ps.foldRight(S.Data(DoBind(dx), cs))((p, b) =>
@@ -1349,6 +1383,7 @@ object Elaboration:
         setGlobal(
           GlobalEntry(
             false,
+            module,
             dx,
             tcon,
             tconty,
@@ -1362,8 +1397,8 @@ object Elaboration:
         // check cases
         val ccs = {
           val ccs = cs.map { (pos, cx, as) =>
-            if getGlobal(cx).isDefined then
-              error(s"duplicate datatype constructor $cx")
+            if getGlobal(module, cx).isDefined || importedNames.contains(cx)
+            then error(s"duplicate datatype constructor $cx")
             val conTy = ps.foldRight(
               S.Let(
                 Many,
@@ -1404,6 +1439,7 @@ object Elaboration:
             setGlobal(
               GlobalEntry(
                 false,
+                module,
                 cx,
                 econTm,
                 neconTy,
@@ -1414,15 +1450,18 @@ object Elaboration:
               )
             )
 
-            List(DDef(cx, neconTy, SMeta, econTm))
+            List(DDef(module, cx, neconTy, SMeta, econTm))
           }
 
           ccs
         }
 
-        List(DDef(dx, tconty, SMeta, tcon)) ++ ccs.flatten
+        List(DDef(module, dx, tconty, SMeta, tcon)) ++ ccs.flatten
 
   def elaborate(module: String, uri: String, ds: S.Defs): Defs =
     debug(s"elaborate $module $uri")
-    try Defs(ds.toList.flatMap(d => elaborate(d)))
+    imports.clear()
+    imports += module
+    importedNames.clear()
+    try Defs(ds.toList.flatMap(d => elaborate(module, d)))
     catch case e: ElaborateError => throw ElaborateError(e.pos, uri, e.msg)

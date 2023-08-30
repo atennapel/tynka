@@ -55,7 +55,13 @@ object Value:
   enum Val:
     case VRigid(head: Head, spine: Spine)
     case VFlex(id: MetaId, spine: Spine)
-    case VGlobal(name: Name, spine: Spine, opaque: Boolean, value: () => Val)
+    case VGlobal(
+        module: String,
+        name: Name,
+        spine: Spine,
+        opaque: Boolean,
+        value: () => Val
+    )
     case VU(stage: VStage)
 
     case VIntLit(value: Int)

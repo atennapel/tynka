@@ -1,64 +1,64 @@
-import "lib/Base"
+import "lib/Base" (...)
 
 -- int
 def Int = Foreign "I"
 
-def Int/jvmBinop op (a b : Int) = foreign Int (appendLabel "op:" op) a b
-def Int/add = Int/jvmBinop "96"
-def Int/sub = Int/jvmBinop "100"
-def Int/mul = Int/jvmBinop "104"
-def Int/div = Int/jvmBinop "108"
-def Int/mod = Int/jvmBinop "112"
-def Int/neg = Int/jvmBinop "116"
-def Int/inc = Int/add 1
-def Int/dec n = Int/sub n 1
+def jvmBinopInt op (a b : Int) = foreign Int (appendLabel "op:" op) a b
+def addInt = jvmBinopInt "96"
+def subInt = jvmBinopInt "100"
+def mulInt = jvmBinopInt "104"
+def divInt = jvmBinopInt "108"
+def modInt = jvmBinopInt "112"
+def negInt = jvmBinopInt "116"
+def incInt = addInt 1
+def decInt n = subInt n 1
 
-def Int/jvmBranch op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
-def Int/eq = Int/jvmBranch "153"
-def Int/neq = Int/jvmBranch "154"
-def Int/lt = Int/jvmBranch "155"
-def Int/geq = Int/jvmBranch "156"
-def Int/gt = Int/jvmBranch "157"
-def Int/leq = Int/jvmBranch "158"
+def jvmBranchInt op (a b : Int) = foreign Bool (appendLabel "branch:" op) a b
+def eqInt = jvmBranchInt "153"
+def neqInt = jvmBranchInt "154"
+def ltInt = jvmBranchInt "155"
+def geqInt = jvmBranchInt "156"
+def gtInt = jvmBranchInt "157"
+def leqInt = jvmBranchInt "158"
 
 -- long
 def Long = Foreign "J"
 
-def Long/fromInt (n : Int) : Long = foreign Long "op:133" n
+def longFromInt (n : Int) : Long = foreign Long "op:133" n
 
-def Long/jvmBinop op (a b : Long) = foreign Long (appendLabel "op:" op) a b
-def Long/add = Long/jvmBinop "97"
-def Long/sub = Long/jvmBinop "101"
-def Long/mul = Long/jvmBinop "105"
-def Long/div = Long/jvmBinop "109"
-def Long/mod = Long/jvmBinop "113"
-def Long/neg = Long/jvmBinop "117"
-def Long/inc = Long/add (Long/fromInt 1)
-def Long/dec n = Long/sub n (Long/fromInt 1)
+def jvmBinopLong op (a b : Long) = foreign Long (appendLabel "op:" op) a b
+def addLong = jvmBinopLong "97"
+def subLong = jvmBinopLong "101"
+def mulLong = jvmBinopLong "105"
+def divLong = jvmBinopLong "109"
+def modLong = jvmBinopLong "113"
+def negLong = jvmBinopLong "117"
+def incLong = addLong (longFromInt 1)
+def decLong n = subLong n (longFromInt 1)
 
 -- Char
 def Char = Foreign "C"
 
-def Char/fromInt (c : Int) : Char =
+def charFromInt (c : Int) : Char =
   foreign Char "cast" c
 
-def Char/jvmBinop op (a b : Char) = foreign Char (appendLabel "op:" op) a b
-def Char/add = Char/jvmBinop "96"
-def Char/sub = Char/jvmBinop "100"
-def Char/mul = Char/jvmBinop "104"
-def Char/div = Char/jvmBinop "108"
-def Char/mod = Char/jvmBinop "112"
-def Char/neg = Char/jvmBinop "116"
-def Char/inc = Char/add (Char/fromInt 1)
-def Char/dec n = Char/sub n (Char/fromInt 1)
+def jvmBinopChar op (a b : Char) = foreign Char (appendLabel "op:" op) a b
+def addChar = jvmBinopChar "96"
+def subChar = jvmBinopChar "100"
+def mulChar = jvmBinopChar "104"
+def divChar = jvmBinopChar "108"
+def modChar = jvmBinopChar "112"
+def negChar = jvmBinopChar "116"
+def incChar = addChar (charFromInt 1)
+def decChar n = subChar n (charFromInt 1)
 
-def Char/jvmBranch op (a b : Char) = foreign Bool (appendLabel "branch:" op) a b
-def Char/eq = Char/jvmBranch "153"
-def Char/neq = Char/jvmBranch "154"
-def Char/lt = Char/jvmBranch "155"
-def Char/geq = Char/jvmBranch "156"
-def Char/gt = Char/jvmBranch "157"
-def Char/leq = Char/jvmBranch "158"
+def jvmBranchChar op (a b : Char) = foreign Bool (appendLabel "branch:" op) a b
+def eqChar = jvmBranchChar "153"
+def neqChar = jvmBranchChar "154"
+def ltChar = jvmBranchChar "155"
+def geqChar = jvmBranchChar "156"
+def gtChar = jvmBranchChar "157"
+def leqChar = jvmBranchChar "158"
 
 -- JVM specifics
 def JavaVoid = Foreign "V"
@@ -71,35 +71,35 @@ def catch {A : VTy} (exc : Label) (try : A) (default : A) : A =
 -- String
 def Str = Foreign "Ljava/lang/String;"
 
-def Str/toJavaObject (x : Str) : JavaObject =
+def strToJavaObject (x : Str) : JavaObject =
   foreign JavaObject "cast" x
 
-def Str/append (a b : Str) : Str =
+def appendStr (a b : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.concat" a b
 
-def Str/equals (x y : Str) : Bool =
-  foreign Bool "invokeVirtual:java.lang.Object.equals" x (Str/toJavaObject y)
+def equalsStr (x y : Str) : Bool =
+  foreign Bool "invokeVirtual:java.lang.Object.equals" x (strToJavaObject y)
 
-def Str/length (x : Str) : Int =
+def lengthStr (x : Str) : Int =
   foreign Int "invokeVirtual:java.lang.String.length" x
 
-def Str/isEmpty (x : Str) : Bool =
-  Int/eq (Str/length x) 0
+def isEmptyStr (x : Str) : Bool =
+  eqInt (lengthStr x) 0
 
-def Str/unsafeIndex (i : Int) (x : Str) : Char =
+def unsafeIndexStr (i : Int) (x : Str) : Char =
   foreign Char "invokeVirtual:java.lang.String.charAt" x i
 
-def Str/unsafeSubstringFrom (begin : Int) (x : Str) : Str =
+def unsafeSubstringFromStr (begin : Int) (x : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.substring" x begin
 
-def Str/unsafeSubstring (begin end : Int) (x : Str) : Str =
+def unsafeSubstringStr (begin end : Int) (x : Str) : Str =
   foreign Str "invokeVirtual:java.lang.String.substring" x begin end
 
-def Str/case {cv : CV} {A : Ty cv} (x : Str) (ifEmpty : A) (ifNonEmpty : Char -> Str -> A) : A =
-  if Str/isEmpty x then
+def caseStr {cv : CV} {A : Ty cv} (x : Str) (ifEmpty : A) (ifNonEmpty : Char -> Str -> A) : A =
+  if isEmptyStr x then
     ifEmpty
   else
-    ifNonEmpty (Str/unsafeIndex 0 x) (Str/unsafeSubstringFrom 1 x)
+    ifNonEmpty (unsafeIndexStr 0 x) (unsafeSubstringFromStr 1 x)
 
 def JavaMain = Array Str -> IO Unit
 

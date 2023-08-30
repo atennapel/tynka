@@ -21,17 +21,17 @@ object Evaluation:
       case CFun2(f)        => f(v, w)
 
   // evaluation
-  private def vglobal(x: Name): Val =
-    val entry = getGlobal(x).get
+  private def vglobal(m: String, x: Name): Val =
+    val entry = getGlobal(m, x).get
     val value = entry.value
-    VGlobal(x, SId, entry.opaque, () => value)
+    VGlobal(m, x, SId, entry.opaque, () => value)
 
   def vapp(f: Val, a: Val, i: Icit): Val = f match
     case VLam(_, _, _, b) => b(a)
     case VRigid(hd, sp)   => VRigid(hd, SApp(sp, a, i))
     case VFlex(hd, sp)    => VFlex(hd, SApp(sp, a, i))
-    case VGlobal(x, sp, opq, v) =>
-      VGlobal(x, SApp(sp, a, i), opq, () => vapp(v(), a, i))
+    case VGlobal(m, x, sp, opq, v) =>
+      VGlobal(m, x, SApp(sp, a, i), opq, () => vapp(v(), a, i))
     case f => impossible()
 
   def vappE(f: Val, a: Val): Val = vapp(f, a, Expl)
@@ -46,8 +46,8 @@ object Evaluation:
         case Named(x, i) => vproj(snd, Named(x, i - 1))
     case VRigid(hd, sp) => VRigid(hd, SProj(sp, p))
     case VFlex(hd, sp)  => VFlex(hd, SProj(sp, p))
-    case VGlobal(x, sp, opq, v) =>
-      VGlobal(x, SProj(sp, p), opq, () => vproj(v(), p))
+    case VGlobal(m, x, sp, opq, v) =>
+      VGlobal(m, x, SProj(sp, p), opq, () => vproj(v(), p))
     case _ => impossible()
 
   def vfst(v: Val): Val = vproj(v, Fst)
@@ -56,16 +56,16 @@ object Evaluation:
   def vquote(v: Val): Val = v match
     case VRigid(hd, SSplice(sp)) => VRigid(hd, sp)
     case VFlex(hd, SSplice(sp))  => VFlex(hd, sp)
-    case VGlobal(hd, SSplice(sp), opq, v) =>
-      VGlobal(hd, sp, opq, () => vquote(v()))
+    case VGlobal(m, hd, SSplice(sp), opq, v) =>
+      VGlobal(m, hd, sp, opq, () => vquote(v()))
     case v => VQuote(v)
 
   def vsplice(v: Val): Val = v match
     case VQuote(v)      => v
     case VRigid(hd, sp) => VRigid(hd, SSplice(sp))
     case VFlex(hd, sp)  => VFlex(hd, SSplice(sp))
-    case VGlobal(x, sp, opq, v) =>
-      VGlobal(x, SSplice(sp), opq, () => vsplice(v()))
+    case VGlobal(m, x, sp, opq, v) =>
+      VGlobal(m, x, SSplice(sp), opq, () => vsplice(v()))
     case _ => impossible()
 
   private def vprimelim(
@@ -121,8 +121,8 @@ object Evaluation:
 
       case (_, VRigid(hd, sp), _) => VRigid(hd, SPrim(sp, x, i, as))
       case (_, VFlex(hd, sp), _)  => VFlex(hd, SPrim(sp, x, i, as))
-      case (_, VGlobal(y, sp, opq, v), _) =>
-        VGlobal(y, SPrim(sp, x, i, as), opq, () => vprimelim(x, i, as, v()))
+      case (_, VGlobal(m, y, sp, opq, v), _) =>
+        VGlobal(m, y, SPrim(sp, x, i, as), opq, () => vprimelim(x, i, as, v()))
 
       case _ => impossible()
 
@@ -136,8 +136,9 @@ object Evaluation:
     v match
       case VRigid(hd, sp) => VRigid(hd, SMatch(sp, dty, rty, cs, o))
       case VFlex(hd, sp)  => VFlex(hd, SMatch(sp, dty, rty, cs, o))
-      case VGlobal(y, sp, opq, v) =>
+      case VGlobal(m, y, sp, opq, v) =>
         VGlobal(
+          m,
           y,
           SMatch(sp, dty, rty, cs, o),
           opq,
@@ -288,7 +289,7 @@ object Evaluation:
 
   def eval(tm: Tm)(implicit env: Env): Val = tm match
     case Var(ix)                  => env(ix.expose)
-    case Global(x)                => vglobal(x)
+    case Global(m, x)             => vglobal(m, x)
     case Prim(x)                  => vprim(x)
     case Let(_, _, _, _, _, v, b) => eval(b)(eval(v) :: env)
     case U(s)                     => VU(s.map(eval))
@@ -345,7 +346,7 @@ object Evaluation:
         getMeta(id) match
           case Solved(_, v, _, _)   => force(vspine(v, sp), unfold)
           case Unsolved(_, _, _, _) => v
-      case VGlobal(_, _, opq, v) if !opq && unfold == UnfoldAll =>
+      case VGlobal(m, _, _, opq, v) if !opq && unfold == UnfoldAll =>
         force(v(), UnfoldAll)
       case _ => v
 
@@ -356,8 +357,8 @@ object Evaluation:
         getMeta(id) match
           case Solved(_, v, _, _)   => forceWithSet(vspine(v, sp), unfold)
           case Unsolved(_, _, _, _) => v
-      case VGlobal(x, _, opq, v) if !opq || unfold.contains(x) =>
-        forceWithSet(v(), unfold)
+      case VGlobal(m, x, _, opq, v) if !opq || unfold.contains(x) =>
+        forceWithSet(v(), unfold) // TODO: handle module in unfold set
       case _ => v
 
   private def quote(hd: Tm, sp: Spine, unfold: Unfold)(implicit l: Lvl): Tm =
@@ -400,10 +401,10 @@ object Evaluation:
 
   def quote(v: Val, unfold: Unfold = UnfoldMetas)(implicit l: Lvl): Tm =
     force(v, unfold) match
-      case VRigid(hd, sp)       => quote(quote(hd), sp, unfold)
-      case VFlex(id, sp)        => quote(Meta(id), sp, unfold)
-      case VGlobal(x, sp, _, _) => quote(Global(x), sp, unfold)
-      case VU(s)                => U(quoteS(s))
+      case VRigid(hd, sp)          => quote(quote(hd), sp, unfold)
+      case VFlex(id, sp)           => quote(Meta(id), sp, unfold)
+      case VGlobal(m, x, sp, _, _) => quote(Global(m, x), sp, unfold)
+      case VU(s)                   => U(quoteS(s))
 
       case VIntLit(v)    => IntLit(v)
       case VStringLit(v) => StringLit(v)

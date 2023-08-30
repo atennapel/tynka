@@ -27,7 +27,8 @@ final case class Ctx(
     pruning: Pruning,
     types: Types,
     unfoldSet: Set[Name],
-    pos: PosInfo
+    pos: PosInfo,
+    module: String
 ):
   def names: List[Name] = locals.names
 
@@ -55,7 +56,8 @@ final case class Ctx(
       Some(Expl) :: pruning,
       newtypes,
       unfoldSet,
-      pos
+      pos,
+      module
     )
 
   def define(
@@ -76,7 +78,8 @@ final case class Ctx(
       None :: pruning,
       types + (x -> (u, lvl, ty, stage)),
       unfoldSet,
-      pos
+      pos,
+      module
     )
 
   def eval(tm: Tm): Val = eval0(tm)(env)
@@ -124,5 +127,5 @@ final case class Ctx(
     Uses(go(i.expose, Nil, uses.expose))
 
 object Ctx:
-  def empty(pos: PosInfo): Ctx =
-    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, Set.empty, pos)
+  def empty(pos: PosInfo, module: String): Ctx =
+    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, Set.empty, pos, module)

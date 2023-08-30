@@ -213,7 +213,7 @@ object Unification:
         val inner2 = goSp(Meta(m), sp)
         goSp(inner2, outer)
 
-      case VGlobal(x, sp, _, _) => goSp(Global(x), sp)
+      case VGlobal(m, x, sp, _, _) => goSp(Global(m, x), sp)
 
       case VPi(u, x, i, t, b) =>
         Pi(u, x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
@@ -493,17 +493,18 @@ object Unification:
       case (VUnit(), _) => ()
       case (_, VUnit()) => ()
 
-      case (VGlobal(x1, sp1, opq, v1), VGlobal(x2, sp2, _, v2)) if x1 == x2 =>
+      case (VGlobal(m1, x1, sp1, opq, v1), VGlobal(m2, x2, sp2, _, v2))
+          if m1 == m2 && x1 == x2 =>
         try unify(sp1, sp2)
         catch
           case _: UnifyError if !opq || unfold.contains(x1) =>
             unify(v1(), v2())
-      case (VGlobal(x1, _, opq1, v), VGlobal(x2, _, opq2, w))
+      case (VGlobal(m1, x1, _, opq1, v), VGlobal(m2, x2, _, opq2, w))
           if (!opq1 || unfold.contains(x1)) && (!opq2 || unfold.contains(x2)) =>
         unify(v(), w())
-      case (VGlobal(x, _, opq, v), w) if !opq || unfold.contains(x) =>
+      case (VGlobal(m, x, _, opq, v), w) if !opq || unfold.contains(x) =>
         unify(v(), w)
-      case (w, VGlobal(x, _, opq, v)) if !opq || unfold.contains(x) =>
+      case (w, VGlobal(m, x, _, opq, v)) if !opq || unfold.contains(x) =>
         unify(w, v())
 
       case (_, _) => throw UnifyError(s"cannot unify ${quote(a)} ~ ${quote(b)}")

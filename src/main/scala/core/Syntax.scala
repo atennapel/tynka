@@ -11,11 +11,11 @@ object Syntax:
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: Name, ty: Ty, stage: CStage, value: Tm)
+    case DDef(module: String, name: Name, ty: Ty, stage: CStage, value: Tm)
 
     override def toString: String = this match
-      case DDef(x, t, SMeta, v)  => s"def $x : $t = $v"
-      case DDef(x, t, STy(_), v) => s"def $x : $t := $v"
+      case DDef(m, x, t, SMeta, v)  => s"def $m/$x : $t = $v"
+      case DDef(m, x, t, STy(_), v) => s"def $m/$x : $t := $v"
   export Def.*
 
   enum ProjType:
@@ -33,7 +33,7 @@ object Syntax:
   type Ty = Tm
   enum Tm:
     case Var(ix: Ix)
-    case Global(name: Name)
+    case Global(module: String, name: Name)
     case Prim(name: PrimName)
     case Let(
         usage: Usage,
@@ -96,12 +96,12 @@ object Syntax:
       case t        => Splice(t)
 
     def metas: Set[MetaId] = this match
-      case Var(ix)      => Set.empty
-      case Global(name) => Set.empty
-      case Prim(name)   => Set.empty
-      case IntLit(_)    => Set.empty
-      case StringLit(_) => Set.empty
-      case U(stage)     => stage.fold(Set.empty, _.metas)
+      case Var(ix)         => Set.empty
+      case Global(m, name) => Set.empty
+      case Prim(name)      => Set.empty
+      case IntLit(_)       => Set.empty
+      case StringLit(_)    => Set.empty
+      case U(stage)        => stage.fold(Set.empty, _.metas)
       case Let(_, name, ty, stage, bty, value, body) =>
         ty.metas ++ stage.fold(
           Set.empty,
@@ -139,7 +139,7 @@ object Syntax:
 
     override def toString: String = this match
       case Var(x)                       => s"'$x"
-      case Global(x)                    => s"$x"
+      case Global(m, x)                 => s"$m/$x"
       case Prim(x)                      => s"$x"
       case Let(u, x, t, SMeta, _, v, b) => s"(let ${u.prefix}$x : $t = $v; $b)"
       case Let(u, x, t, STy(_), _, v, b) =>

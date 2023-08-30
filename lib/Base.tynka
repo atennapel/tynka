@@ -21,13 +21,13 @@ data Pair A B := MkPair A B
 def fst {A B : VTy} (p : Pair A B) : A = p.1
 def snd {A B : VTy} (p : Pair A B) : B = p.2
 
-def Pair/case {A B : VTy} {cv} {C : Ty cv} (p : Pair A B) (f : A -> B -> C) : C =
+def casePair {A B : VTy} {cv} {C : Ty cv} (p : Pair A B) (f : A -> B -> C) : C =
   match p | MkPair a b. f a b
 
 def curry {A B : VTy} {cv} {C : Ty cv} (f : Pair A B -> C) : A -> B -> C =
   \a b. f (MkPair a b)
 def uncurry {A B : VTy} {cv} {C : Ty cv} (f : A -> B -> C) : Pair A B -> C =
-  \p. Pair/case p f
+  \p. casePair p f
 
 data Tuple3 A B C := MkTuple3 A B C
 data Tuple4 A B C D := MkTuple4 A B C D

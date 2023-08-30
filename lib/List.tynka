@@ -1,63 +1,62 @@
-import "lib/Base"
-import "lib/IO"
--- import "lib/Constructor"
+import "lib/Base" (...)
+import "lib/IO" (return, (>>=) = bind, (>>>) = seq)
 
 data List A
   | Nil
   | (::) A List
 
-def List/isEmpty {A : VTy} (l : List A) : Bool =
+def isEmpty {A : VTy} (l : List A) : Bool =
   match l
   | Nil. True
   | _. False
 
-def List/head {A : VTy} (l : List A) : Option A =
+def head {A : VTy} (l : List A) : Option A =
   match l
   | Nil. None
   | (::) hd _. Some hd
 
-def List/foldr {A : VTy} {cv : CV} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
+def foldr {A : VTy} {cv : CV} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
   fix (go l. match l
   | Nil. n
   | (::) hd tl. c hd (go tl)
   ) l
 
-def List/foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
-  List/foldr (\acc. acc) (\hd go acc. go (c acc hd)) l n
+def foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
+  foldr (\acc. acc) (\hd go acc. go (c acc hd)) l n
 
-def List/map {A B : VTy} (f : A -> B) (l : List A) : List B =
-  List/foldr Nil (\hd tl. f hd :: tl) l
+def map {A B : VTy} (f : A -> B) (l : List A) : List B =
+  foldr Nil (\hd tl. f hd :: tl) l
 
-def List/append {A : VTy} (a b : List A) : List A = List/foldr b (::) a
+def append {A : VTy} (a b : List A) : List A = foldr b (::) a
 
-def List/reverse {A : VTy} (l : List A) : List A =
+def reverse {A : VTy} (l : List A) : List A =
   fix (go l. \acc. match l
   | Nil. acc
   | (::) hd tl. go tl (hd :: acc)
   ) l Nil
 
-def List/traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
-  List/foldr (IO/return Nil) (\hd tl. IO/bind (f hd) \fhd. IO/bind tl \ftl. IO/return (fhd :: ftl)) l
+def traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
+  foldr (return Nil) (\hd tl. do fhd <- f hd; ftl <- tl; return (fhd :: ftl)) l
 
-def List/traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
-  List/foldr (IO/return U) (\hd tl. IO/seq (f hd) tl) l
+def traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
+  foldr (return U) (\hd tl. f hd >>> tl) l
 
-def List/foldlIO {A B : VTy} (start : B) (f : B -> A -> IO B) (l : List A) : IO B =
-  List/foldr (\acc. IO/return acc) (\hd tl acc. IO/bind (f acc hd) tl) l start
+def foldlIO {A B : VTy} (start : B) (f : B -> A -> IO B) (l : List A) : IO B =
+  foldr (\acc. return acc) (\hd tl acc. f acc hd >>= tl) l start
 
-def Con/:: {A : VTy} (hd : A) (tl : List A) : Con (List A) "::" =
+def Con:: {A : VTy} (hd : A) (tl : List A) : Con (List A) "::" =
   foreign (Con (List A) "::") "castCon:::" (hd :: tl)
 
 -- not thread-safe
-def List/fastmap {A B : VTy} (f : A -> B) (l : List A) : List B =
+def fastmap {A B : VTy} (f : A -> B) (l : List A) : List B =
   match l
   | Nil. Nil
   | (::) hd tl.
-    IO/unsafePerformIO do {IO/bind}
-      let start := Con/:: (f hd) Nil;
-      List/foldlIO start (\pointer hd. do {IO/bind}
-        let next := Con/:: (f hd) Nil;
+    unsafePerformIO do
+      let start := Con:: (f hd) Nil;
+      foldlIO start (\pointer hd. do
+        let next := Con:: (f hd) Nil;
         foreignIO Unit "mutateConUnit::::1" pointer (exposeCon next);
-        IO/return next
+        return next
       ) tl;
-      IO/return start
+      return start
