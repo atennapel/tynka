@@ -42,7 +42,7 @@ object Elaboration:
         )
 
   // imports
-  private val imports: mutable.Set[String] = mutable.Set.empty
+  private val imports: mutable.Map[String, String] = mutable.Map.empty
   private val importedNames: mutable.Map[Name, (String, Name)] =
     mutable.Map.empty
 
@@ -841,11 +841,12 @@ object Elaboration:
                     if importedNames.contains(y) then importedNames(y)
                     else (ctx.module, y)
                   else (m, y)
-                if module != ctx.module && !imports.contains(module) then
+                if !imports.contains(module) then
                   error(s"module $module is not imported")
-                getGlobal(module, y) match
+                val realModule = imports(module)
+                getGlobal(realModule, y) match
                   case Some(e) =>
-                    (Global(module, y), e.vty, e.vstage, ctx.uses)
+                    (Global(realModule, y), e.vty, e.vstage, ctx.uses)
                   case None => error(s"undefined variable $x")
 
       case S.Let(u, x, m, t, v, b) =>
@@ -1331,22 +1332,26 @@ object Elaboration:
   private def elaborate(module: String, d: S.Def): List[Def] =
     debug(s"elaborate $module $d")
     d match
-      case S.DImport(pos, m, None) =>
-        imports += m
-        Nil
-      case S.DImport(pos, m, Some(xs_)) =>
-        imports += m
-        val xs = xs_ match
-          case Left(_)   => allNamesFromModule(m).map(x => (x, x))
-          case Right(xs) => xs.map((o, x) => (o.getOrElse(x), x))
-        xs.foreach { (x, y) =>
-          if getGlobal(module, x).isDefined || importedNames.contains(x) then
-            error(s"cannot import $x from $m, it is already defined")(
-              Ctx.empty(pos, module)
-            )
-          importedNames += (x -> (m, y))
-        }
-        Nil
+      case S.DImport(pos, m, mx, xs_, hiding) =>
+        imports += (mx.map(_.expose).getOrElse(m) -> m)
+        xs_ match
+          case None if hiding.isEmpty => Nil
+          case _ =>
+            val toHide = hiding.getOrElse(Nil)
+            val xs = (xs_ match
+              case None            => allNamesFromModule(m).map(x => (x, x))
+              case Some(Left(_))   => allNamesFromModule(m).map(x => (x, x))
+              case Some(Right(xs)) => xs.map((o, x) => (o.getOrElse(x), x))
+            ).filterNot((_, x) => toHide.contains(x))
+            xs.foreach { (x, y) =>
+              if getGlobal(module, x).isDefined || importedNames.contains(x)
+              then
+                error(s"cannot import $x from $m, it is already defined")(
+                  Ctx.empty(pos, module)
+                )
+              importedNames += (x -> (m, y))
+            }
+            Nil
       case S.DDef(pos, opq, x, m, t, v) =>
         implicit val ctx: Ctx = Ctx.empty(pos, module)
         if getGlobal(module, x).isDefined || importedNames.contains(x) then
@@ -1461,7 +1466,7 @@ object Elaboration:
   def elaborate(module: String, uri: String, ds: S.Defs): Defs =
     debug(s"elaborate $module $uri")
     imports.clear()
-    imports += module
+    imports += (module -> module)
     importedNames.clear()
     try Defs(ds.toList.flatMap(d => elaborate(module, d)))
     catch case e: ElaborateError => throw ElaborateError(e.pos, uri, e.msg)

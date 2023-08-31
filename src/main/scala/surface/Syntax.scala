@@ -10,8 +10,8 @@ object Syntax:
     def imports: List[String] =
       (
         defs.flatMap {
-          case DImport(_, uri, _) => Some(uri)
-          case _                  => None
+          case DImport(_, uri, _, _, _) => Some(uri)
+          case _                        => None
         }
       )
 
@@ -19,7 +19,9 @@ object Syntax:
     case DImport(
         pos: PosInfo,
         uri: String,
-        xs: Option[Either[Unit, List[(Option[Name], Name)]]]
+        moduleRename: Option[Name],
+        xs: Option[Either[Unit, List[(Option[Name], Name)]]],
+        hiding: Option[List[Name]]
     )
     case DDef(
         pos: PosInfo,
@@ -37,13 +39,25 @@ object Syntax:
     )
 
     override def toString: String = this match
-      case DImport(pos, uri, None) => s"import \"$uri\""
-      case DImport(pos, uri, Some(Left(_))) =>
-        s"import \"$uri\" (...)"
-      case DImport(pos, uri, Some(Right(xs))) =>
-        s"import \"$uri\" (${xs
-            .map { case (Some(x), y) => s"$x = $y"; case (None, x) => s"$x" }
-            .mkString(", ")})"
+      case DImport(pos, uri, mx, None, hiding) =>
+        val hs = hiding
+          .map(xs => s" hiding ${xs.mkString("(", ",", ")")}")
+          .getOrElse("")
+        s"import \"$uri\"${mx.map(x => s" as $x").getOrElse("")}$hs"
+      case DImport(pos, uri, mx, Some(Left(_)), hiding) =>
+        val hs = hiding
+          .map(xs => s" hiding ${xs.mkString("(", ",", ")")}")
+          .getOrElse("")
+        s"import \"$uri\"${mx.map(x => s" as $x").getOrElse("")} (...)$hs"
+      case DImport(pos, uri, mx, Some(Right(xs)), hiding) =>
+        val hs = hiding
+          .map(xs => s" hiding ${xs.mkString("(", ",", ")")}")
+          .getOrElse("")
+        s"import \"$uri\"${mx.map(x => s" as $x").getOrElse("")} (${xs
+            .map {
+              case (Some(x), y) => s"$x = $y"; case (None, x) => s"$x"
+            }
+            .mkString(", ")})$hs"
       case DDef(_, opq, x, m, Some(t), v) =>
         s"${if opq then "opaque " else ""}def $x : $t ${if m then "" else ":"}= $v"
       case DDef(_, opq, x, m, None, v) =>

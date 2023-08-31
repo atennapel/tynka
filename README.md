@@ -30,9 +30,10 @@ TODO:
 - [x] Add IdM, BoolM and IFixM to Meta-level
 - [x] Try to write n-ary State monad
 - [ ] Modules
+  - [x] Renaming
+  - [x] Qualified imports
+  - [x] Import hiding
   - [ ] Rewrite lib and examples to use modules
-  - [ ] Qualified imports
-  - [ ] Import hiding
   - [ ] Exporting imports
   - [ ] Private/public definitions
   - [ ] Fix modules in staging/compilation

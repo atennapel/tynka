@@ -527,15 +527,17 @@ object Parser:
         }
 
     private lazy val importP: Parsley[Def] =
-      (pos <~> "import" *> string <~> option(
+      (pos <~> "import" *> string <~> option("as" *> ident) <~> option(
         "(" *> ("...".map(_ => Left(())) <|> sepEndBy(
           attempt(identOrOp <~> "=" *> identOrOp).map((x, y) =>
             (Some(x), y)
           ) <|> identOrOp.map(x => (None, x)),
           ","
         ).map(xs => Right(xs))) <* ")"
-      )).map { case ((pos, m), ids) =>
-        DImport(pos, m, ids)
+      ) <~> option(
+        "hiding" *> "(" *> sepEndBy(identOrOp, ",") <* ")"
+      )).map { case ((((pos, m), mx), ids), hiding) =>
+        DImport(pos, m, mx, ids, hiding)
       }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)
