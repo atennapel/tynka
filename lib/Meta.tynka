@@ -1,22 +1,18 @@
 opaque def VoidM = (P : Meta) -> P
 def absurdM {A : Meta} (x : VoidM) : A = unfold VoidM; x A
 
-def BoolM/elim = elimBoolM
-def IFixM/elim = elimIFixM
-def HId/elim = elimHId
-
-def ifM {A} (b : BoolM) (t f : A) : A = BoolM/elim (\_. A) t f b
+def ifM {A} (b : BoolM) (t f : A) : A = elimBoolM (\_. A) t f b
 def notM (b : BoolM) = ifM b FalseM TrueM
 
 -- FixM
 def FixM (F : Meta -> Meta) = IFixM {()} (\f _. F (f [])) []
 def InM {F : Meta -> Meta} (x : F (FixM F)) : FixM F = IInM {()} {\f _. F (f [])} {[]} x
-def FixM/elim
+def elimFixM
   {F : Meta -> Meta}
   (P : FixM F -> Meta)
   (alg : (rec : (z : FixM F) -> P z) (y : F (FixM F)) -> P (InM {F} y))
   (x : FixM F) : P x
-  = IFixM/elim {()} {\f _. F (f [])} P (\rec y. alg rec y) x
+  = elimIFixM {()} {\f _. F (f [])} P (\rec y. alg rec y) x
 
 -- EitherM
 def EitherM (A B : Meta) = (tag : BoolM) ** ifM tag A B
@@ -24,50 +20,50 @@ def EitherM (A B : Meta) = (tag : BoolM) ** ifM tag A B
 def LeftM {A B} (x : A) : EitherM A B = (TrueM, x)
 def RightM {A B} (x : B) : EitherM A B = (FalseM, x)
 
-def EitherM/elim {A B}
+def elimEitherM {A B}
   (P : EitherM A B -> Meta)
   (left : (x : A) -> P (LeftM x))
   (right : (x : B) -> P (RightM x))
   (x : EitherM A B) : P x
-  = BoolM/elim (\tag. (x : ifM tag A B) -> P (tag, x)) left right x.tag x.2
+  = elimBoolM (\tag. (x : ifM tag A B) -> P (tag, x)) left right x.tag x.2
 
-def EitherM/case {A B R} (x : EitherM A B) (left : A -> R) (right : B -> R) : R =
-  EitherM/elim (\_. R) left right x
+def caseEitherM {A B R} (x : EitherM A B) (left : A -> R) (right : B -> R) : R =
+  elimEitherM (\_. R) left right x
 
 -- Id
 def Id {A} x y = HId {A} {A} x y
 def NHId {A B : Meta} (x : A) (y : B) = HId x y -> VoidM
 def NId {A : Meta} (x y : A) = Id x y -> VoidM
 
-def Id/J {A} (P : {a b : A} -> Id a b -> Meta) (refl : {a} -> P {a} Refl) {a b : A} (p : Id a b) : P p
-  = HId/elim (\{c} q. P {a} {c} q) refl p
+def JId {A} (P : {a b : A} -> Id a b -> Meta) (refl : {a} -> P {a} Refl) {a b : A} (p : Id a b) : P p
+  = elimHId (\{c} q. P {a} {c} q) refl p
 
-def Id/rewrite {A} (P : A -> Meta) {a b : A} (p : Id a b) (x : P a) : P b
-  = Id/J (\{a} {b} _. P a -> P b) (\q. q) p x
+def rewriteId {A} (P : A -> Meta) {a b : A} (p : Id a b) (x : P a) : P b
+  = JId (\{a} {b} _. P a -> P b) (\q. q) p x
 
-def Id/cast {A B} (p : Id A B) (x : A) : B
-  = Id/rewrite (\y. y) p x
+def castId {A B} (p : Id A B) (x : A) : B
+  = rewriteId (\y. y) p x
 
-def Id/sym {A} {a b : A} (p : Id a b) : Id b a
-  = Id/J (\{x} {y} _. Id {A} y x) Refl p
+def symId {A} {a b : A} (p : Id a b) : Id b a
+  = JId (\{x} {y} _. Id {A} y x) Refl p
 
-def Id/trans {A} {a b c : A} (p : Id b c) (q : Id a b) : Id a c
-  = Id/rewrite (Id a) p q
+def transId {A} {a b c : A} (p : Id b c) (q : Id a b) : Id a c
+  = rewriteId (Id a) p q
 
-def Id/ap {A B} {a b : A} (f : A -> B) (p : Id a b) : Id (f a) (f b)
-  = Id/rewrite (\x. Id (f a) (f x)) p Refl
+def apId {A B} {a b : A} (f : A -> B) (p : Id a b) : Id (f a) (f b)
+  = rewriteId (\x. Id (f a) (f x)) p Refl
 
-def Id/idRefl {A} {a : A} (p : Id a a) : Id p Refl
-  = HId/elim (\{c} q. HId q (Refl {A} {c})) Refl p
+def idReflId {A} {a : A} (p : Id a a) : Id p Refl
+  = elimHId (\{c} q. HId q (Refl {A} {c})) Refl p
 
-def Id/K {A} {a : A} (P : Id a a -> Meta) (p : Id a a) (h : P Refl) : P p
-  = Id/rewrite P (Id/sym (Id/idRefl p)) h
+def KId {A} {a : A} (P : Id a a -> Meta) (p : Id a a) (h : P Refl) : P p
+  = rewriteId P (symId (idReflId p)) h
 
-def Id/uip {A} {a b : A} (p1 p2 : Id a b) : Id p1 p2
-  = (HId/elim (\{c} p. (q : Id a c) -> Id q p) Id/idRefl p2) p1
+def uipId {A} {a b : A} (p1 p2 : Id a b) : Id p1 p2
+  = (elimHId (\{c} p. (q : Id a c) -> Id q p) idReflId p2) p1
 
-def Id/rewriteBoth {A} (P : {x y : A} -> Id x y -> Meta) {a b : A} (p : Id a b) (x : P p) : P (Id/sym p)
-  = (HId/elim {A} {a} (\e. P e -> P (Id/sym e)) (\x. x) p) x
+def rewriteBothId {A} (P : {x y : A} -> Id x y -> Meta) {a b : A} (p : Id a b) (x : P p) : P (symId p)
+  = (elimHId {A} {a} (\e. P e -> P (symId e)) (\x. x) p) x
 
 -- NatM
 def NatMF R = EitherM R ()
@@ -75,27 +71,27 @@ def NatM = FixM NatMF
 def ZM : NatM = InM {F = NatMF} (RightM [])
 def SM (n : NatM) : NatM = InM {F = NatMF} (LeftM n)
 
-def NatM/elim
+def elimNatM
   (P : NatM -> Meta)
   (z : P ZM)
   (s : (m : NatM) -> P m -> P (SM m))
   (n : NatM) : P n
-  = FixM/elim {NatMF} P (\rec y. EitherM/elim (\z. P (InM {NatMF} z)) (\m. s m (rec m)) (\_. z) y) n
+  = elimFixM {NatMF} P (\rec y. elimEitherM (\z. P (InM {NatMF} z)) (\m. s m (rec m)) (\_. z) y) n
 
-def NatM/para {A} (n : NatM) (z : A) (s : NatM -> A -> A) : A = NatM/elim (\_. A) z s n
-def NatM/case {A} (n : NatM) (z : A) (s : NatM -> A) : A = NatM/elim (\_. A) z (\m _. s m) n
-def NatM/fold {A} (n : NatM) (z : A) (s : A -> A) : A = NatM/elim (\_. A) z (\_. s) n
+def paraNatM {A} (n : NatM) (z : A) (s : NatM -> A -> A) : A = elimNatM (\_. A) z s n
+def caseNatM {A} (n : NatM) (z : A) (s : NatM -> A) : A = elimNatM (\_. A) z (\m _. s m) n
+def foldNatM {A} (n : NatM) (z : A) (s : A -> A) : A = elimNatM (\_. A) z (\_. s) n
 
-def NatM/add (a b : NatM) : NatM = NatM/fold a b SM
+def addNatM (a b : NatM) : NatM = foldNatM a b SM
 
-def NatM/inc = SM
-def NatM/dec (n : NatM) : NatM = NatM/case n ZM (\m. m)
+def incNatM = SM
+def decNatM (n : NatM) : NatM = caseNatM n ZM (\m. m)
 
-def NatM/isZero (n : NatM) : BoolM = NatM/case n TrueM (\_. FalseM)
+def isZeroNatM (n : NatM) : BoolM = caseNatM n TrueM (\_. FalseM)
 
-def NatM/eq (a b : NatM) : BoolM =
-  NatM/fold a NatM/isZero (\r b. NatM/case b FalseM r) b
-def NatM/neq (a b : NatM) : BoolM = notM (NatM/eq a b)
+def eqNatM (a b : NatM) : BoolM =
+  foldNatM a isZeroNatM (\r b. caseNatM b FalseM r) b
+def neqNatM (a b : NatM) : BoolM = notM (eqNatM a b)
 
 -- ListM
 def ListMF A R = EitherM ((head : A) (tail : R) ** ()) ()
@@ -103,18 +99,18 @@ def ListM A = FixM (ListMF A)
 def NilM {A} : ListM A = InM {ListMF A} (RightM [])
 def ConsM {A} (head : A) (tail : ListM A) : ListM A = InM {ListMF A} (LeftM {B = ()} [head, tail])
 
-def ListM/elim {A}
+def elimListM {A}
   (P : ListM A -> Meta)
   (nil : P NilM)
   (cons : (head : A) (tail : ListM A) -> P tail -> P (ConsM head tail))
   (x : ListM A) : P x
-  = FixM/elim {ListMF A} P (\rec y. EitherM/elim (\s. P (InM {ListMF A} s))
+  = elimFixM {ListMF A} P (\rec y. elimEitherM (\s. P (InM {ListMF A} s))
       (\d. cons d.head d.tail (rec d.tail)) (\_. nil) y) x
 
-def ListM/foldr {R A} (nil : R) (cons : A -> R -> R) (list : ListM A) : R
-  = ListM/elim (\_. R) nil (\hd _ tl. cons hd tl) list
+def foldrListM {R A} (nil : R) (cons : A -> R -> R) (list : ListM A) : R
+  = elimListM (\_. R) nil (\hd _ tl. cons hd tl) list
 
-def ListM/map {A B} (fn : A -> B) (list : ListM A) : ListM B
-  = ListM/foldr NilM (\hd tl. ConsM (fn hd) tl) list
+def mapListM {A B} (fn : A -> B) (list : ListM A) : ListM B
+  = foldrListM NilM (\hd tl. ConsM (fn hd) tl) list
 
-def ListM/append {A} (a b : ListM A) : ListM A = ListM/foldr b ConsM a
+def appendListM {A} (a b : ListM A) : ListM A = foldrListM b ConsM a

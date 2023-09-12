@@ -34,8 +34,8 @@ TODO:
   - [x] Qualified imports
   - [x] Import hiding
   - [x] Fix modules in staging/compilation
+  - [x] Rewrite lib and examples to use modules
   - [ ] Exporting imports
-  - [ ] Rewrite lib and examples to use modules
   - [ ] Private/public definitions
 - [ ] Remove implicit generalization
 - [ ] Linear pairs

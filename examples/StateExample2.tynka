@@ -1,7 +1,9 @@
-import "lib/Prelude"
-import "lib/State2"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/State2" as State2
+import "lib/State2" (State2)
 
-def (+) = Int/add
+def (+) = addInt
 def (>>>) = State2/seq
 def (<$>) = State2/map
 

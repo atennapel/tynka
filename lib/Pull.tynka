@@ -1,10 +1,12 @@
-import "lib/Prelude"
-import "lib/Push"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/List" (List)
+import "lib/Push" (Push)
 
-def Pull/Step A S = (cv : CV) (R : Ty cv) -> R -> (A -> S -> R) -> R
-def Pull A = (S : VTy) ** (step : S -> Pull/Step A S) ** (value : S) ** ()
+def Step A S = (cv : CV) (R : Ty cv) -> R -> (A -> S -> R) -> R
+def Pull A = (S : VTy) ** (step : S -> Step A S) ** (value : S) ** ()
 
-def Pull/fromList {A : VTy} (as : List A) : Pull A =
+def fromList {A : VTy} (as : List A) : Pull A =
   [
     List A,
     \as cv R stop yield.
@@ -14,12 +16,12 @@ def Pull/fromList {A : VTy} (as : List A) : Pull A =
     as
   ]
 
-def Pull/map {A B : VTy} (f : A -> B) (p : Pull A) : Pull B =
+def map {A B : VTy} (f : A -> B) (p : Pull A) : Pull B =
   [
     p.S,
     \as cv R stop yield. p.step as cv R stop (\a s. yield (f a) s),
     p.value
   ]
 
-def Pull/toPush {A : VTy} (p : Pull A) : Push A =
+def toPush {A : VTy} (p : Pull A) : Push A =
   \cv B c n. fix (go s. p.step s cv B n (\a s. c a (go s))) p.value

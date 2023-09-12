@@ -1,25 +1,28 @@
-import "lib/Prelude"
-import "lib/Free"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/IO" as IO
+import "lib/Free" as Free
+import "lib/Free" (Free, FunctorM)
 
-def (+) a b = Int/add a b
+def (+) a b = addInt a b
 def (>>=) = Free/bind
 def return = Free/return
 
 -- church-encoded state monad
 def StateF (S : VTy) (A : Meta) = (cv : CV) (R : Ty cv) -> ((S -> A) -> R) -> (S -> A -> R) -> R 
 
-def StateF/handle
+def handleStateF
   {S : VTy} {A : Meta} {cv : CV} {R : Ty cv}
   (get : (S -> A) -> R) (put : S -> A -> R) (s : StateF S A) : R =
   s _ R get put
 
-def StateF/Functor {S : VTy} : FunctorM (StateF S) =
+def FunctorStateF {S : VTy} : FunctorM (StateF S) =
   \f x. \cv R get put. x _ R (\k. get (\x. f (k x))) (\s k. put s (f k))
 
 def State S A = Free (StateF S) A
 
-def get {S : VTy} : State S S = Free/lift StateF/Functor (\cv R get put. get (\s. s))
-def put {S : VTy} (s : S) : State S Unit = Free/lift StateF/Functor (\cv R get put. put s U)
+def get {S : VTy} : State S S = Free/lift FunctorStateF (\cv R get put. get (\s. s))
+def put {S : VTy} (s : S) : State S Unit = Free/lift FunctorStateF (\cv R get put. put s U)
 
 -- concrete State monad
 def StateI (S A : VTy) = S -> Pair S A
@@ -38,12 +41,12 @@ def example : State Int Int = do
   return y
 
 def handleConstant {S A : VTy} (c : S) (s : State S A) : A =
-  Free/handle s (\x. x) \. StateF/handle
+  Free/handle s (\x. x) \. handleStateF
     (\k. k c)
     (\_ k. k)
 
 def handleConcrete {S A : VTy} (s : State S A) : StateI S A =
-  Free/handle s (\x. returnI x) \. StateF/handle
+  Free/handle s (\x. returnI x) \. handleStateF
     (\k. bindI getI k)
     (\x k. bindI (putI x) \_. k)
 

@@ -1,5 +1,9 @@
-import "lib/Prelude"
-import "lib/StrSlice"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/StrSlice" as StrSlice
+import "lib/StrSlice" (StrSlice)
+import "lib/List" as List
+import "lib/List" (List, Nil, (::))
 
 data ParseError
   | UnexpectedEof
@@ -11,41 +15,41 @@ def SParseResult A = (cv : CV) (R : Ty cv) -> (ParseError -> R) -> (StrSlice -> 
 def Parser (A : VTy) : Meta = StrSlice -> SParseResult A
 
 -- monad definitions
-def Parser/parse {A : VTy} (p : Parser A) (input : Str) : ParseResult A =
+def parse {A : VTy} (p : Parser A) (input : Str) : ParseResult A =
   p (StrSlice/fromStr input) _ _ Error Result
 
-def Parser/return {A : VTy} (a : A) : Parser A = \s. \cv R err res. res s a
+def return {A : VTy} (a : A) : Parser A = \s. \cv R err res. res s a
 
-def Parser/error {A : VTy} (e : ParseError) : Parser A = \_. \cv R err res. err e
+def error {A : VTy} (e : ParseError) : Parser A = \_. \cv R err res. err e
 
-def SParseResult/map {A B : VTy} (f : A -> B) (p : SParseResult A) : SParseResult B =
+def mapSParseResult {A B : VTy} (f : A -> B) (p : SParseResult A) : SParseResult B =
   \cv R err res. p cv R err (\s v. res s (f v))
 
-def Parser/map {A B : VTy} (f : A -> B) (p : Parser A) : Parser B =
-  \s. SParseResult/map f (p s)
+def map {A B : VTy} (f : A -> B) (p : Parser A) : Parser B =
+  \s. mapSParseResult f (p s)
 
-def Parser/bind {A B : VTy} (p : Parser A) (f : A -> Parser B) : Parser B =
+def bind {A B : VTy} (p : Parser A) (f : A -> Parser B) : Parser B =
   \s. \cv R err res. p s cv R err (\s' a. f a s' cv R err res)
 
-def Parser/seq {A B : VTy} (p : Parser A) (k : Parser B) : Parser B =
-  Parser/bind p \_. k
+def seq {A B : VTy} (p : Parser A) (k : Parser B) : Parser B =
+  bind p \_. k
 
-def Parser/map2 {A B C : VTy} (f : A -> B -> C) (p1 : Parser A) (p2 : Parser B) : Parser C =
-  Parser/bind p1 \a. Parser/bind p2 \b. Parser/return (f a b)
+def map2 {A B C : VTy} (f : A -> B -> C) (p1 : Parser A) (p2 : Parser B) : Parser C =
+  bind p1 \a. bind p2 \b. return (f a b)
 
-def Parser/first {A : VTy} (p1 p2 : Parser A) : Parser A =
+def first {A : VTy} (p1 p2 : Parser A) : Parser A =
   \s. \cv R err res. let res' s v := res s v; p1 s cv R (\_. p2 s cv R err res') res'
 
 -- parser essentials
-def Parser/char : Parser Char =
+def char : Parser Char =
   \s. \cv R err res. StrSlice/unsafeCaseMut s (err UnexpectedEof) (\c s. res s c)
 
-def Parser/satisfy (f : Char -> Bool) : Parser Char =
-  \s. \cv R err res. let err' e := err e; Parser/char s cv R err' (\s' v. if f v then res s' v else err' (UnexpectedChar v))
+def satisfy (f : Char -> Bool) : Parser Char =
+  \s. \cv R err res. let err' e := err e; char s cv R err' (\s' v. if f v then res s' v else err' (UnexpectedChar v))
 
-def Parser/is (c : Char) : Parser Char = Parser/satisfy (Char/eq c)
+def is (c : Char) : Parser Char = satisfy (eqChar c)
 
-def Parser/many {A : VTy} (p : Parser A) : Parser (List A) =
+def many {A : VTy} (p : Parser A) : Parser (List A) =
   \s. \cv R err res.
     fix (go s. \acc.
       p s cv R
@@ -53,10 +57,10 @@ def Parser/many {A : VTy} (p : Parser A) : Parser (List A) =
         (\s' hd. go s' (hd :: acc))
     ) s Nil
 
-def Parser/digit : Parser Char =
-  Parser/satisfy \c. Char/geq c (Char/fromInt 48) && Char/leq c (Char/fromInt 57)
+def digit : Parser Char =
+  satisfy \c. geqChar c (charFromInt 48) && leqChar c (charFromInt 57)
 
-def Parser/spaces : Parser Unit =
-  Parser/map (\_. U) (Parser/many (Parser/is (Char/fromInt 32)))
+def spaces : Parser Unit =
+  map (\_. U) (many (is (charFromInt 32)))
 
-def Parser/number : Parser (List Char) = Parser/many Parser/digit
+def number : Parser (List Char) = many digit

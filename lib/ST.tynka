@@ -1,42 +1,43 @@
-import "lib/Base"
-import "lib/IO"
-import "lib/Array"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/IO" as IO
+import "lib/Array" as Array
 
 opaque def ST (S : Label) A = IO A
 
-def ST/return {S} {A : VTy} (x : A) : ST S A = unfold ST; IO/return x
-def ST/bind {S} {A B : VTy} (a : ST S A) (k : A -> ST S B) : ST S B =
+def return {S} {A : VTy} (x : A) : ST S A = unfold ST; IO/return x
+def bind {S} {A B : VTy} (a : ST S A) (k : A -> ST S B) : ST S B =
   unfold ST; IO/bind a \x. k x
 
-def ST/seq {S} {A B : VTy} (a : ST S A) (b : ST S B) : ST S B =
-  ST/bind a \_. b
+def seq {S} {A B : VTy} (a : ST S A) (b : ST S B) : ST S B =
+  bind a \_. b
 
-def ST/map {S} {A B : VTy} (f : A -> B) (a : ST S A) : ST S B =
-  ST/bind a \x. ST/return (f x)
+def map {S} {A B : VTy} (f : A -> B) (a : ST S A) : ST S B =
+  bind a \x. return (f x)
 
-def ST/fix {S} {A : VTy} (action : ST S A -> ST S A) : ST S A =
+def fixST {S} {A : VTy} (action : ST S A -> ST S A) : ST S A =
   fix (go _. action (go U)) U
 
-def ST/run {A : VTy} (action : {S} -> ST S A) : A =
+def run {A : VTy} (action : {S} -> ST S A) : A =
   IO/unsafePerformIO (unfold ST; action {"STToken"})
 
 -- arrays
 opaque def STArray (S : Label) A = Array A
 
-def STArray/new {S} {A : VTy} (length : Int) (initial : A) : ST S (STArray S A) =
+def newSTArray {S} {A : VTy} (length : Int) (initial : A) : ST S (STArray S A) =
   unfold ST STArray; Array/new length initial
 
-def STArray/length {S} {A : VTy} (array : STArray S A) : ST S Int =
+def lengthSTArray {S} {A : VTy} (array : STArray S A) : ST S Int =
   unfold ST STArray; Array/length array
 
-def STArray/get {S} {A : VTy} (index : Int) (array : STArray S A) : ST S A =
+def getSTArray {S} {A : VTy} (index : Int) (array : STArray S A) : ST S A =
   unfold ST STArray; Array/get index array
 
-def STArray/set {S} {A : VTy} (index : Int) (value : A) (array : STArray S A) : ST S Unit =
+def setSTArray {S} {A : VTy} (index : Int) (value : A) (array : STArray S A) : ST S Unit =
   unfold ST STArray; Array/set index value array
 
 -- refs
 def STRef S A = STArray S A
-def STRef/new {S} {A : VTy} (x : A) : ST S (STRef S A) = STArray/new 1 x
-def STRef/get {S} {A : VTy} (ref : STRef S A) : ST S A = STArray/get 0 ref
-def STRef/set {S} {A : VTy} (x : A) (ref : STRef S A) : ST S Unit = STArray/set 0 x ref
+def newSTRef {S} {A : VTy} (x : A) : ST S (STRef S A) = newSTArray 1 x
+def getSTRef {S} {A : VTy} (ref : STRef S A) : ST S A = getSTArray 0 ref
+def setSTRef {S} {A : VTy} (x : A) (ref : STRef S A) : ST S Unit = setSTArray 0 x ref

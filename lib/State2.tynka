@@ -1,43 +1,44 @@
-import "lib/Prelude"
+import "lib/Base" (...)
+import "lib/JVM" (...)
 
 def State2 (S1 S2 A : VTy) = S1 -> S2 -> Tuple3 S1 S2 A
 
-def State2/run {S1 S2 A} (c : State2 S1 S2 A) (s1 : S1) (s2 : S2) : Tuple3 S1 S2 A = c s1 s2
-def State2/exec {S1 S2 A} (c : State2 S1 S2 A) (s1 : S1) (s2 : S2) : A = match c s1 s2 | MkTuple3 _ _ x. x
+def run {S1 S2 A} (c : State2 S1 S2 A) (s1 : S1) (s2 : S2) : Tuple3 S1 S2 A = c s1 s2
+def exec {S1 S2 A} (c : State2 S1 S2 A) (s1 : S1) (s2 : S2) : A = match c s1 s2 | MkTuple3 _ _ x. x
 
-def State2/get {S1 S2} : State2 S1 S2 (Pair S1 S2) = \s1 s2. MkTuple3 s1 s2 (MkPair s1 s2)
-def State2/get1 {S1 S2} : State2 S1 S2 S1 = \s1 s2. MkTuple3 s1 s2 s1
-def State2/get2 {S1 S2} : State2 S1 S2 S2 = \s1 s2. MkTuple3 s1 s2 s2
-def State2/put {S1 S2 : VTy} (s1 : S1) (s2 : S2) : State2 S1 S2 Unit = \_ _. MkTuple3 s1 s2 U
-def State2/put1 {S1 S2 : VTy} (s1 : S1) : State2 S1 S2 Unit = \_ s2. MkTuple3 s1 s2 U
-def State2/put2 {S1 S2 : VTy} (s2 : S2) : State2 S1 S2 Unit = \s1 _. MkTuple3 s1 s2 U
-def State2/update {S1 S2 : VTy} (f : S1 -> S1) (g : S2 -> S2) : State2 S1 S2 Unit = \s1 s2. MkTuple3 (f s1) (g s2) U
-def State2/update1 {S1 S2 : VTy} (f : S1 -> S1) : State2 S1 S2 Unit = State2/update f (\x. x)
-def State2/update2 {S1 S2 : VTy} (f : S2 -> S2) : State2 S1 S2 Unit = State2/update (\x. x) f
-def State2/updateBoth {S1 S2 : VTy} (f : S1 -> S2 -> Pair S1 S2) : State2 S1 S2 Unit =
+def get {S1 S2} : State2 S1 S2 (Pair S1 S2) = \s1 s2. MkTuple3 s1 s2 (MkPair s1 s2)
+def get1 {S1 S2} : State2 S1 S2 S1 = \s1 s2. MkTuple3 s1 s2 s1
+def get2 {S1 S2} : State2 S1 S2 S2 = \s1 s2. MkTuple3 s1 s2 s2
+def put {S1 S2 : VTy} (s1 : S1) (s2 : S2) : State2 S1 S2 Unit = \_ _. MkTuple3 s1 s2 U
+def put1 {S1 S2 : VTy} (s1 : S1) : State2 S1 S2 Unit = \_ s2. MkTuple3 s1 s2 U
+def put2 {S1 S2 : VTy} (s2 : S2) : State2 S1 S2 Unit = \s1 _. MkTuple3 s1 s2 U
+def update {S1 S2 : VTy} (f : S1 -> S1) (g : S2 -> S2) : State2 S1 S2 Unit = \s1 s2. MkTuple3 (f s1) (g s2) U
+def update1 {S1 S2 : VTy} (f : S1 -> S1) : State2 S1 S2 Unit = update f (\x. x)
+def update2 {S1 S2 : VTy} (f : S2 -> S2) : State2 S1 S2 Unit = update (\x. x) f
+def updateBoth {S1 S2 : VTy} (f : S1 -> S2 -> Pair S1 S2) : State2 S1 S2 Unit =
   \s1 s2. match f s1 s2 | MkPair s1' s2'. MkTuple3 s1' s2' U
 
-def State2/return {S1 S2 A : VTy} (a : A) : State2 S1 S2 A = \s1 s2. MkTuple3 s1 s2 a 
+def return {S1 S2 A : VTy} (a : A) : State2 S1 S2 A = \s1 s2. MkTuple3 s1 s2 a 
 
-def State2/map {S1 S2 A B : VTy} (f : A -> B) (c : State2 S1 S2 A) : State2 S1 S2 B =
+def map {S1 S2 A B : VTy} (f : A -> B) (c : State2 S1 S2 A) : State2 S1 S2 B =
   \s1 s2. match c s1 s2 | MkTuple3 s1' s2' res. MkTuple3 s1' s2' (f res)
 
-def State2/bind {S1 S2 A B : VTy} (c : State2 S1 S2 A) (f : A -> State2 S1 S2 B) : State2 S1 S2 B =
+def bind {S1 S2 A B : VTy} (c : State2 S1 S2 A) (f : A -> State2 S1 S2 B) : State2 S1 S2 B =
   \s1 s2. match c s1 s2 | MkTuple3 s1' s2' res. f res s1' s2'
 
-def State2/seq {S1 S2 A B : VTy} (c : State2 S1 S2 A) (f : State2 S1 S2 B) : State2 S1 S2 B =
-  State2/bind c \_. f
+def seq {S1 S2 A B : VTy} (c : State2 S1 S2 A) (f : State2 S1 S2 B) : State2 S1 S2 B =
+  bind c \_. f
 
-def State2/fix {S1 S2 A : VTy} (action : State2 S1 S2 A -> State2 S1 S2 A) : State2 S1 S2 A =
+def fixState2 {S1 S2 A : VTy} (action : State2 S1 S2 A -> State2 S1 S2 A) : State2 S1 S2 A =
   fix (go _. action (go U)) U
 
-def State2/loopN {S1 S2 A : VTy} (n : Int) (action : State2 S1 S2 A) : State2 S1 S2 Unit =
+def loopN {S1 S2 A : VTy} (n : Int) (action : State2 S1 S2 A) : State2 S1 S2 Unit =
   fix (rec n.
-    if Int/leq n 0 then State2/return U
-    else do {State2/bind}
+    if leqInt n 0 then return U
+    else do {bind}
       action;
-      rec (Int/sub n 1)
+      rec (subInt n 1)
   ) n
 
-def State2/updateN {S1 S2 : VTy} (n : Int) (f : S1 -> S1) (g : S2 -> S2) : State2 S1 S2 Unit =
-  State2/loopN n (State2/update f g)
+def updateN {S1 S2 : VTy} (n : Int) (f : S1 -> S1) (g : S2 -> S2) : State2 S1 S2 Unit =
+  loopN n (update f g)

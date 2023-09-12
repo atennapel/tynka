@@ -1,8 +1,10 @@
-import "lib/Prelude"
-import "lib/StateN"
-import "lib/Meta"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/StateN" as StateN
+import "lib/StateN" (StateN)
+import "lib/Meta" (ListM, NilM, ConsM)
 
-def (+) = Int/add
+def (+) = addInt
 def return = StateN/return
 def (>>=) = StateN/bind
 def (>>>) = StateN/seq

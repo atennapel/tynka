@@ -1,27 +1,27 @@
-import "lib/Prelude"
+import "lib/Base" (...)
+import "lib/JVM" hiding (subInt, addInt, eqInt)
+import "lib/JVM" ((-) = subInt, (+) = addInt, (==) = eqInt)
 
 data StrSlice := MkStrSlice Int Str
 
-def StrSlice/fromStr (s : Str) : StrSlice = MkStrSlice 0 s
+def fromStr (s : Str) : StrSlice = MkStrSlice 0 s
 
-def StrSlice/length (s : StrSlice) : Int =
-  Int/sub (Str/length s.2) s.1
+def length (s : StrSlice) : Int = lengthStr s.2 - s.1
 
-def StrSlice/isEmpty (s : StrSlice) : Bool =
-  Int/eq 0 (StrSlice/length s)
+def isEmpty (s : StrSlice) : Bool = 0 == length s
 
-def StrSlice/unsafeHead (s : StrSlice) : Char = Str/unsafeIndex s.1 s.2
-def StrSlice/unsafeTail (s : StrSlice) : StrSlice = MkStrSlice (Int/add 1 s.1) s.2
-def StrSlice/unsafeTailMut (s : StrSlice) : StrSlice = foreign StrSlice "mutateData:0" s (Int/add 1 s.1)
+def unsafeHead (s : StrSlice) : Char = unsafeIndexStr s.1 s.2
+def unsafeTail (s : StrSlice) : StrSlice = MkStrSlice (1 + s.1) s.2
+def unsafeTailMut (s : StrSlice) : StrSlice = foreign StrSlice "mutateData:0" s (1 + s.1)
 
-def StrSlice/case {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
-  if StrSlice/isEmpty s then
+def case {cv} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
+  if isEmpty s then
     ifEmpty
   else
-    ifNonEmpty (StrSlice/unsafeHead s) (StrSlice/unsafeTail s)
+    ifNonEmpty (unsafeHead s) (unsafeTail s)
 
-def StrSlice/unsafeCaseMut {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
-  if StrSlice/isEmpty s then
+def unsafeCaseMut {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
+  if isEmpty s then
     ifEmpty
   else
-    ifNonEmpty (StrSlice/unsafeHead s) (StrSlice/unsafeTailMut s)
+    ifNonEmpty (unsafeHead s) (unsafeTailMut s)

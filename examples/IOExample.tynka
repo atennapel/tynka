@@ -1,16 +1,18 @@
-import "lib/Prelude"
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/IO" as IO
 
 def return = IO/return
 def (>>=) = IO/bind
-def (++) = Str/append
-def (==) = Str/equals
+def (++) = appendStr
+def (==) = equalsStr
 
 def main (_ : Array Str) : IO Unit :=
-  IO/fix \go. do
+  IO/fixIO \go. do
     name <- getLn;
     if name == "exit" then
       return U
     else do
       putLn ("hi " ++ name);
-      putLn (Str/length name);
+      putLn (lengthStr name);
       go

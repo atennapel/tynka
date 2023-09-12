@@ -1,5 +1,6 @@
-import "lib/Prelude"
-import "lib/StagedParser"
+import "lib/JVM" (...)
+import "lib/StagedParser" as Parser
+import "lib/List" as List
 
 def input := "123123781273812738127382173812738127381273128371283712837182371231245114312451232114513123412451232131412312312451234123a"
 
