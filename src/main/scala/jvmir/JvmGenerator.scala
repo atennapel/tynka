@@ -56,7 +56,9 @@ object JvmGenerator:
   private def conIsFirst(dx: GName, cx: GName): Boolean =
     tcons(dx)._3.head == cx
 
-  private def name(x: GName)(implicit ctx: Ctx): GName = s"${escape(x)}"
+  private def name(m: String, x: GName)(implicit ctx: Ctx): GName =
+    if ctx.moduleName == m then s"${escape(x)}"
+    else s"${escape(m)}_${escape(x)}"
 
   def generate(moduleGName: String, ds: Defs): Unit =
     implicit val cw: ClassWriter = new ClassWriter(
@@ -103,11 +105,12 @@ object JvmGenerator:
     // generate main
     val mainexists = ds.defs.exists {
       case DDef(
+            dm,
             "main",
             false,
             TDef(Some(List(TArray(TForeign("Ljava/lang/String;")))), _),
             _
-          ) =>
+          ) if dm == moduleGName =>
         true
       case _ => false
     }
@@ -196,7 +199,7 @@ object JvmGenerator:
       ds0: Defs
   )(implicit ctx: Ctx, cw: ClassWriter): Unit =
     val ds = ds0.toList.filter {
-      case DDef(x, _, TDef(None, _), b) if constantValue(b).isEmpty =>
+      case DDef(m, x, _, TDef(None, _), b) if constantValue(b).isEmpty =>
         true
       case _ => false
     }
@@ -207,10 +210,10 @@ object JvmGenerator:
       implicit val locals: Locals = IntMap.empty
       ds.foreach(d => {
         d match
-          case DDef(x, g, TDef(None, rt), b) =>
+          case DDef(m, x, g, TDef(None, rt), b) =>
             implicit val methodStart = mg.newLabel()
             gen(b)
-            mg.putStatic(ctx.moduleType, name(x), gen(rt))
+            mg.putStatic(ctx.moduleType, name(m, x), gen(rt))
           case _ =>
       })
       mg.visitInsn(RETURN)
@@ -245,18 +248,18 @@ object JvmGenerator:
     case _ =>
 
   private def gen(d: Def)(implicit cw: ClassWriter, ctx: Ctx): Unit = d match
-    case DDef(x, g, TDef(None, ty), v) =>
+    case DDef(m, x, g, TDef(None, ty), v) =>
       cw.visitField(
         (if g then ACC_PRIVATE + ACC_SYNTHETIC
          else ACC_PUBLIC) + ACC_FINAL + ACC_STATIC,
-        name(x),
+        name(m, x),
         gen(ty).getDescriptor,
         null,
         constantValue(v).orNull
       )
-    case DDef(x, g, TDef(Some(ts), rt), v) =>
+    case DDef(md, x, g, TDef(Some(ts), rt), v) =>
       val m = new Method(
-        name(x),
+        name(md, x),
         gen(rt),
         ts.map(gen).toList.toArray
       )
@@ -511,8 +514,9 @@ object JvmGenerator:
         case Left(t)       => gen(t)
         case Right((l, _)) => mg.loadLocal(l)
 
-    case Global(x, t) => mg.getStatic(ctx.moduleType, name(x), gen(t))
-    case GlobalApp(x, TDef(Some(ps), rt), true, as) if name(x) == mg.getName =>
+    case Global(m, x, t) => mg.getStatic(ctx.moduleType, name(m, x), gen(t))
+    case GlobalApp(m, x, TDef(Some(ps), rt), true, as)
+        if name(m, x) == mg.getName =>
       as.foreach(gen)
       Range.inclusive(as.size - 1, 0, -1).foreach(i => mg.storeArg(i))
       // local clearing to allow gc (taken from Clojure)
@@ -524,13 +528,13 @@ object JvmGenerator:
         case _ =>
       }
       mg.visitJumpInsn(GOTO, methodStart)
-    case GlobalApp(x, TDef(Some(ps), rt), _, as) =>
+    case GlobalApp(m, x, TDef(Some(ps), rt), _, as) =>
       as.foreach(gen)
       mg.invokeStatic(
         ctx.moduleType,
-        new Method(name(x), gen(rt), ps.map(gen).toArray)
+        new Method(name(m, x), gen(rt), ps.map(gen).toArray)
       )
-    case GlobalApp(_, _, _, _) => impossible()
+    case GlobalApp(_, _, _, _, _) => impossible()
 
     case Let(x, t, InvokeVirtualVoid(arg, as), b) =>
       invokeVirtualVoid(arg, as); gen(b)

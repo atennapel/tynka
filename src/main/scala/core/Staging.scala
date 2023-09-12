@@ -244,6 +244,7 @@ object Staging:
         case _                                => false
 
   private case class DataMonomorphizer(
+      module: String,
       cache: mutable.ArrayBuffer[(VData1, IR.GName)] =
         mutable.ArrayBuffer.empty,
       defsCache: mutable.ArrayBuffer[IR.Def] = mutable.ArrayBuffer.empty
@@ -302,7 +303,7 @@ object Staging:
         val (x, t) = ns(lvl.toIx.expose)
         IR.Var(x, t)
       case VGlobal0(m, x, t) =>
-        IR.Global(x.expose, quoteCTy(t)) // TODO: handle module
+        IR.Global(m, x.expose, quoteCTy(t))
 
       case VApp0(f, a) => IR.App(quote(f), quote(a))
       case VLam0(ft, b) =>
@@ -427,10 +428,10 @@ object Staging:
       implicit val fresh: Fresh = newFresh()
       val ty = stageCTy(t)
       val value = stageTm(v)
-      Some(IR.DDef(x.expose, false, ty, value))
+      Some(IR.DDef(m, x.expose, false, ty, value))
     case _ => None
 
-  def stage(ds: Defs): IR.Defs =
-    implicit val dmono: DataMonomorphizer = DataMonomorphizer()
+  def stage(module: String, ds: Defs): IR.Defs =
+    implicit val dmono: DataMonomorphizer = DataMonomorphizer(module)
     val sds = ds.toList.flatMap(d => stageDef(d))
     IR.Defs(dmono.defs ++ sds)

@@ -1338,11 +1338,16 @@ object Elaboration:
           case None if hiding.isEmpty => Nil
           case _ =>
             val toHide = hiding.getOrElse(Nil)
-            val xs = (xs_ match
+            val xsPre = xs_ match
               case None            => allNamesFromModule(m).map(x => (x, x))
               case Some(Left(_))   => allNamesFromModule(m).map(x => (x, x))
               case Some(Right(xs)) => xs.map((o, x) => (o.getOrElse(x), x))
-            ).filterNot((_, x) => toHide.contains(x))
+            val hideLeft = toHide.filterNot(x => xsPre.exists((_, y) => x == y))
+            if hideLeft.size > 0 then
+              error(s"hiding invalid name: ${hideLeft.mkString(", ")}")(
+                Ctx.empty(pos, module)
+              )
+            val xs = xsPre.filterNot((_, x) => toHide.contains(x))
             xs.foreach { (x, y) =>
               if getGlobal(module, x).isDefined || importedNames.contains(x)
               then

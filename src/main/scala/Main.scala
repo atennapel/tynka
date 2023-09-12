@@ -9,7 +9,6 @@ import elaboration.Elaboration.elaborate
 import elaboration.Elaboration.ElaborateError
 import core.Staging.stage
 import ir.Compilation.compile
-import jvmir.Interpreter.interpret
 import jvmir.JvmGenerator.generate
 
 import java.io.File
@@ -35,7 +34,7 @@ object Main:
       }*/
 
       println("\nstaging:")
-      val irds = stage(eds)
+      val irds = stage(filename, eds)
       println(irds)
 
       if options.contains("stage") then return
@@ -45,16 +44,6 @@ object Main:
       println(jvmirds)
 
       if options.contains("compile") then return
-
-      /*
-      println("\ninterpret:")
-      val interpretTimeStart = System.nanoTime()
-      interpret(jvmirds).foreach(println(_))
-      val interpretTime = System.nanoTime() - interpretTimeStart
-      println(
-        s"interpret time: ${interpretTime / 1000000}ms (${interpretTime}ns)"
-      )
-       */
 
       println("\ngenerate JVM bytecode")
       generate(filename, jvmirds)

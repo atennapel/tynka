@@ -44,15 +44,12 @@ object Syntax:
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(name: GName, gen: Boolean, ty: TDef, value: Tm)
-    case DData(
-        name: GName,
-        cs: List[(GName, List[Ty])]
-    )
+    case DDef(module: String, name: GName, gen: Boolean, ty: TDef, value: Tm)
+    case DData(name: GName, cs: List[(GName, List[Ty])])
 
     override def toString: String = this match
-      case DDef(x, _, t, v) => s"def $x : $t = $v"
-      case DData(x, Nil)    => s"data $x"
+      case DDef(m, x, _, t, v) => s"def $m/$x : $t = $v"
+      case DData(x, Nil)       => s"data $x"
       case DData(x, cs) =>
         s"data $x = ${cs
             .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
@@ -61,7 +58,7 @@ object Syntax:
 
   enum Tm:
     case Var(name: LName, ty: TDef)
-    case Global(name: GName, ty: TDef)
+    case Global(module: String, name: GName, ty: TDef)
 
     case IntLit(n: Int)
     case BoolLit(b: Boolean)
@@ -96,8 +93,8 @@ object Syntax:
     case Foreign(io: Boolean, rt: Ty, cmd: String, args: List[(Tm, Ty)])
 
     override def toString: String = this match
-      case Var(x, _)    => s"'$x"
-      case Global(x, _) => s"$x"
+      case Var(x, _)       => s"'$x"
+      case Global(m, x, _) => s"$m/$x"
 
       case IntLit(n)    => s"$n"
       case BoolLit(n)   => s"$n"
@@ -152,11 +149,11 @@ object Syntax:
 
     // may contain duplicates, to be used for usage counts
     def fvs: List[(LName, TDef)] = this match
-      case Var(x, t)    => List((x, t))
-      case Global(_, _) => Nil
-      case IntLit(_)    => Nil
-      case BoolLit(_)   => Nil
-      case StringLit(_) => Nil
+      case Var(x, t)       => List((x, t))
+      case Global(_, _, _) => Nil
+      case IntLit(_)       => Nil
+      case BoolLit(_)      => Nil
+      case StringLit(_)    => Nil
 
       case App(f, a)       => f.fvs ++ a.fvs
       case Lam(x, _, _, b) => b.fvs.filterNot((y, _) => y == x)
@@ -178,11 +175,11 @@ object Syntax:
       case Foreign(_, _, _, as) => as.flatMap(_._1.fvs)
 
     def usedNames: Set[LName] = this match
-      case Var(x, _)    => Set(x)
-      case Global(_, _) => Set.empty
-      case IntLit(_)    => Set.empty
-      case BoolLit(_)   => Set.empty
-      case StringLit(_) => Set.empty
+      case Var(x, _)       => Set(x)
+      case Global(_, _, _) => Set.empty
+      case IntLit(_)       => Set.empty
+      case BoolLit(_)      => Set.empty
+      case StringLit(_)    => Set.empty
 
       case App(f, a)               => f.usedNames ++ a.usedNames
       case Lam(_, _, _, b)         => b.usedNames
@@ -202,11 +199,11 @@ object Syntax:
       case Foreign(_, _, _, as) => as.toSet.flatMap(_._1.usedNames)
 
     def maxName: LName = this match
-      case Var(x, _)    => x
-      case Global(_, _) => -1
-      case IntLit(_)    => -1
-      case BoolLit(_)   => -1
-      case StringLit(_) => -1
+      case Var(x, _)       => x
+      case Global(_, _, _) => -1
+      case IntLit(_)       => -1
+      case BoolLit(_)      => -1
+      case StringLit(_)    => -1
 
       case App(f, a)               => f.maxName max a.maxName
       case Lam(x, _, _, b)         => x max b.maxName
@@ -258,11 +255,11 @@ object Syntax:
             else go(ps, nps ++ List((x, t)), sub - x, scope + x)
         go(ps, Nil, sub, scope)
       this match
-        case Var(x, _)    => sub.get(x).getOrElse(this)
-        case Global(_, _) => this
-        case IntLit(_)    => this
-        case BoolLit(_)   => this
-        case StringLit(_) => this
+        case Var(x, _)       => sub.get(x).getOrElse(this)
+        case Global(_, _, _) => this
+        case IntLit(_)       => this
+        case BoolLit(_)      => this
+        case StringLit(_)    => this
 
         case App(f, a) => App(f.subst(sub, scope), a.subst(sub, scope))
         case Lam(x0, t1, t2, b0) =>

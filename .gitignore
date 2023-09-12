@@ -34,5 +34,6 @@ metals.sbt
 *.txt
 *.class
 test.tynka
+test2.tynka
 *.jar
 log.java

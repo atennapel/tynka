@@ -33,10 +33,10 @@ TODO:
   - [x] Renaming
   - [x] Qualified imports
   - [x] Import hiding
-  - [ ] Rewrite lib and examples to use modules
+  - [x] Fix modules in staging/compilation
   - [ ] Exporting imports
+  - [ ] Rewrite lib and examples to use modules
   - [ ] Private/public definitions
-  - [ ] Fix modules in staging/compilation
 - [ ] Remove implicit generalization
 - [ ] Linear pairs
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO

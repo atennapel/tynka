@@ -62,6 +62,7 @@ object Syntax:
 
   enum Def:
     case DDef(
+        module: String,
         name: GName,
         gen: Boolean,
         ty: TDef,
@@ -72,19 +73,19 @@ object Syntax:
         cs: List[(GName, List[Ty])]
     )
 
-    def globals: Set[GName] = this match
-      case DDef(name, gen, ty, value) => value.globals
-      case DData(name, cs)            => Set.empty
+    def globals: Set[(String, GName)] = this match
+      case DDef(_, name, gen, ty, value) => value.globals
+      case DData(name, cs)               => Set.empty
 
     def dataGlobals: Set[GName] = this match
-      case DDef(name, gen, ty, value) => ty.dataGlobals ++ value.dataGlobals
+      case DDef(_, name, gen, ty, value) => ty.dataGlobals ++ value.dataGlobals
       case DData(name, cs) =>
         cs.flatMap((_, as) => as.flatMap(_.dataGlobals)).toSet
 
     override def toString: String = this match
-      case DDef(x, _, TDef(None, t), v) => s"def $x : $t = $v"
-      case DDef(x, _, t, v) =>
-        s"def $x (${t.params.mkString(", ")}) : ${t.rt} = $v"
+      case DDef(m, x, _, TDef(None, t), v) => s"def $m/$x : $t = $v"
+      case DDef(m, x, _, t, v) =>
+        s"def $m/$x (${t.params.mkString(", ")}) : ${t.rt} = $v"
       case DData(x, Nil) => s"data $x"
       case DData(x, cs) =>
         s"data $x = ${cs
@@ -95,11 +96,12 @@ object Syntax:
   enum Tm:
     case Arg(ix: Int)
     case Var(name: LName)
-    case Global(name: GName, ty: Ty)
+    case Global(module: String, name: GName, ty: Ty)
 
     case Let(name: LName, ty: Ty, value: Tm, body: Tm)
 
     case GlobalApp(
+        module: String,
         name: GName,
         ty: TDef,
         tc: Boolean,
@@ -123,16 +125,16 @@ object Syntax:
 
     case Foreign(rt: Ty, cmd: String, args: List[(Tm, Ty)])
 
-    def globals: Set[GName] = this match
+    def globals: Set[(String, GName)] = this match
       case Arg(ix)          => Set.empty
       case Var(name)        => Set.empty
       case IntLit(value)    => Set.empty
       case BoolLit(value)   => Set.empty
       case StringLit(value) => Set.empty
 
-      case Global(name, ty) => Set(name)
-      case GlobalApp(name, ty, tc, as) =>
-        Set(name) ++ as.flatMap(_.globals)
+      case Global(m, name, ty) => Set((m, name))
+      case GlobalApp(m, name, ty, tc, as) =>
+        Set((m, name)) ++ as.flatMap(_.globals)
 
       case Let(name, ty, value, body) =>
         value.globals ++ body.globals
@@ -154,7 +156,7 @@ object Syntax:
       case BoolLit(value)   => Set.empty
       case StringLit(value) => Set.empty
 
-      case Global(name, ty)     => ty.dataGlobals
+      case Global(m, name, ty)  => ty.dataGlobals
       case Con(name, con, args) => Set(name) ++ args.flatMap(_.dataGlobals)
       case Field(dty, con, scrut, ix) => Set(dty) ++ scrut.dataGlobals
       case Match(dty, ty, x, scrut, cs, other) =>
@@ -163,7 +165,7 @@ object Syntax:
         ) ++ other.map(_.dataGlobals).getOrElse(Set.empty)
       case Let(name, ty, value, body) =>
         ty.dataGlobals ++ value.dataGlobals ++ body.dataGlobals
-      case GlobalApp(name, ty, tc, as) =>
+      case GlobalApp(m, name, ty, tc, as) =>
         ty.dataGlobals ++ as.flatMap(_.dataGlobals)
       case Foreign(rt, cmd, args) =>
         rt.dataGlobals ++ args.flatMap((a, b) => a.dataGlobals ++ b.dataGlobals)
@@ -171,15 +173,15 @@ object Syntax:
     override def toString: String = this match
       case Arg(i)          => s"'arg$i"
       case Var(x)          => s"'$x"
-      case Global(x, _)    => s"$x"
+      case Global(m, x, _) => s"$m/$x"
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
 
       case IntLit(v)    => s"$v"
       case BoolLit(v)   => s"$v"
       case StringLit(v) => s"\"$v\""
 
-      case GlobalApp(x, _, tc, as) =>
-        s"$x${if tc then "[tailcall]" else ""}(${as.mkString(", ")})"
+      case GlobalApp(m, x, _, tc, as) =>
+        s"$m/$x${if tc then "[tailcall]" else ""}(${as.mkString(", ")})"
 
       case Con(_, "Z", Nil) => "0"
       case full @ Con(_, "S", as @ List(n)) =>

@@ -14,10 +14,11 @@ object Compilation:
     J.Defs(removeUnused(jds))
 
   private def removeUnused(ds: List[J.Def]): List[J.Def] =
-    def isUsed(x: J.GName, ds: List[J.Def]): Boolean =
-      ds.filterNot { case J.DDef(y, _, _, _) => y == x; case _ => false }
-        .flatMap(_.globals)
-        .contains(x)
+    def isUsed(m: String, x: J.GName, ds: List[J.Def]): Boolean =
+      ds.filterNot {
+        case J.DDef(m2, y, _, _, _) => m == m2 && y == x; case _ => false
+      }.flatMap(_.globals)
+        .contains((m, x))
     def isDataUsed(x: J.GName, ds: List[J.Def]): Boolean =
       ds.filterNot { case J.DData(y, _) => y == x; case _ => false }
         .flatMap(_.dataGlobals)
@@ -27,9 +28,10 @@ object Compilation:
       case (d @ J.DData(x, _)) :: tl if isDataUsed(x, full) =>
         go(tl, full).map(d :: _)
       case J.DData(_, _) :: tl => Some(tl)
-      case (d @ J.DDef(x, _, _, _)) :: tl if x == "main" || isUsed(x, full) =>
+      case (d @ J.DDef(m, x, _, _, _)) :: tl
+          if x == "main" || isUsed(m, x, full) =>
         go(tl, full).map(d :: _)
-      case J.DDef(x, _, _, _) :: tl => Some(tl)
+      case J.DDef(m, x, _, _, _) :: tl => Some(tl)
     @tailrec
     def loop(ds: List[J.Def]): List[J.Def] = go(ds, ds) match
       case None      => ds
@@ -51,31 +53,38 @@ object Compilation:
 
   private def go(d: Def): List[J.Def] =
     conv(d).map {
-      case DDef(x, gen, t, v) =>
-        implicit val defname: GName = x
+      case DDef(m, x, gen, t, v) =>
+        implicit val defname: (String, GName) = (m, x)
         implicit val rename: LocalRename = LocalRename()
         v.flattenLams match
-          case (None, v) => J.DDef(x, gen, go(t), go(v, true))
+          case (None, v) => J.DDef(m, x, gen, go(t), go(v, true))
           case (Some((ps, bt)), v) =>
             ps.zipWithIndex.foreach { case ((x, _), i) =>
               rename.set(x, i, true)
             }
-            J.DDef(x, gen, go(t), go(v, true))
+            J.DDef(m, x, gen, go(t), go(v, true))
       case DData(x, cs) => J.DData(x, cs.map((cx, as) => (cx, as.map(go))))
     }
 
   private def go(t: Tm, tr: Boolean)(implicit
-      defname: GName,
+      defname: (String, GName),
       localrename: LocalRename
   ): J.Tm =
     t match
       case Var(x0, _) =>
         val (x, arg) = localrename.get(x0)
         if arg then J.Arg(x) else J.Var(x)
-      case Global(x, t) =>
+      case Global(m, x, t) =>
         t match
-          case TDef(Nil, false, rt) => J.Global(x, go(t.rt))
-          case ty => J.GlobalApp(x, go(ty), tr && x == defname, List())
+          case TDef(Nil, false, rt) => J.Global(m, x, go(t.rt))
+          case ty =>
+            J.GlobalApp(
+              m,
+              x,
+              go(ty),
+              tr && m == defname._1 && x == defname._2,
+              List()
+            )
 
       case IntLit(n)    => J.IntLit(n)
       case BoolLit(b)   => J.BoolLit(b)
@@ -84,11 +93,12 @@ object Compilation:
       case app @ App(_, _) =>
         val (f, as) = app.flattenApps
         f match
-          case Global(x, t) =>
+          case Global(m, x, t) =>
             J.GlobalApp(
+              m,
               x,
               go(t),
-              tr && x == defname,
+              tr && m == defname._1 && x == defname._2,
               as.map(go(_, false))
             )
           case _ => impossible()
@@ -141,7 +151,7 @@ object Compilation:
   // simplify and lambdalift
   private type NewDefs = mutable.ArrayBuffer[Def]
 
-  private case class GlobalGen(ref: Ref[Int] = Ref(0)):
+  private case class GlobalGen(module: String, ref: Ref[Int] = Ref(0)):
     def gen()(implicit defname: GName): GName =
       s"$defname$$${ref.updateGetOld(_ + 1)}"
 
@@ -151,14 +161,14 @@ object Compilation:
     def apply(l: LName): LocalGen = LocalGen(Ref(l))
 
   private def conv(d: Def): List[Def] = d match
-    case DDef(x, gen, t, v) =>
+    case DDef(m, x, gen, t, v) =>
       val (ps, rt, b) = etaExpand(t, v)
       implicit val defname: GName = x
       implicit val newDefs: NewDefs = mutable.ArrayBuffer.empty
-      implicit val globalgen: GlobalGen = GlobalGen()
+      implicit val globalgen: GlobalGen = GlobalGen(m)
       implicit val localgen: LocalGen = LocalGen(v.maxName + 1)
       val cb = conv(b).lams(ps, TDef(rt))
-      newDefs.toList ++ List(DDef(x, gen, t, cb))
+      newDefs.toList ++ List(DDef(m, x, gen, t, cb))
     case d @ DData(_, _) => List(d)
 
   private def conv(
@@ -170,11 +180,11 @@ object Compilation:
       defname: GName
   ): Tm =
     val res = tm match
-      case Var(x, t)    => tm
-      case Global(x, t) => tm
-      case IntLit(n)    => tm
-      case BoolLit(n)   => tm
-      case StringLit(v) => tm
+      case Var(x, t)       => tm
+      case Global(_, x, t) => tm
+      case IntLit(n)       => tm
+      case BoolLit(n)      => tm
+      case StringLit(v)    => tm
 
       case Con(x, cx, as)   => Con(x, cx, as.map(conv))
       case Lam(x, t, rt, b) => Lam(x, t, rt, conv(b))
@@ -217,13 +227,15 @@ object Compilation:
               }.toMap
               val gx = globalgen.gen()
               defs += DDef(
+                globalgen.module,
                 gx,
                 true,
                 TDef(fv.map(_._2), t),
                 conv(v.apps(spine).lams(nps, TDef(t.io, t.rt)))
               )
-              val gl = Global(gx, TDef(nps.map(_._2), t.io, t.rt))
-                .apps(fv.map((x, t) => Var(x, TDef(t))))
+              val gl =
+                Global(globalgen.module, gx, TDef(nps.map(_._2), t.io, t.rt))
+                  .apps(fv.map((x, t) => Var(x, TDef(t))))
               val (vs2, spine2) = eta(bt.params)
               conv(
                 b.subst(Map(x -> gl)).apps(spine2).lams(vs2, TDef(bt.io, bt.rt))
@@ -240,12 +252,13 @@ object Compilation:
           x -> ix
         }.toMap
         val gx = globalgen.gen()
-        val gl = Global(gx, TDef(nps.map(_._2), t2.io, t2.rt))
+        val gl = Global(globalgen.module, gx, TDef(nps.map(_._2), t2.io, t2.rt))
           .apps(fv.map((x, t) => Var(x, TDef(t))))
         val b = conv(
           b0.subst(Map(g -> gl)).apps(spine).lams(nps, TDef(t2.io, t2.rt))
         )
         defs += DDef(
+          globalgen.module,
           gx,
           true,
           TDef(fv.map(_._2) ++ List(t1), t2),
@@ -357,13 +370,13 @@ object Compilation:
     res
 
   private def isSmall(v: Tm): Boolean = v match
-    case Var(_, _)      => true
-    case Global(_, _)   => true
-    case IntLit(_)      => true
-    case BoolLit(_)     => true
-    case StringLit(_)   => true
-    case Con(_, _, Nil) => true
-    case _              => false
+    case Var(_, _)       => true
+    case Global(_, _, _) => true
+    case IntLit(_)       => true
+    case BoolLit(_)      => true
+    case StringLit(_)    => true
+    case Con(_, _, Nil)  => true
+    case _               => false
 
   private def etaExpand(t: TDef, v: Tm): (List[(LName, Ty)], Ty, Tm) =
     val (ps, b) = v.flattenLams
