@@ -10,7 +10,7 @@ enum Locals:
 
   def closeTy(b: Ty): Ty = this match
     case Empty              => b
-    case Bound(ls, x, a, _) => ls.closeTy(Pi(Many, x, Expl, a, b))
+    case Bound(ls, x, a, _) => ls.closeTy(Pi(Many, x, PiExpl, a, b))
     case Defined(ls, x, a, s, v) =>
       ls.closeTy(Let(Many, x, a, s, Irrelevant, v, b))
 

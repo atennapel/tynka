@@ -91,7 +91,7 @@ object Unification:
         case VPi(_, x, i, a, b) =>
           Lam(
             x,
-            i,
+            i.toIcit,
             quote(a)(lvl),
             go(
               b(VVar(lvl)),
@@ -271,7 +271,7 @@ object Unification:
             val y = x match
               case DontBind => DoBind(Name(s"x$l2"))
               case _        => x
-            Lam(y, i, quote(a)(l2), go(b(VVar(l2)), l2 + 1))
+            Lam(y, i.toIcit, quote(a)(l2), go(b(VVar(l2)), l2 + 1))
           case _ => impossible()
     go(a, lvl0)
 

@@ -10,6 +10,7 @@ object Globals:
   private val map: mutable.Map[(String, Name), GlobalEntry] = mutable.Map.empty
 
   case class GlobalEntry(
+      auto: Boolean,
       opaque: Boolean,
       module: String,
       name: Name,
@@ -33,3 +34,5 @@ object Globals:
 
   def allNamesFromModule(m: String): List[Name] =
     allEntriesFromModule(m).map(_.name).toList
+
+  def allGlobals: Map[(String, Name), GlobalEntry] = map.toMap

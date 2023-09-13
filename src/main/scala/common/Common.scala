@@ -61,7 +61,30 @@ object Common:
     def wrap(x: Any): String = this match
       case Expl => s"($x)"
       case Impl => s"{$x}"
+
+    def toPiIcit: PiIcit = this match
+      case Expl => PiExpl
+      case Impl => PiImpl(false)
+
+    def eqPiIcit(i: PiIcit): Boolean = (this, i) match
+      case (Expl, PiExpl)    => true
+      case (Impl, PiImpl(_)) => true
+      case _                 => false
   export Icit.*
+
+  enum PiIcit:
+    case PiExpl
+    case PiImpl(search: Boolean)
+
+    def wrap(x: Any): String = this match
+      case PiExpl        => s"($x)"
+      case PiImpl(false) => s"{$x}"
+      case PiImpl(true)  => s"{auto $x}"
+
+    def toIcit: Icit = this match
+      case PiExpl         => Expl
+      case PiImpl(search) => Impl
+  export PiIcit.*
 
   // pruning
   type Pruning = List[Option[Icit]]

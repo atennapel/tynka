@@ -25,6 +25,7 @@ object Syntax:
     )
     case DDef(
         pos: PosInfo,
+        auto: Boolean,
         opaque: Boolean,
         name: Name,
         meta: Boolean,
@@ -58,10 +59,12 @@ object Syntax:
               case (Some(x), y) => s"$x = $y"; case (None, x) => s"$x"
             }
             .mkString(", ")})$hs"
-      case DDef(_, opq, x, m, Some(t), v) =>
-        s"${if opq then "opaque " else ""}def $x : $t ${if m then "" else ":"}= $v"
-      case DDef(_, opq, x, m, None, v) =>
-        s"${if opq then "opaque " else ""}def $x ${if m then "" else ":"}= $v"
+      case DDef(_, auto, opq, x, m, Some(t), v) =>
+        s"${if auto then "auto " else ""}${
+            if opq then "opaque " else ""
+          }def $x : $t ${if m then "" else ":"}= $v"
+      case DDef(_, auto, opq, x, m, None, v) =>
+        s"${if auto then "auto " else ""}${if opq then "opaque " else ""}def $x ${if m then "" else ":"}= $v"
       case DData(_, x, ps, Nil) =>
         s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
       case DData(_, x, ps, cs) =>
@@ -103,7 +106,7 @@ object Syntax:
     case IntLit(value: Int)
     case StringLit(value: String)
 
-    case Pi(usage: Usage, name: Bind, icit: Icit, ty: Ty, body: Ty)
+    case Pi(usage: Usage, name: Bind, icit: PiIcit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
     case Fix(g: Bind, x: Bind, b: Tm, arg: Tm)
@@ -190,7 +193,7 @@ object Syntax:
       case IntLit(v)    => s"$v"
       case StringLit(v) => s"\"$v\""
 
-      case Pi(Many, DontBind, Expl, t, b) => s"($t -> $b)"
+      case Pi(Many, DontBind, PiExpl, t, b) => s"($t -> $b)"
       case Pi(u, x, i, t, b) => s"(${i.wrap(s"${u.prefix}$x : $t")} -> $b)"
       case Lam(x, ArgNamed(y), None, b)    => s"(\\{$x = $y}. $b)"
       case Lam(x, ArgNamed(y), Some(t), b) => s"(\\{$x : $t = $y}. $b)"

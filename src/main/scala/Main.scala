@@ -27,12 +27,6 @@ object Main:
 
       if options.contains("typecheck") then return
 
-      /*
-      getGlobal(Name("main")).foreach { g =>
-        println("\nmain normal form:")
-        println(pretty(nf(g.tm))(Nil))
-      }*/
-
       println("\nstaging:")
       val irds = stage(filename, eds)
       println(irds)

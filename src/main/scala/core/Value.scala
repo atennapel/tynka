@@ -67,7 +67,7 @@ object Value:
     case VIntLit(value: Int)
     case VStringLit(value: String)
 
-    case VPi(usage: Usage, name: Bind, icit: Icit, ty: VTy, body: Clos)
+    case VPi(usage: Usage, name: Bind, icit: PiIcit, ty: VTy, body: Clos)
     case VFun(usage: Usage, pty: VTy, cv: VTy, rty: VTy)
     case VLam(name: Bind, icit: Icit, fnty: VTy, body: Clos)
     case VFix(ty: VTy, rty: VTy, g: Bind, x: Bind, b: Clos2, arg: Val)
@@ -97,13 +97,13 @@ object Value:
   def vlamIrrI(x: String, f: Val => Val): Val =
     VLam(name(x), Impl, VIrrelevant, CFun(f))
   def vpi(x: String, t: Val, f: Val => Val): Val =
-    VPi(Many, name(x), Expl, t, CFun(f))
+    VPi(Many, name(x), PiExpl, t, CFun(f))
   def vpi1(x: String, t: Val, f: Val => Val): Val =
-    VPi(One, name(x), Expl, t, CFun(f))
+    VPi(One, name(x), PiExpl, t, CFun(f))
   def vpiI(x: String, t: Val, f: Val => Val): Val =
-    VPi(Many, name(x), Impl, t, CFun(f))
-  def vfun(a: Val, b: Val): Val = VPi(Many, DontBind, Expl, a, CFun(_ => b))
-  def vfun1(a: Val, b: Val): Val = VPi(One, DontBind, Expl, a, CFun(_ => b))
+    VPi(Many, name(x), PiImpl(false), t, CFun(f))
+  def vfun(a: Val, b: Val): Val = VPi(Many, DontBind, PiExpl, a, CFun(_ => b))
+  def vfun1(a: Val, b: Val): Val = VPi(One, DontBind, PiExpl, a, CFun(_ => b))
   def vsigma(x: String, t: Val, f: Val => Val): Val =
     VSigma(name(x), t, CFun(f))
 

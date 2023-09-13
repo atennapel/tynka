@@ -37,16 +37,20 @@ TODO:
   - [x] Rewrite lib and examples to use modules
   - [ ] Exporting imports
   - [ ] Private/public definitions
+- [ ] Some form of type classes
+  - [x] Search globals
+  - [ ] Approximate inversion for globals
+  - [ ] Search locals
+  - [ ] Order globals
 - [ ] Remove implicit generalization
 - [ ] Linear pairs
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO
 - [ ] Support trampolines
 - [ ] Improve syntax for recursive functions
-- [ ] Recursion check in datatypes definitions
-- [ ] Higher-kinded type parameters for datatypes
+- [ ] Higher-kinded type parameters for 
+- [ ] Partially-static data
 - [ ] Records/variants
 - [ ] Val Rep: Boxed or Unboxed
-- [ ] Try to write `mapTRMC` using ST
 
 BUGS:
 - [ ] Fix duplicate definitions import bug

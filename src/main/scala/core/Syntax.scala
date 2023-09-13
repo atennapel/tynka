@@ -49,7 +49,7 @@ object Syntax:
     case IntLit(value: Int)
     case StringLit(value: String)
 
-    case Pi(usage: Usage, name: Bind, icit: Icit, ty: Ty, body: Ty)
+    case Pi(usage: Usage, name: Bind, icit: PiIcit, ty: Ty, body: Ty)
     case Fun(usage: Usage, pty: Ty, cv: Ty, rty: Ty)
     case Lam(name: Bind, icit: Icit, fnty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm, icit: Icit)
@@ -149,7 +149,7 @@ object Syntax:
       case IntLit(v)    => s"$v"
       case StringLit(v) => s"\"$v\""
 
-      case Pi(Many, DontBind, Expl, t, b) => s"($t -> $b)"
+      case Pi(Many, DontBind, PiExpl, t, b) => s"($t -> $b)"
       case Pi(u, x, i, t, b)  => s"(${i.wrap(s"${u.prefix}$x : $t")} -> $b)"
       case Fun(Many, a, _, b) => s"($a -> $b)"
       case Fun(u, a, _, b)    => s"($a ${u.prefix}-> $b)"

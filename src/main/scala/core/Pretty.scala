@@ -22,9 +22,9 @@ object Pretty:
     case Fun(Many, a, _, b) => s"${prettyParen(a, true)} -> ${prettyPi(b)}"
     case Fun(u, a, _, b) =>
       s"${prettyParen(a, true)} ${u.prefix}-> ${prettyPi(b)}"
-    case Pi(Many, DontBind, Expl, t, b) =>
+    case Pi(Many, DontBind, PiExpl, t, b) =>
       s"${prettyParen(t, true)} -> ${prettyPi(b)(DontBind.toName :: ns)}"
-    case Pi(u, DoBind(x), Expl, t, b) =>
+    case Pi(u, DoBind(x), PiExpl, t, b) =>
       s"(${u.prefix}$x : ${pretty(t)}) -> ${prettyPi(b)(x :: ns)}"
     case Pi(u, x, i, t, b) =>
       s"${i.wrap(s"${u.prefix}$x : ${pretty(t)}")} -> ${prettyPi(b)(x.toName :: ns)}"

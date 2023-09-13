@@ -37,7 +37,8 @@ object Parser:
         "mutable",
         "do",
         "opaque",
-        "unfold"
+        "unfold",
+        "auto"
       ),
       operators = Set(
         "=",
@@ -154,27 +155,31 @@ object Parser:
       ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> unfoldP <|> dataP <|> conP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
-          Ops(InfixR)("->" #> ((l, r) => Pi(Many, DontBind, Expl, l, r)))
+          Ops(InfixR)("->" #> ((l, r) => Pi(Many, DontBind, PiExpl, l, r)))
         )
     )
 
     private lazy val usage: Parsley[Usage] =
       option(("0" #> Zero) <|> ("1" #> One)).map(o => o.getOrElse(Many))
 
-    private type PiSigmaParam = (Usage, List[Bind], Icit, Option[Ty])
+    private type PiSigmaParam = (Usage, List[Bind], PiIcit, Option[Ty])
     private lazy val piSigmaParam: Parsley[PiSigmaParam] =
-      ("{" *> usage <~> some(bind) <~> option(":" *> tm) <* "}").map {
-        case ((u, xs), ty) => (u, xs, Impl, ty)
+      ("{" *> usage <~> option("auto") <~> some(bind) <~> option(
+        ":" *> tm
+      ) <* "}").map { case (((u, m), xs), ty) =>
+        (u, xs, PiImpl(m.isDefined), ty)
       }
         <|> attempt("(" *> usage <~> some(bind) <~> ":" *> tm <* ")")
           .map { case ((u, xs), ty) =>
-            (u, xs, Expl, Some(ty))
+            (u, xs, PiExpl, Some(ty))
           }
-        <|> ("(" <~> ")").map(_ => (Many, List(DontBind), Expl, Some(unittype)))
+        <|> ("(" <~> ")").map(_ =>
+          (Many, List(DontBind), PiExpl, Some(unittype))
+        )
 
     private lazy val piSigma: Parsley[Tm] =
       ((some(piSigmaParam) <|> app.map(t =>
-        List((Many, List(DontBind), Expl, Some(t)))
+        List((Many, List(DontBind), PiExpl, Some(t)))
       )) <~> ("->" #> false <|> "**" #> true) <~> tm)
         .map { case ((ps, isSigma), rt) =>
           ps.foldRight(rt) { case ((u, xs, i, ty), rt) =>
@@ -249,9 +254,9 @@ object Parser:
       }
     )
 
-    private type DefParam = (Usage, List[Bind], Icit, Option[Ty])
+    private type DefParam = (Usage, List[Bind], PiIcit, Option[Ty])
     private lazy val defParam: Parsley[DefParam] =
-      attempt(piSigmaParam) <|> bind.map(x => (Many, List(x), Expl, None))
+      attempt(piSigmaParam) <|> bind.map(x => (Many, List(x), PiExpl, None))
 
     private val nConsumeLinearUnit = Var(Name("consumeLinearUnit"))
     private lazy val let: Parsley[Tm] =
@@ -366,7 +371,9 @@ object Parser:
       attempt(
         "{" *> some(bind) <~> option(":" *> tm) <~> "=" *> identOrOp <* "}"
       ).map { case ((xs, ty), y) => (xs, ArgNamed(y), ty) }
-        <|> attempt(piSigmaParam).map((_, xs, i, ty) => (xs, ArgIcit(i), ty))
+        <|> attempt(piSigmaParam).map((_, xs, i, ty) =>
+          (xs, ArgIcit(i.toIcit), ty)
+        )
         <|> bind.map(x => (List(x), ArgIcit(Expl), None))
 
     private lazy val lam: Parsley[Tm] =
@@ -442,7 +449,7 @@ object Parser:
         xs.foldRight(b)(
           Lam(
             _,
-            ArgIcit(i),
+            ArgIcit(i.toIcit),
             if useTypes then Some(ty.getOrElse(hole)) else None,
             _
           )
@@ -487,14 +494,17 @@ object Parser:
       many(defP <|> dataDefP <|> importP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
-      (pos <~> option("opaque") <~> "def" *> identOrOp <~> many(
+      (pos <~> option("auto") <~> option(
+        "opaque"
+      ) <~> "def" *> identOrOp <~> many(
         defParam
       ) <~> option(
         ":" *> tm
       ) <~> (":=" #> false <|> "=" #> true) <~> tm)
-        .map { case ((((((pos, opq), x), ps), ty), m), v) =>
+        .map { case (((((((pos, auto), opq), x), ps), ty), m), v) =>
           DDef(
             pos,
+            auto.isDefined,
             opq.isDefined,
             x,
             m,

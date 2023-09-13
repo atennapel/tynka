@@ -9,12 +9,24 @@ import scala.collection.mutable.ArrayBuffer
 import scala.annotation.tailrec
 
 object Metas:
-  private val metas: ArrayBuffer[MetaEntry] = ArrayBuffer.empty
+  private var metas: ArrayBuffer[MetaEntry] = ArrayBuffer.empty
+  private val stack: ArrayBuffer[ArrayBuffer[MetaEntry]] = ArrayBuffer.empty
 
   enum MetaEntry:
     case Unsolved(deps: Set[MetaId], ty: VTy, cty: Ty, stage: VStage)
     case Solved(deps: Set[MetaId], value: Val, ty: VTy, stage: VStage)
   export MetaEntry.*
+
+  def pushMetas(): Unit =
+    stack += metas
+    metas = metas.clone()
+
+  def useMetas(): Unit =
+    stack.dropRightInPlace(1)
+
+  def discardMetas(): Unit =
+    metas = stack.last
+    stack.dropRightInPlace(1)
 
   def freshMeta(ty: VTy, cty: Ty, stage: VStage): MetaId =
     val id = metaId(metas.size)
