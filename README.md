@@ -39,9 +39,10 @@ TODO:
   - [ ] Private/public definitions
 - [ ] Some form of type classes
   - [x] Search globals
-  - [ ] Approximate inversion for globals
+  - [x] Approximate unification for globals
   - [ ] Search locals
   - [ ] Order globals
+  - [ ] Rename auto?
 - [ ] Remove implicit generalization
 - [ ] Linear pairs
 - [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO

@@ -15,52 +15,68 @@ import scala.util.{Failure, Success, Try}
 object Unification:
   case class UnifyError(msg: String) extends Exception(msg)
 
+  private type Apx = Map[(String, Name), Lvl]
+
   private final case class PSub(
       occ: Option[MetaId],
       dom: Lvl,
       cod: Lvl,
-      sub: IntMap[(Val, Boolean)]
+      sub: IntMap[(Val, Boolean)],
+      apx: Apx
   ):
     def lift: PSub =
-      PSub(occ, dom + 1, cod + 1, sub + (cod.expose, (VVar(dom), false)))
+      PSub(occ, dom + 1, cod + 1, sub + (cod.expose, (VVar(dom), false)), apx)
     def liftN(n: Int): PSub = {
       var c = this
       for (_ <- 0 until n) c = c.lift
       c
     }
-    def skip: PSub = PSub(occ, dom, cod + 1, sub)
+    def skip: PSub = PSub(occ, dom, cod + 1, sub, apx)
 
   private def invert(sp: Spine)(implicit gamma: Lvl): (PSub, Option[Pruning]) =
     def go(
         sp: Spine
-    ): (Lvl, Set[Lvl], IntMap[(Val, Boolean)], Pruning, Boolean) = sp match
-      case SId => (lvl0, Set.empty, IntMap.empty, Nil, true)
+    ): (Lvl, Set[Lvl], IntMap[(Val, Boolean)], Apx, Pruning, Boolean) = sp match
+      case SId => (lvl0, Set.empty, IntMap.empty, Map.empty, Nil, true)
       case SApp(f, a, i) =>
-        val (dom, domvars, sub, pr, isLinear) = go(f)
+        val (dom, domvars, sub, apx, pr, isLinear) = go(f)
         def invertVal(
             x: Lvl,
             invx: Val,
             lifted: Boolean = false
-        ): (Lvl, Set[Lvl], IntMap[(Val, Boolean)], Pruning, Boolean) =
+        ): (Lvl, Set[Lvl], IntMap[(Val, Boolean)], Apx, Pruning, Boolean) =
           if domvars.contains(x) then
-            (dom + 1, domvars, sub - x.expose, None :: pr, false)
+            (dom + 1, domvars, sub - x.expose, apx, None :: pr, false)
           else
             (
               dom + 1,
               domvars + x,
               sub + (x.expose -> (invx, lifted)),
+              apx,
               Some(i) :: pr,
               isLinear
             )
-        force(a) match
+        force(a, UnfoldMetas) match
           case VVar(x)         => invertVal(x, VVar(dom))
           case VQuote(VVar(x)) => invertVal(x, VRigid(HVar(dom), SSplice(SId)))
           case VRigid(HVar(x), SSplice(SId)) => invertVal(x, VQuote(VVar(dom)))
           case VLift(_, VVar(x))             => invertVal(x, VVar(dom), true)
+          case VGlobal(m, x, SId, opq, v) =>
+            if apx.contains((m, x)) then
+              throw UnifyError(s"duplicate global in meta spine: $m/$x")
+            else
+              (
+                dom + 1,
+                domvars,
+                sub,
+                apx + ((m, x) -> dom),
+                Some(i) :: pr,
+                isLinear
+              )
           case _ => throw UnifyError(s"non-var in meta spine")
       case _ => throw UnifyError(s"non-app in meta spine")
-    val (dom, _, sub, pr, isLinear) = go(sp)
-    (PSub(None, dom, gamma, sub), if isLinear then None else Some(pr))
+    val (dom, _, sub, apx, pr, isLinear) = go(sp)
+    (PSub(None, dom, gamma, sub, apx), if isLinear then None else Some(pr))
 
   private def pruneTy(p: RevPruning, a: VTy): Ty =
     def go(p: Pruning, a: VTy)(implicit psub: PSub): Ty = (p, force(a)) match
@@ -70,7 +86,7 @@ object Unification:
       case (None :: p, VPi(_, _, _, _, b)) =>
         go(p, b(VVar(psub.cod)))(psub.skip)
       case _ => impossible()
-    go(p.expose, a)(PSub(None, lvl0, lvl0, IntMap.empty))
+    go(p.expose, a)(PSub(None, lvl0, lvl0, IntMap.empty, Map.empty))
 
   private def pruneMeta(p: Pruning, m: MetaId): Val =
     val u = getMetaUnsolved(m)
@@ -213,7 +229,10 @@ object Unification:
         val inner2 = goSp(Meta(m), sp)
         goSp(inner2, outer)
 
-      case VGlobal(m, x, sp, _, _) => goSp(Global(m, x), sp)
+      case VGlobal(m, x, sp, _, _) =>
+        psub.apx.get((m, x)) match
+          case None    => goSp(Global(m, x), sp)
+          case Some(k) => goSp(Var(k.toIx(psub.dom)), sp)
 
       case VPi(u, x, i, t, b) =>
         Pi(u, x, i, go(t), go(b(VVar(psub.cod)))(psub.lift))
@@ -280,34 +299,49 @@ object Unification:
       unfold: Set[Name]
   ): Unit =
     debug(s"solve ?$m := ${quote(topRhs)}")
-    val (sp, outer) = splitSpine(topSp)
-    val (m2, sp2) = expandVFlex(m, sp)
-    val psub = invert(sp2)
-    if outer.isEmpty then solveWithPSub(m2, psub, topRhs)
-    else
-      force(topRhs) match
-        case VRigid(x, rhsSp) =>
-          @tailrec
-          def goProj(a: Spine, b: Spine, n: Int)(implicit l: Lvl): Unit =
-            (a, n) match
-              case (a, 0)             => go(a, b)
-              case (SProj(a, Snd), n) => goProj(a, b, n - 1)
-              case _ =>
-                throw UnifyError(s"solve ?$m2, spine projection mismatch")
-          def go(a: Spine, b: Spine): Unit = (a, b) match
-            case (SId, b) => solveWithPSub(m2, psub, VRigid(x, b))
-            case (SApp(s1, a, _), SApp(s2, b, _)) => go(s1, s2); unify(a, b)
-            case (SSplice(s1), SSplice(s2))       => go(s1, s2)
-            case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => go(s1, s2)
-            case (SProj(s1, Fst), SProj(s2, Named(_, n)))   => goProj(s1, s2, n)
-            case (SProj(s1, Named(_, n)), SProj(s2, Fst))   => goProj(s1, s2, n)
-            case (SPrim(a, x, i, as1), SPrim(b, y, j, as2))
-                if x == y && i == j =>
-              go(a, b)
-              as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
-            case _ => throw UnifyError(s"solve ?$m2, spine mismatch")
-          go(outer, rhsSp)
-        case _ => throw UnifyError(s"solve ?$m2, invalid spine")
+    def k =
+      val (sp, outer) = splitSpine(topSp)
+      val (m2, sp2) = expandVFlex(m, sp)
+      val psub = invert(sp2)
+      if outer.isEmpty then solveWithPSub(m2, psub, topRhs)
+      else
+        @tailrec
+        def goProj(a: Spine, b: Spine, n: Int, k: Spine => Val)(implicit
+            l: Lvl
+        ): Unit =
+          (a, n) match
+            case (a, 0)             => go(a, b, k)
+            case (SProj(a, Snd), n) => goProj(a, b, n - 1, k)
+            case _ =>
+              throw UnifyError(s"solve ?$m2, spine projection mismatch")
+        def go(a: Spine, b: Spine, k: Spine => Val): Unit = (a, b) match
+          case (SId, b)                         => solveWithPSub(m2, psub, k(b))
+          case (SApp(s1, a, _), SApp(s2, b, _)) => go(s1, s2, k); unify(a, b)
+          case (SSplice(s1), SSplice(s2))       => go(s1, s2, k)
+          case (SProj(s1, p1), SProj(s2, p2)) if p1 == p2 => go(s1, s2, k)
+          case (SProj(s1, Fst), SProj(s2, Named(_, n))) =>
+            goProj(s1, s2, n, k)
+          case (SProj(s1, Named(_, n)), SProj(s2, Fst)) =>
+            goProj(s1, s2, n, k)
+          case (SPrim(a, x, i, as1), SPrim(b, y, j, as2)) if x == y && i == j =>
+            go(a, b, k)
+            as1.zip(as2).foreach { case ((v, _), (w, _)) => unify(v, w) }
+          case _ => throw UnifyError(s"solve ?$m2, spine mismatch")
+        force(topRhs) match
+          case VRigid(x, rhsSp) => go(outer, rhsSp, VRigid(x, _))
+          case _ => throw UnifyError(s"solve ?$m2, invalid spine")
+    force(topRhs, UnfoldMetas) match
+      case VGlobal(mod, x, sp, opq, v) if sp.size == topSp.size =>
+        pushMetas()
+        try
+          unify(topSp, sp)
+          solveWithPSub(m, invert(topSp), VGlobal(mod, x, topSp, opq, v))
+          useMetas()
+        catch
+          case _: UnifyError =>
+            discardMetas()
+            k
+      case _ => k
 
   private def solveWithPSub(
       m: MetaId,
@@ -315,6 +349,7 @@ object Unification:
       rhs: Val
   ): Unit =
     val (psub, pruneNonLinear) = data
+    debug(s"solveWithPSub ?$m := ${quote(rhs)(psub.dom)}")
     val mty = getMetaUnsolved(m).ty
     pruneNonLinear.foreach(pr => pruneTy(revPruning(pr), mty))
     val rhs2 = psubst(rhs)(psub.copy(occ = Some(m)))

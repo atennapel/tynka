@@ -1,0 +1,12 @@
+import "lib/Base" (VTy)
+import "lib/List" as List
+import "lib/List" (List)
+
+opaque def Monoid (A : VTy) =
+  (unit : A) ** (append : A -> A -> A) ** ()
+def MkMonoid {A : VTy} (unit : A) (append : A -> A -> A) : Monoid A =
+  unfold Monoid; [unit, append]
+def unit {A} {auto mon : Monoid A} : A = unfold Monoid; mon.unit
+def append {A} {auto mon : Monoid A} (x y : A) : A = unfold Monoid; mon.append x y
+
+auto def MonoidList {A} : Monoid (List A) = MkMonoid List/Nil List/append

@@ -1,0 +1,12 @@
+import "lib/Base" (VTy)
+import "lib/List" as List
+import "lib/List" (List)
+
+opaque def Functor (F : VTy -> VTy) =
+  {A B : VTy} -> (A -> B) -> F A -> F B
+def MkFunctor {F : VTy -> VTy} (f : {A B : VTy} -> (A -> B) -> F A -> F B) : Functor F =
+  unfold Functor; f
+def map {F} {auto fc : Functor F} {A B : VTy} (f : A -> B) (x : F A) : F B =
+  unfold Functor; fc {A} {B} f x
+
+auto def FunctorList : Functor List = MkFunctor List/map

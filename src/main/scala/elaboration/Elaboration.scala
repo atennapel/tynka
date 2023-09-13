@@ -117,10 +117,13 @@ object Elaboration:
   private def searchAuto(m: Val, ty: VTy, st: VStage)(implicit
       ctx: Ctx
   ): Boolean =
+    debug(
+      s"searchAuto ${ctx.pretty(m)} : ${ctx.pretty(ty)} : ${ctx.pretty(st)}"
+    )
     force(ty) match
       case ty if tooBroad(ty) => false
-      case VUnitType()        => unify(m, VUnit()); true
-      case VSigma(x, t1, t2c) =>
+      case VUnitType() => unify(m, VUnit()); true
+      /*case VSigma(x, t1, t2c) =>
         val m1 = newMeta(t1, SMeta)
         val vm1 = ctx.eval(m1)
         val t2 = t2c(vm1)
@@ -129,17 +132,24 @@ object Elaboration:
         val res1 = searchAuto(vm1, t1, SMeta)
         val res2 = searchAuto(vm2, t2, SMeta)
         unify(m, VPair(vm1, vm2, ty))
-        res1 && res2
+        res1 && res2*/
       case _ =>
         allGlobals.foldLeft(false) {
           case (true, _)              => true
           case (_, (_, e)) if !e.auto => false
           case (_, ((mod, x), e)) =>
+            pushMetas()
+            pushAutos()
             val (etm, gty, gst) = insertPi((Global(mod, x), e.vty, e.vstage))
-            if !tryUnify(gst, st, gty, ty) then false
+            if !tryUnify(gst, st, gty, ty) then
+              discardMetas()
+              discardAutos()
+              false
             else
               val vetm = ctx.eval(etm)
               unify(m, vetm)
+              useMetas()
+              useAutos()
               true
         }
 
@@ -699,7 +709,7 @@ object Elaboration:
   ): (ProjType, VTy) =
     @tailrec
     def go(ty: VTy, ix: Int, ns: Set[Name]): (ProjType, VTy) =
-      force(ty) match
+      forceWithSet(ty, ctx.unfoldSet) match
         case VSigma(DoBind(y), fstty, _) if x == y =>
           (Named(Some(x), ix), fstty)
         case VSigma(y, _, sndty) =>
@@ -1299,15 +1309,17 @@ object Elaboration:
   // elaboration
   private def solveAutos(): Unit =
     debug(s"solveAutos ${autos.size}")
-    val newautos = autos
-      .clone()
+    val autosClone = autos.clone()
+    val result = autosClone
       .map { case e @ (m, ty, st, ctx) =>
         if searchAuto(m, ty, st)(ctx) then None else Some(e)
       }
-      .flatten
-    if newautos.nonEmpty then
-      autos = newautos
-      solveAutos()
+    if result.forall(_.isDefined) then ()
+    else
+      val newautos = result.flatten ++ autos.filterNot(autosClone.contains(_))
+      if newautos.nonEmpty then
+        autos = newautos
+        solveAutos()
 
   private def prettyHoles(implicit ctx0: Ctx): String =
     holes.toList
