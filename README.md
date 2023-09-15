@@ -37,12 +37,12 @@ TODO:
   - [x] Rewrite lib and examples to use modules
   - [ ] Exporting imports
   - [ ] Private/public definitions
-- [ ] Some form of type classes
+- [x] Some form of type classes
   - [x] Search globals
   - [x] Approximate unification for globals
   - [x] Search locals
   - [x] Fix autos from imports
-  - [ ] Order globals
+  - [x] Order globals
   - [ ] Rename auto?
 - [ ] Remove implicit generalization
 - [ ] Linear pairs

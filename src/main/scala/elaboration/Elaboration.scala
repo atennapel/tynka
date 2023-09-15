@@ -65,10 +65,8 @@ object Elaboration:
   private val imports: mutable.Map[String, String] = mutable.Map.empty
   private val importedNames: mutable.Map[Name, (String, Name)] =
     mutable.Map.empty
-  private val accessibleNames: mutable.Set[(String, Name)] = mutable.Set.empty
-
-  private def isImported(mod: String, x: Name)(implicit ctx: Ctx): Boolean =
-    ctx.module == mod || accessibleNames.contains((mod, x))
+  private val accessibleNames: mutable.ArrayBuffer[(String, Name)] =
+    mutable.ArrayBuffer.empty
 
   // holes
   private final case class HoleEntry(
@@ -161,24 +159,26 @@ object Elaboration:
         if res then true
         else
           debug(s"searchAuto globals")
-          allGlobals.foldLeft(false) {
-            case (true, _)              => true
-            case (_, (_, e)) if !e.auto => false
-            case (_, ((mod, x), e)) if isImported(mod, x) =>
-              pushMetas()
-              pushAutos()
-              val (etm, gty, gst) = insertPi((Global(mod, x), e.vty, e.vstage))
-              if !tryUnify(gst, st, gty, ty) then
-                discardMetas()
-                discardAutos()
-                false
+          accessibleNames.toList.reverse.foldLeft(false) {
+            case (true, _) => true
+            case (_, (mod, x)) =>
+              val e = getGlobal(mod, x).get
+              if !e.auto then false
               else
-                val vetm = ctx.eval(etm)
-                unify(m, vetm)
-                useMetas()
-                useAutos()
-                true
-            case _ => false
+                pushMetas()
+                pushAutos()
+                val (etm, gty, gst) =
+                  insertPi((Global(mod, x), e.vty, e.vstage))
+                if !tryUnify(gst, st, gty, ty) then
+                  discardMetas()
+                  discardAutos()
+                  false
+                else
+                  val vetm = ctx.eval(etm)
+                  unify(m, vetm)
+                  useMetas()
+                  useAutos()
+                  true
           }
 
   // metas
@@ -1572,6 +1572,7 @@ object Elaboration:
           )
         )
         val ed = DDef(module, x, ety, estage, etm)
+        if auto then accessibleNames += ((module, x))
         debug(s"elaborated $ed")
         List(ed)
       case S.DData(pos, dx, ps, cs) =>
