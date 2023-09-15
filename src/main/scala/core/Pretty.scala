@@ -75,7 +75,8 @@ object Pretty:
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Var(ix) =>
       val x = ns(ix.expose)
-      if ns.take(ix.expose).contains(x) then
+      if x.expose == "_" then s"$x@${ns.size - ix.expose - 1}"
+      else if ns.take(ix.expose).contains(x) then
         s"${ns(ix.expose)}@${ns.size - ix.expose - 1}"
       else s"$x"
     case Global(m, x) => s"$m/$x"

@@ -140,7 +140,6 @@ object Elaboration:
         val res = ctx.allTypes.zipWithIndex.foldLeft(false) {
           case (true, _)                     => true
           case (_, ((vlty, vlst, false), i)) => false
-          // TODO: check for auto exposed lets
           case (_, ((vlty, vlst, true), i)) =>
             pushMetas()
             pushAutos()

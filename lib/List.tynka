@@ -1,6 +1,7 @@
 import "lib/Base" (...)
 import "lib/IO" (return, (>>=) = bind, (>>>) = seq)
 import "lib/Functor" as Functor
+import "lib/Show" (...)
 
 data List A
   | Nil
@@ -63,3 +64,6 @@ def fastmap {A B : VTy} (f : A -> B) (l : List A) : List B =
         return next
       ) tl;
       return start
+
+-- def ShowList {A} {auto _ : Show A} : Show (List A) =
+--   MkShow (foldr "Nil" (\hd tl. appendStr (appendStr (show hd) "::") tl)) 

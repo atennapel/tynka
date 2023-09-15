@@ -80,6 +80,16 @@ def appendStr (a b : Str) : Str =
 def equalsStr (x y : Str) : Bool =
   foreign Bool "invokeVirtual:java.lang.Object.equals" x (strToJavaObject y)
 
+def unsafeToString {A : VTy} (x : A) : Str =
+  foreign Str "invokeVirtual:java.lang.Object.toString" x
+
+def unsafePrimitiveToString {A : VTy} (x : A) : Str =
+  foreign Str "invokeStatic:java.lang.String.valueOf" x
+
+def intToString (x : Int) : Str = unsafePrimitiveToString x
+def charToString (x : Char) : Str = unsafePrimitiveToString x
+def longToString (x : Long) : Str = unsafePrimitiveToString x
+
 def lengthStr (x : Str) : Int =
   foreign Int "invokeVirtual:java.lang.String.length" x
 
