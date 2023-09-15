@@ -26,6 +26,7 @@ final case class Ctx(
     locals: Locals,
     pruning: Pruning,
     types: Types,
+    allTypes: List[(VTy, VStage, Boolean)],
     unfoldSet: Set[Name],
     pos: PosInfo,
     module: String
@@ -40,6 +41,7 @@ final case class Ctx(
 
   def bind(
       u: Usage,
+      auto: Boolean,
       x: Bind,
       ty: VTy,
       stage: VStage,
@@ -55,6 +57,7 @@ final case class Ctx(
       Bound(locals, x, quote(ty), quote(stage)),
       Some(Expl) :: pruning,
       newtypes,
+      (ty, stage, auto) :: allTypes,
       unfoldSet,
       pos,
       module
@@ -62,6 +65,7 @@ final case class Ctx(
 
   def define(
       u: Usage,
+      auto: Boolean,
       x: Name,
       ty: VTy,
       qty: Ty,
@@ -77,6 +81,7 @@ final case class Ctx(
       Defined(locals, x, qty, qstage, qvalue),
       None :: pruning,
       types + (x -> (u, lvl, ty, stage)),
+      (ty, stage, auto) :: allTypes,
       unfoldSet,
       pos,
       module
@@ -128,4 +133,4 @@ final case class Ctx(
 
 object Ctx:
   def empty(pos: PosInfo, module: String): Ctx =
-    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, Set.empty, pos, module)
+    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, Nil, Set.empty, pos, module)

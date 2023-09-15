@@ -94,6 +94,7 @@ object Syntax:
     case Var(name: Name, rigid: Boolean = false)
     case Let(
         usage: Usage,
+        auto: Boolean,
         name: Name,
         meta: Boolean,
         ty: Option[Ty],
@@ -139,7 +140,7 @@ object Syntax:
 
     def free: List[Name] = this match
       case Var(name, _) => List(name)
-      case Let(_, name, meta, ty, value, body) =>
+      case Let(_, _, name, meta, ty, value, body) =>
         ty.map(_.free).getOrElse(Nil) ++ value.free ++ body.free.filterNot(
           _ == name
         )
@@ -183,10 +184,14 @@ object Syntax:
     override def toString: String = this match
       case Var(x, true) => s"rigid $x"
       case Var(x, _)    => s"$x"
-      case Let(u, x, m, None, v, b) =>
-        s"(let ${u.prefix}$x ${if m then "" else ":"}= $v; $b)"
-      case Let(u, x, m, Some(t), v, b) =>
-        s"(let ${u.prefix}$x : $t ${if m then "" else ":"}= $v; $b)"
+      case Let(u, auto, x, m, None, v, b) =>
+        s"(let ${u.prefix}${if auto then "auto " else ""}$x ${
+            if m then "" else ":"
+          }= $v; $b)"
+      case Let(u, auto, x, m, Some(t), v, b) =>
+        s"(let ${u.prefix}${if auto then "auto " else ""}$x : $t ${
+            if m then "" else ":"
+          }= $v; $b)"
       case U(s)          => s"$s"
       case Unfold(xs, b) => s"(unfold ${xs.mkString(" ")}; $b)"
 

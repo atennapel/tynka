@@ -40,7 +40,8 @@ TODO:
 - [ ] Some form of type classes
   - [x] Search globals
   - [x] Approximate unification for globals
-  - [ ] Search locals
+  - [x] Search locals
+  - [ ] Fix autos from imports
   - [ ] Order globals
   - [ ] Rename auto?
 - [ ] Remove implicit generalization

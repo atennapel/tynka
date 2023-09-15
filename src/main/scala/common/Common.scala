@@ -84,6 +84,10 @@ object Common:
     def toIcit: Icit = this match
       case PiExpl         => Expl
       case PiImpl(search) => Impl
+
+    def isAuto: Boolean = this match
+      case PiExpl => false
+      case PiImpl(auto) => auto
   export PiIcit.*
 
   // pruning
