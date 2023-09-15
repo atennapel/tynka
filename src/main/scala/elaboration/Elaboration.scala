@@ -65,6 +65,10 @@ object Elaboration:
   private val imports: mutable.Map[String, String] = mutable.Map.empty
   private val importedNames: mutable.Map[Name, (String, Name)] =
     mutable.Map.empty
+  private val accessibleNames: mutable.Set[(String, Name)] = mutable.Set.empty
+
+  private def isImported(mod: String, x: Name)(implicit ctx: Ctx): Boolean =
+    ctx.module == mod || accessibleNames.contains((mod, x))
 
   // holes
   private final case class HoleEntry(
@@ -160,7 +164,7 @@ object Elaboration:
           allGlobals.foldLeft(false) {
             case (true, _)              => true
             case (_, (_, e)) if !e.auto => false
-            case (_, ((mod, x), e)) =>
+            case (_, ((mod, x), e)) if isImported(mod, x) =>
               pushMetas()
               pushAutos()
               val (etm, gty, gst) = insertPi((Global(mod, x), e.vty, e.vstage))
@@ -174,6 +178,7 @@ object Elaboration:
                 useMetas()
                 useAutos()
                 true
+            case _ => false
           }
 
   // metas
@@ -1544,6 +1549,7 @@ object Elaboration:
                   Ctx.empty(pos, module)
                 )
               importedNames += (x -> (m, y))
+              accessibleNames += ((m, y))
             }
             Nil
       case S.DDef(pos, auto, opq, x, m, t, v) =>

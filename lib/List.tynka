@@ -1,5 +1,6 @@
 import "lib/Base" (...)
 import "lib/IO" (return, (>>=) = bind, (>>>) = seq)
+import "lib/Functor" as Functor
 
 data List A
   | Nil
@@ -26,6 +27,8 @@ def foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
 
 def map {A B : VTy} (f : A -> B) (l : List A) : List B =
   foldr Nil (\hd tl. f hd :: tl) l
+
+auto def FunctorList : Functor/Functor List = Functor/MkFunctor map
 
 def append {A : VTy} (a b : List A) : List A = foldr b (::) a
 

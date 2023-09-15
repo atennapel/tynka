@@ -41,7 +41,7 @@ TODO:
   - [x] Search globals
   - [x] Approximate unification for globals
   - [x] Search locals
-  - [ ] Fix autos from imports
+  - [x] Fix autos from imports
   - [ ] Order globals
   - [ ] Rename auto?
 - [ ] Remove implicit generalization
