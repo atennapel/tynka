@@ -9,7 +9,7 @@ def subInt = jvmBinopInt "100"
 def mulInt = jvmBinopInt "104"
 def divInt = jvmBinopInt "108"
 def modInt = jvmBinopInt "112"
-def negInt = jvmBinopInt "116"
+def negInt (a : Int) = foreign Int "op:116" a
 def incInt = addInt 1
 def decInt n = subInt n 1
 
@@ -35,6 +35,14 @@ def modLong = jvmBinopLong "113"
 def negLong = jvmBinopLong "117"
 def incLong = addLong (longFromInt 1)
 def decLong n = subLong n (longFromInt 1)
+
+def cmpLong (a b : Long) : Int = foreign Int "op:148" a b
+def eqLong a b = eqInt 0 (cmpLong a b)
+def neqLong a b = neqInt 0 (cmpLong a b)
+def ltLong a b = eqInt (negInt 1) (cmpLong a b)
+def geqLong a b = geqInt (cmpLong a b) 0
+def gtLong a b = eqInt 1 (cmpLong a b)
+def leqLong a b = leqInt (cmpLong a b) 0
 
 -- Char
 def Char = Foreign "C"
