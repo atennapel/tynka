@@ -8,5 +8,6 @@ def show {A} {auto show : Show A} (x : A) : Str = unfold Show; show x
 auto def ShowInt : Show Int = MkShow intToString
 auto def ShowChar : Show Char = MkShow charToString
 auto def ShowLong : Show Long = MkShow longToString
+auto def ShowStr : Show Str = MkShow \s. s
 
 def putShowLn {A} {auto _ : Show A} (x : A) : IO Unit = putLn (show x)

@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 object Elaboration:
-  val AUTO_SEARCH_LIMIT = 1000
+  val AUTO_SEARCH_LIMIT = 100
 
   // errors
   final case class ElaborateError(pos: PosInfo, uri: String, msg: String)
@@ -164,12 +164,15 @@ object Elaboration:
         if res then true
         else
           debug(s"searchAuto globals")
-          accessibleNames.toList.reverse.foldLeft(false) {
+          val globals = accessibleNames.toList.reverse.distinct
+          println(globals)
+          val res = globals.foldLeft(false) {
             case (true, _) => true
             case (_, (mod, x)) =>
               val e = getGlobal(mod, x).get
               if !e.auto then false
               else
+                debug(s"try auto $mod/$x")
                 pushMetas()
                 pushAutos()
                 val (etm, gty, gst) =
@@ -177,14 +180,18 @@ object Elaboration:
                 if !tryUnify(gst, st, gty, ty) then
                   discardMetas()
                   discardAutos()
+                  debug(s"auto match failed: $mod/$x")
                   false
                 else
                   val vetm = ctx.eval(etm)
                   unify(m, vetm)
                   useMetas()
                   useAutos()
+                  debug(s"auto match found: $mod/$x")
                   true
           }
+          debug(s"search globals done: $res")
+          res
 
   // metas
   private def newMeta(ty: VTy, s: VStage)(implicit ctx: Ctx): Tm =

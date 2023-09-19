@@ -2,11 +2,14 @@ import "lib/Base" (...)
 import "lib/IO" (return, (>>=) = bind, (>>>) = seq)
 import "lib/Functor" as Functor
 import "lib/Show" (...)
-import "lib/JVM" (appendStr)
+import "lib/Monoid" (...)
+import "lib/JVM" (Str, appendStr)
 
 data List A
   | Nil
   | (::) A List
+
+def singleton {A} (x : A) : List A = x :: Nil
 
 def isEmpty {A : VTy} (l : List A) : Bool =
   match l
@@ -33,6 +36,11 @@ def map {A B : VTy} (f : A -> B) (l : List A) : List B =
 auto def FunctorList : Functor/Functor List = Functor/MkFunctor map
 
 def append {A : VTy} (a b : List A) : List A = foldr b (::) a
+
+auto def MonoidList {A} : Monoid (List A) = MkMonoid Nil append
+
+def mconcat {A} {auto monoid : Monoid A} (l : List A) : A =
+  foldr munit (++) l
 
 def reverse {A : VTy} (l : List A) : List A =
   fix (go l. \acc. match l
@@ -66,5 +74,10 @@ def fastmap {A B : VTy} (f : A -> B) (l : List A) : List B =
       ) tl;
       return start
 
-def ShowList {A} {auto _ : Show A} : Show (List A) =
-  MkShow (foldr "Nil" (\hd tl. appendStr (appendStr (show hd) "::") tl)) 
+def join {A} {auto _ : Show A} (s : Str) (l : List A) : Str =
+  match l
+  | Nil. ""
+  | (::) hd tl. foldl (show hd) (\acc hd'. acc ++ s ++ show hd') tl
+
+auto def ShowList {A} {auto _ : Show A} : Show (List A) =
+  MkShow {List A} \l. "[" ++ join "," l ++ "]"
