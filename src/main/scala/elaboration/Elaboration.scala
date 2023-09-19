@@ -15,6 +15,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 object Elaboration:
+  val AUTO_SEARCH_LIMIT = 1000
+
   // errors
   final case class ElaborateError(pos: PosInfo, uri: String, msg: String)
       extends Exception(msg)
@@ -88,6 +90,10 @@ object Elaboration:
   private val autoStack
       : mutable.ArrayBuffer[mutable.ArrayBuffer[(Val, VTy, VStage, Ctx)]] =
     mutable.ArrayBuffer.empty
+
+  private def resetAutos(): Unit =
+    autos.clear()
+    autoStack.clear()
 
   private def pushAutos(): Unit =
     autoStack += autos
@@ -1356,19 +1362,21 @@ object Elaboration:
         infer(b)(ctx.unfold(xs))
 
   // elaboration
-  private def solveAutos(): Unit =
-    debug(s"solveAutos ${autos.size}")
-    val autosClone = autos.clone()
-    val result = autosClone
-      .map { case e @ (m, ty, st, ctx) =>
-        if searchAuto(m, ty, st)(ctx) then None else Some(e)
-      }
-    if result.forall(_.isDefined) then ()
+  private def solveAutos(count: Int): Unit =
+    if count >= AUTO_SEARCH_LIMIT then
+      debug(s"auto search limit reached (${AUTO_SEARCH_LIMIT})")
+      ()
     else
+      debug(s"solveAutos ${autos.size}")
+      val autosClone = autos.clone()
+      val result = autosClone
+        .map { case e @ (m, ty, st, ctx) =>
+          if searchAuto(m, ty, st)(ctx) then None else Some(e)
+        }
       val newautos = result.flatten ++ autos.filterNot(autosClone.contains(_))
-      if newautos.nonEmpty then
-        autos = newautos
-        solveAutos()
+      autos = newautos
+      if autos.nonEmpty then solveAutos(count + 1)
+      else ()
 
   private def prettyHoles(implicit ctx0: Ctx): String =
     holes.toList
@@ -1384,12 +1392,19 @@ object Elaboration:
       ctx: Ctx
   ): (Tm, Ty, CStage) =
     resetMetas()
+    resetAutos()
     holes.clear()
 
     val vstage = if meta then SMeta else STy(ctx.eval(newCV()))
     val (etm_, ety_, _, _) = check(tm, ty, vstage, true)
 
-    if autos.nonEmpty then solveAutos()
+    if autos.nonEmpty then solveAutos(0)
+    if autos.nonEmpty then
+      error(s"not all autos were solved (${autos.size}):\n${autos
+          .map { (m, t, s, ctx) =>
+            s"${ctx.pretty(m)} : ${ctx.pretty(t)} : ${ctx.pretty(s)}"
+          }
+          .mkString("\n")}")
 
     val etm = ctx.zonk(etm_)
     val ety = ctx.zonk(ety_)

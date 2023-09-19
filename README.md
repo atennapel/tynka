@@ -43,7 +43,6 @@ TODO:
   - [x] Search locals
   - [x] Fix autos from imports
   - [x] Order globals
-  - [ ] Fix ShowList bug
   - [ ] Rename auto?
   - [ ] Better syntax for unnamed auto parameters
 - [ ] Remove implicit generalization
