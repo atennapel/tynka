@@ -1,0 +1,22 @@
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/StateN" as StateN
+import "lib/StateN" (StateN)
+import "lib/Meta" (ListM, NilM, ConsM)
+
+def (+) = addInt
+def return = StateN/return
+def (>>=) = StateN/bind
+def (>>>) = StateN/seq
+def (<$>) = StateN/map
+
+def State : ListM VTy = ConsM Int (ConsM Int NilM)
+
+def fibStep (a b : Int) : Int ** Int ** () = [b, a + b]
+
+def fibState (n : Int) : StateN State Int =
+  StateN/loopN n (StateN/update {State} fibStep) >>> (fst <$> StateN/get {State})
+
+def fib (n : Int) : Int := StateN/exec (fibState n) 0 1
+
+def main (_ : Array Str) := putLn (fib 8)

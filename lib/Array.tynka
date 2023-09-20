@@ -1,0 +1,106 @@
+import "lib/Base" (...)
+import "lib/IO" (return, (>>=) = bind)
+import "lib/Jvm" (Int, (>=) = geqInt, (<) = ltInt, (==) = eqInt, (+) = addInt, (-) = subInt)
+
+def new {A : VTy} (length : Int) (initial : A) : IO (Array A) =
+  foreignIO (Array A) "arrayNew" length initial
+
+def unsafeNew {A : VTy} (length : Int) : IO (Array A) =
+  foreignIO (Array A) "arrayUnsafeNew" length
+
+def length {A : VTy} (array : Array A) : IO Int =
+  foreignIO Int "arrayLength" array
+
+def get {A : VTy} (index : Int) (array : Array A) : IO A =
+  foreignIO A "arrayGet" index array
+
+def set {A : VTy} (index : Int) (value : A) (array : Array A) : IO Unit =
+  foreignIO Unit "arraySet" index value array
+
+def updateIO {A : VTy} (i : Int) (f : A -> IO A) (a : Array A) : IO A =
+  do
+    x <- get i a;
+    x' <- f x;
+    set i x' a;
+    return x
+
+def update {A : VTy} (i : Int) (f : A -> A) (a : Array A) : IO A =
+  updateIO i (\x. return (f x)) a
+
+def foldrWithIndexIO {A B : VTy} (n : B) (c : Int -> A -> B -> IO B) (a : Array A) : IO B =
+  do
+    l <- length a;
+    fix (go i. \acc.
+      if i >= 0 then do
+        x <- get i a;
+        acc' <- c i x acc;
+        go (i - 1) acc'
+      else
+        return acc
+    ) (l - 1) n
+
+def foldrIO {A B : VTy} (n : B) (c : A -> B -> IO B) (a : Array A) : IO B =
+  foldrWithIndexIO n (\_. c) a
+
+def foldrWithIndex {A B : VTy} (n : B) (c : Int -> A -> B -> B) (a : Array A) : IO B =
+  foldrWithIndexIO n (\i hd acc. return (c i hd acc)) a
+
+def foldr {A B : VTy} (n : B) (c : A -> B -> B) (a : Array A) : IO B =
+  foldrWithIndex n (\_. c) a
+
+def foldlWithIndexIO {A B : VTy} (n : B) (c : Int -> B -> A -> IO B) (a : Array A) : IO B =
+  do
+    l <- length a;
+    fix (go i. \acc.
+      if i < l then do
+        x <- get i a;
+        acc' <- (c i acc x);
+        go (i + 1) acc'
+      else
+        return acc
+    ) 0 n
+
+def foldlIO {A B : VTy} (n : B) (c : B -> A -> IO B) (a : Array A) : IO B =
+  foldlWithIndexIO n (\_. c) a
+
+def foldlWithIndex {A B : VTy} (n : B) (c : Int -> B -> A -> B) (a : Array A) : IO B =
+  foldlWithIndexIO n (\i acc hd. return (c i acc hd)) a
+
+def foldl {A B : VTy} (n : B) (c : B -> A -> B) (a : Array A) : IO B =
+  foldlWithIndex n (\_. c) a
+
+def eachWithIndex {A : VTy} (a : Array A) (f : Int -> A -> IO Unit) : IO Unit =
+  foldlWithIndexIO U (\i _ hd. f i hd) a
+
+def each {A : VTy} (a : Array A) (f : A -> IO Unit) : IO Unit =
+  eachWithIndex a \_ hd. f hd
+
+def mutmapIO {A : VTy} (f : Int -> A -> IO A) (a : Array A) : IO Unit =
+  eachWithIndex a \i x. do
+    x' <- f i x;
+    set i x' a
+
+def mutmap {A : VTy} (f : Int -> A -> A) (a : Array A) : IO Unit =
+  mutmapIO (\i x. return (f i x)) a
+
+def newInitIO {A : VTy} (length : Int) (f : Int -> IO A) : IO (Array A) =
+  do
+    a <- unsafeNew length;
+    mutmapIO (\i _. f i) a;
+    return a
+
+def newInit {A : VTy} (length : Int) (f : Int -> A) : IO (Array A) =
+  newInitIO length (\i. return (f i))
+
+def mapIO {A B : VTy} (f : A -> IO B) (a : Array A) : IO (Array B) =
+  do
+    l <- length a;
+    newInitIO l (\i. do
+      x <- get i a;
+      f x)
+
+def map {A B : VTy} (f : A -> B) (a : Array A) : IO (Array B) =
+  mapIO (\x. return (f x)) a
+
+def clone {A B : VTy} (a : Array A) : IO (Array A) =
+  map (\x. x) a

@@ -1,0 +1,57 @@
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/IO" as IO
+import "lib/Free" as Free
+import "lib/Free" (Free, FunctorM)
+
+def (+) a b = addInt a b
+def (>>=) = Free/bind
+def return = Free/return
+
+-- church-encoded state monad
+def StateF (S : VTy) (A : Meta) = (cv : CV) (R : Ty cv) -> ((S -> A) -> R) -> (S -> A -> R) -> R 
+
+def handleStateF
+  {S : VTy} {A : Meta} {cv : CV} {R : Ty cv}
+  (get : (S -> A) -> R) (put : S -> A -> R) (s : StateF S A) : R =
+  s _ R get put
+
+def FunctorStateF {S : VTy} : FunctorM (StateF S) =
+  \f x. \cv R get put. x _ R (\k. get (\x. f (k x))) (\s k. put s (f k))
+
+def State S A = Free (StateF S) A
+
+def get {S : VTy} : State S S = Free/lift FunctorStateF (\cv R get put. get (\s. s))
+def put {S : VTy} (s : S) : State S Unit = Free/lift FunctorStateF (\cv R get put. put s U)
+
+-- concrete State monad
+def StateI (S A : VTy) = S -> Pair S A
+def returnI {S A : VTy} (a : A) : StateI S A = \s. (s, a)
+def getI {S} : StateI S S = \s. (s, s)
+def putI {S : VTy} (s : S) : StateI S Unit = \_. (s, [])
+def bindI {S A B : VTy} (c : StateI S A) (f : A -> StateI S B) : StateI S B =
+  \s. match (c s) | MkPair s' res. f res s'
+
+-- example
+def example : State Int Int = do
+  put 1;
+  x <- get;
+  put (x + 1);
+  y <- get;
+  return y
+
+def handleConstant {S A : VTy} (c : S) (s : State S A) : A =
+  Free/handle s (\x. x) \. handleStateF
+    (\k. k c)
+    (\_ k. k)
+
+def handleConcrete {S A : VTy} (s : State S A) : StateI S A =
+  Free/handle s (\x. returnI x) \. handleStateF
+    (\k. bindI getI k)
+    (\x k. bindI (putI x) \_. k)
+
+def testmain : Int :=
+  handleConstant 1 example
+
+def main : Pair Int Int :=
+  handleConcrete example 1

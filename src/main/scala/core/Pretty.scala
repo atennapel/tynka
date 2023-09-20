@@ -14,30 +14,28 @@ object Pretty:
   private def prettySigma(tm: Tm)(implicit ns: List[Name]): String = tm match
     case Sigma(DontBind, t, b) =>
       s"${prettyParen(t, true)} ** ${prettySigma(b)(DontBind.toName :: ns)}"
-    case Sigma(DoBind(x0), t, b) =>
-      val x = x0.fresh
+    case Sigma(DoBind(x), t, b) =>
       s"($x : ${pretty(t)}) ** ${prettySigma(b)(x :: ns)}"
     case rest => pretty(rest)
 
   private def prettyPi(tm: Tm)(implicit ns: List[Name]): String = tm match
-    case Pi(DontBind, Expl, t, b) =>
+    case Fun(Many, a, _, b) => s"${prettyParen(a, true)} -> ${prettyPi(b)}"
+    case Fun(u, a, _, b) =>
+      s"${prettyParen(a, true)} ${u.prefix}-> ${prettyPi(b)}"
+    case Pi(Many, DontBind, PiExpl, t, b) =>
       s"${prettyParen(t, true)} -> ${prettyPi(b)(DontBind.toName :: ns)}"
-    case Pi(DoBind(x0), Expl, t, b) =>
-      val x = x0.fresh
-      s"($x : ${pretty(t)}) -> ${prettyPi(b)(x :: ns)}"
-    case Pi(x0, Impl, t, b) =>
-      val x = x0.fresh
-      s"{$x : ${pretty(t)}} -> ${prettyPi(b)(x.toName :: ns)}"
+    case Pi(u, DoBind(x), PiExpl, t, b) =>
+      s"(${u.prefix}$x : ${pretty(t)}) -> ${prettyPi(b)(x :: ns)}"
+    case Pi(u, x, i, t, b) =>
+      s"${i.wrap(s"${u.prefix}$x : ${pretty(t)}")} -> ${prettyPi(b)(x.toName :: ns)}"
     case rest => pretty(rest)
 
   private def prettyLam(tm: Tm)(implicit ns: List[Name]): String =
     def go(tm: Tm, first: Boolean = false)(implicit ns: List[Name]): String =
       tm match
-        case Lam(x0, Expl, _, b) =>
-          val x = x0.fresh
+        case Lam(x, Expl, _, b) =>
           s"${if first then "" else " "}$x${go(b)(x.toName :: ns)}"
-        case Lam(x0, Impl, _, b) =>
-          val x = x0.fresh
+        case Lam(x, Impl, _, b) =>
           s"${if first then "" else " "}{$x}${go(b)(x.toName :: ns)}"
         case rest => s". ${pretty(rest)}"
     s"\\${go(tm, true)}"
@@ -48,6 +46,8 @@ object Pretty:
   ): String =
     tm match
       case Var(_)              => pretty(tm)
+      case IntLit(_)           => pretty(tm)
+      case StringLit(_)        => pretty(tm)
       case Global(_, _)        => pretty(tm)
       case Prim(_)             => pretty(tm)
       case Pair(_, _, _)       => pretty(tm)
@@ -59,9 +59,7 @@ object Pretty:
       case AppPruning(_, _)    => pretty(tm)
       case App(_, _, _) if app => pretty(tm)
       case U(_)                => pretty(tm)
-      case IntLit(_)           => pretty(tm)
       case Irrelevant          => pretty(tm)
-      case StringLit(_)        => pretty(tm)
       case Wk(tm)              => prettyParen(tm, app)(ns.tail)
       case _                   => s"(${pretty(tm)})"
 
@@ -75,24 +73,29 @@ object Pretty:
   def pretty(s: CStage)(implicit ns: List[Name]): String = s"${s.map(pretty)}"
 
   def pretty(tm: Tm)(implicit ns: List[Name]): String = tm match
-    case Var(ix)      => s"${ns(ix.expose)}"
-    case Global(m, x) => s"$m:$x"
+    case Var(ix) =>
+      val x = ns(ix.expose)
+      if x.expose == "_" then s"$x@${ns.size - ix.expose - 1}"
+      else if ns.take(ix.expose).contains(x) then
+        s"${ns(ix.expose)}@${ns.size - ix.expose - 1}"
+      else s"$x"
+    case Global(m, x) => s"$m/$x"
     case Prim(x)      => s"$x"
-    case Let(x0, t, s, _, v, b) =>
-      val x = x0.fresh
+    case IntLit(x)    => s"$x"
+    case StringLit(x) => s"\"$x\""
+    case Let(u, x, t, s, _, v, b) =>
       val ss = s match
         case SMeta  => ""
         case STy(_) => ":"
-      s"let $x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
+      s"let ${u.prefix}$x : ${pretty(t)} $ss= ${pretty(v)}; ${prettyLift(x, b)}"
     case U(s) => pretty(s)
 
-    case Pi(_, _, _, _)  => prettyPi(tm)
-    case Lam(_, _, _, _) => prettyLam(tm)
-    case App(_, _, _)    => prettyApp(tm)
+    case Pi(_, _, _, _, _) => prettyPi(tm)
+    case Fun(_, _, _, _)   => prettyPi(tm)
+    case Lam(_, _, _, _)   => prettyLam(tm)
+    case App(_, _, _)      => prettyApp(tm)
 
-    case Fix(_, _, g0, x0, b, arg) =>
-      val g = g0.fresh
-      val x = x0.fresh
+    case Fix(_, _, g, x, b, arg) =>
       s"fix ($g $x. ${prettyParen(b)(x.toName :: g.toName :: ns)}) ${prettyParen(arg)}"
 
     case Sigma(_, _, _) => prettySigma(tm)
@@ -101,32 +104,30 @@ object Pretty:
       if es.last == Prim(PUnit) then s"[${es.init.map(pretty).mkString(", ")}]"
       else s"(${es.map(pretty).mkString(", ")})"
     case Proj(t, p, _, _) => s"${prettyParen(t)}$p"
-    case TPair(a, b)      => s"TPair ${prettyParen(a)} ${prettyParen(b)}"
-
-    case IntLit(n)    => s"$n"
-    case StringLit(v) => s"\"$v\""
-
-    case TCon(x0, Nil) =>
-      val x = x0.fresh
-      s"tcon $x."
-    case TCon(x0, cs) =>
-      val x = x0.fresh
-      s"tcon $x. ${cs.map(as => s"(${as.map(a => prettyParen(a)(x.toName :: ns)).mkString(" ")})").mkString(" ")}"
-    case Con(ty, i, Nil) => s"con ${prettyParen(ty)} #$i"
-    case Con(ty, i, as) =>
-      s"con ${prettyParen(ty)} #$i ${as.map(a => prettyParen(a)).mkString(" ")}"
-    case Case(ty, _, s, Nil) => s"case ${prettyParen(ty)} ${prettyParen(s)}"
-    case Case(ty, _, s, cs) =>
-      s"case ${prettyParen(ty)} ${prettyParen(s)} ${cs.map(a => prettyParen(a)).mkString(" ")}"
 
     case Lift(_, t) => s"^${prettyParen(t)}"
     case Quote(t)   => s"`${prettyParen(t)}"
     case Splice(t)  => s"$$${prettyParen(t)}"
 
-    case Foreign(rt, cmd, Nil) =>
-      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)}"
-    case Foreign(rt, cmd, as) =>
-      s"foreign ${prettyParen(rt)} ${prettyParen(cmd)} ${as.map((a, _) => prettyParen(a)).mkString(" ")}"
+    case Data(x, Nil) => s"data $x."
+    case Data(x, as) =>
+      s"data $x. ${as.map((c, as) => s"$c ${as.map((x, t) => s"($x : $t)").mkString(" ")}").mkString(" | ")}"
+    case Con(c, t, Nil) => s"con $c {$t}"
+    case Con(c, t, as)  => s"con $c {$t} ${as.mkString(" ")}"
+
+    case Match(_, _, scrut, cs, other) =>
+      s"match ${prettyParen(scrut, true)} ${cs
+          .map((c, _, _, b) => s"| $c ${pretty(b)}")
+          .mkString(" ")}${if other.isDefined then " " else ""}${other
+          .map(t => s"| ${pretty(t)}")
+          .getOrElse("")}"
+
+    case Foreign(io, rt, cmd, Nil) =>
+      s"foreign${if io then "IO" else ""} ${prettyParen(rt)} ${prettyParen(cmd)}"
+    case Foreign(io, rt, cmd, as) =>
+      s"foreign${if io then "IO" else ""} ${prettyParen(rt)} ${prettyParen(
+          cmd
+        )} ${as.map((a, _) => prettyParen(a)).mkString(" ")}"
 
     case Wk(tm)     => pretty(tm)(ns.tail)
     case Irrelevant => "Ir"
@@ -136,8 +137,8 @@ object Pretty:
 
   def pretty(d: Def): String = d match
     case DDef(m, x, t, SMeta, v) =>
-      s"def $m:$x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
+      s"def $m/$x : ${pretty(t)(Nil)} = ${pretty(v)(Nil)}"
     case DDef(m, x, t, STy(_), v) =>
-      s"def $m:$x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
+      s"def $m/$x : ${pretty(t)(Nil)} := ${pretty(v)(Nil)}"
 
   def pretty(ds: Defs): String = ds.toList.map(pretty).mkString("\n")

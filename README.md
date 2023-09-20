@@ -5,48 +5,56 @@ We have a language with two layers, one compile-time layer with full dependent t
 
 Try it out:
 ```
-sbt "run examples/IO"
-java IO
+sbt "run examples/IOExample"
+java examples/IOExample
 ```
 
 TODO:
+- [x] Datatype monomorphization
+- [x] Match expressions
+- [x] IO
+- [x] Interpreter
+- [x] Implicit generalization
 - [x] JVM bytecode generation
-- [x] Tail recursion
-- [x] Datatypes
-- [x] Improve `fix` type inference
-- [x] More primitive operations for `Int`
-- [x] Fix weakening bug in pretty printing `case`
-- [x] Optimize `Bool`-like types
-- [x] Optimize `Unit`-like types
-- [x] Optimize `Void`-like types
-- [x] Optimize finite types to `Int`
-- [x] Syntax sugar for datatype definitions
-- [x] Optimize constructor elimination (only bind used values)
-- [x] Boxing
-- [x] Optimize single constructor types (product-like)
-- [x] Add new-types
-- [x] Basic file importing
-- [x] Modules, or a way to handle name clashes
-- [x] Value level strings
-- [x] Syntax to re-export definitions
-- [ ] Fix re-export duplication
-- [ ] Cannot access operators in modules
-- [ ] Import with renaming
-- [ ] Public/private definitions
-- [ ] Do not export imported definitions
-- [ ] Remove unused defs (starting from main)
-- [ ] JVM slot reuse
-- [ ] Inline tail recursive functions
-- [ ] IO should generate 0-arity method
-- [ ] Optimize unit parameters
-- [ ] Relative file including
-- [ ] Improve inference for if condition
-- [ ] Value level syntax for unit
-- [ ] Arrays
-- [ ] Dependency ordering of surface definitions
-- [ ] Keep generics signature in JVM bytecode output
-- [ ] Records
-- [ ] Coercion over constructors
-- [ ] Closures, thunks, JVM generics
-- [ ] Irregular/nested datatype recursion
-- [ ] Optimize case + prim-branch
+- [x] Foreign datatypes
+- [x] Foreign operations
+- [x] Integrate foreign with IO
+- [x] Do syntax for monads
+- [x] Imports
+- [x] Add arrays in IO
+- [x] Add linearity in Ty
+- [x] ST monad
+- [x] Opaque definitions
+- [x] Safe field access in Con
+- [x] Access to Con in pattern matching
+- [x] Add IdM, BoolM and IFixM to Meta-level
+- [x] Try to write n-ary State monad
+- [ ] Modules
+  - [x] Renaming
+  - [x] Qualified imports
+  - [x] Import hiding
+  - [x] Fix modules in staging/compilation
+  - [x] Rewrite lib and examples to use modules
+  - [ ] Exporting imports
+  - [ ] Private/public definitions
+- [x] Some form of type classes
+  - [x] Search globals
+  - [x] Approximate unification for globals
+  - [x] Search locals
+  - [x] Fix autos from imports
+  - [x] Order globals
+  - [ ] Rename auto?
+  - [ ] Better syntax for unnamed auto parameters
+- [ ] Remove implicit generalization
+- [ ] Linear pairs
+- [ ] Try to get rid of `boolean bl = false;` in JVM bytecode due to IO
+- [ ] Support trampolines
+- [ ] Improve syntax for recursive functions
+- [ ] Higher-kinded type parameters for 
+- [ ] Partially-static data
+- [ ] Records/variants
+- [ ] Val Rep: Boxed or Unboxed
+
+BUGS:
+- [ ] Fix duplicate definitions import bug
+- [ ] Fix naming issues in datatypes and generated JVM bytecode

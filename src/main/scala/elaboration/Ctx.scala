@@ -17,44 +17,55 @@ import core.Locals.*
 
 import scala.annotation.tailrec
 
-type Types = Map[Name, (Lvl, VTy, VStage)]
+type Types = Map[Name, (Usage, Lvl, VTy, VStage)]
 
 final case class Ctx(
+    usage: Usage,
     lvl: Lvl,
     env: Env,
     locals: Locals,
     pruning: Pruning,
     types: Types,
-    module: String,
-    pos: PosInfo
+    allTypes: List[(VTy, VStage, Boolean)],
+    unfoldSet: Set[Name],
+    pos: PosInfo,
+    module: String
 ):
   def names: List[Name] = locals.names
 
-  def fresh(x: Name): Name = x.fresh(names)
-  def fresh(x: Bind): Bind = x.fresh(names)
-
   def enter(pos: PosInfo): Ctx = copy(pos = pos)
 
+  def unfold(xs: List[Name]): Ctx = copy(unfoldSet = unfoldSet ++ xs)
+
+  def inType: Ctx = copy(usage = Zero)
+
   def bind(
+      u: Usage,
+      auto: Boolean,
       x: Bind,
       ty: VTy,
       stage: VStage,
       inserted: Boolean = false
   ): Ctx =
     val newtypes = x match
-      case DoBind(x) if !inserted => types + (x -> (lvl, ty, stage))
+      case DoBind(x) if !inserted => types + (x -> (u, lvl, ty, stage))
       case _                      => types
     Ctx(
+      usage,
       lvl + 1,
       VVar(lvl) :: env,
       Bound(locals, x, quote(ty), quote(stage)),
       Some(Expl) :: pruning,
       newtypes,
-      module,
-      pos
+      (ty, stage, auto) :: allTypes,
+      unfoldSet,
+      pos,
+      module
     )
 
   def define(
+      u: Usage,
+      auto: Boolean,
       x: Name,
       ty: VTy,
       qty: Ty,
@@ -64,13 +75,16 @@ final case class Ctx(
       qvalue: Tm
   ): Ctx =
     Ctx(
+      usage,
       lvl + 1,
       value :: env,
       Defined(locals, x, qty, qstage, qvalue),
       None :: pruning,
-      types + (x -> (lvl, ty, stage)),
-      module,
-      pos
+      types + (x -> (u, lvl, ty, stage)),
+      (ty, stage, auto) :: allTypes,
+      unfoldSet,
+      pos,
+      module
     )
 
   def eval(tm: Tm): Val = eval0(tm)(env)
@@ -90,12 +104,12 @@ final case class Ctx(
   def prettyS(s: CStage): String = pretty0(s.map(zonk))(names)
 
   def closeTy(b: Ty): Ty = locals.closeTy(b)
-  def closeVTy(b: VTy): VTy =
+  def closeVTy(b: VTy): (VTy, Ty) =
     val t = closeTy(quote(b))
-    eval0(t)(Nil)
+    (eval0(t)(Nil), t)
 
-  def lookup(x: Name): Option[(Ix, VTy, VStage)] =
-    types.get(x).map((k, ty, s) => (k.toIx(lvl), ty, s))
+  def lookup(x: Name): Option[(Usage, Ix, VTy, VStage)] =
+    types.get(x).map((u, k, ty, s) => (u, k.toIx(lvl), ty, s))
 
   def prettyLocals: String =
     def go(p: Locals): List[String] = p match
@@ -107,6 +121,16 @@ final case class Ctx(
         )
     go(locals).mkString("\n")
 
+  def uses: Uses = Uses(lvl.expose)
+  def use(i: Ix): Uses =
+    @tailrec
+    def go(j: Int, acc: List[Usage], c: List[Usage]): List[Usage] =
+      c match
+        case hd :: tl if j == 0 => acc.reverse ++ List(usage) ++ tl
+        case hd :: tl           => go(j - 1, hd :: acc, tl)
+        case Nil                => Nil
+    Uses(go(i.expose, Nil, uses.expose))
+
 object Ctx:
-  def empty(module: String, pos: PosInfo): Ctx =
-    Ctx(lvl0, Nil, Empty, Nil, Map.empty, module, pos)
+  def empty(pos: PosInfo, module: String): Ctx =
+    Ctx(One, lvl0, Nil, Empty, Nil, Map.empty, Nil, Set.empty, pos, module)

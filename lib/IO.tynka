@@ -1,0 +1,16 @@
+import "lib/Base" (...)
+
+def return = returnIO
+def bind = bindIO
+
+def seq {A B : VTy} (a : IO A) (b : IO B) : IO B =
+  bind a \_. b
+
+def map {A B : VTy} (f : A -> B) (io : IO A) : IO B =
+  bind io (\x. return (f x))
+
+def fixIO {A : VTy} (action : IO A -> IO A) : IO A =
+  fix (go _. action (go U)) U
+
+def unsafePerformIO {A : VTy} (action : IO A) : A =
+  unsafePerformIO action

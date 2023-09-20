@@ -1,0 +1,40 @@
+def VTy = Ty Val
+def CTy = Ty Comp
+
+data Void
+
+def absurd {cv} {A : Ty cv} (v : Void) : A = match v
+
+data Unit := U
+
+data Bool := False | True
+
+def cond {cv} {A : Ty cv} (a b : A) (c : Bool) : A =
+  if c then a else b
+
+def (!) b = if b then False else True
+def (&&) a b = if a then b else False
+def (||) a b = if a then True else b
+
+data Pair A B := MkPair A B
+
+def fst {A B : VTy} (p : Pair A B) : A = p.1
+def snd {A B : VTy} (p : Pair A B) : B = p.2
+
+def casePair {A B : VTy} {cv} {C : Ty cv} (p : Pair A B) (f : A -> B -> C) : C =
+  match p | MkPair a b. f a b
+
+def curry {A B : VTy} {cv} {C : Ty cv} (f : Pair A B -> C) : A -> B -> C =
+  \a b. f (MkPair a b)
+def uncurry {A B : VTy} {cv} {C : Ty cv} (f : A -> B -> C) : Pair A B -> C =
+  \p. casePair p f
+
+data Tuple3 A B C := MkTuple3 A B C
+data Tuple4 A B C D := MkTuple4 A B C D
+data Tuple5 A B C D E := MkTuple5 A B C D E
+
+data Either A B := Left A | Right B
+
+data Option A := None | Some A
+
+data Nat := Z | S Nat

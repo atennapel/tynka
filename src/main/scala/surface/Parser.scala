@@ -23,19 +23,22 @@ object Parser:
       keywords = Set(
         "def",
         "let",
+        "fix",
+        "data",
+        "con",
+        "match",
+        "Meta",
+        "Ty",
         "if",
         "then",
         "else",
-        "Meta",
-        "Ty",
-        "tcon",
-        "con",
-        "case",
-        "fix",
-        "data",
-        "import",
-        "export",
-        "foreign"
+        "foreign",
+        "foreignIO",
+        "mutable",
+        "do",
+        "opaque",
+        "unfold",
+        "auto"
       ),
       operators = Set(
         "=",
@@ -46,6 +49,7 @@ object Parser:
         ".",
         ",",
         "->",
+        "<-",
         "**",
         "_",
         "^",
@@ -108,15 +112,15 @@ object Parser:
         <|> ("`" *> projAtom).map(Quote.apply)
         <|> ("$" *> projAtom).map(Splice.apply)
         <|> string.map(StringLit.apply)
-        <|> attempt("(" *> userOp.map(Var.apply) <* ")")
+        <|> attempt("(" *> userOp.map(x => Var(x)) <* ")")
         <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
         <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
           .map(mkUnitPair)
         <|> attempt(holeP)
         <|> nat
         <|> ("Meta" #> U(SMeta))
-        <|> ("Ty" *> projAtom).map(vf => U(STy(vf)))
-        <|> ident.map(Var.apply)
+        <|> ("Ty" *> projAtom).map(cv => U(STy(cv)))
+        <|> ident.map(x => Var(x))
     )
 
     private val unittype = Var(Name("()"))
@@ -124,6 +128,13 @@ object Parser:
     private val hole = Hole(None)
     private val nZ = Var(Name("Z"))
     private val nS = Var(Name("S"))
+
+    private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
+    /*natural.map { i =>
+      var c = nZ
+      for (_ <- 0 until i) c = App(nS, c, ArgIcit(Expl))
+      c
+    }*/
 
     private def mkPair(ts: List[Tm]): Tm = ts match
       case Nil => unittype
@@ -138,107 +149,257 @@ object Parser:
         )
       else ts.foldRight(unit)(Pair.apply)
 
-    private lazy val nat: Parsley[Tm] = natural.map(IntLit.apply)
-
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> ifP <|> tcon <|> con <|> caseP <|> fix <|> foreignP <|>
+      ) <|> let <|> lam <|> ifP <|> fix <|> matchP <|> foreignP <|> doP <|> unfoldP <|> dataP <|> conP <|>
         precedence[Tm](app)(
           Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
-          Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
+          Ops(InfixR)("->" #> ((l, r) => Pi(Many, DontBind, PiExpl, l, r)))
         )
     )
 
-    private type PiSigmaParam = (List[Bind], Icit, Option[Ty])
+    private lazy val usage: Parsley[Usage] =
+      option(("0" #> Zero) <|> ("1" #> One)).map(o => o.getOrElse(Many))
+
+    private type PiSigmaParam = (Usage, List[Bind], PiIcit, Option[Ty])
     private lazy val piSigmaParam: Parsley[PiSigmaParam] =
-      ("{" *> some(bind) <~> option(":" *> tm) <* "}").map((xs, ty) =>
-        (xs, Impl, ty)
-      )
-        <|> attempt("(" *> some(bind) <~> ":" *> tm <* ")").map((xs, ty) =>
-          (xs, Expl, Some(ty))
+      ("{" *> usage <~> option("auto") <~> some(bind) <~> option(
+        ":" *> tm
+      ) <* "}").map { case (((u, m), xs), ty) =>
+        (u, xs, PiImpl(m.isDefined), ty)
+      }
+        <|> attempt("(" *> usage <~> some(bind) <~> ":" *> tm <* ")")
+          .map { case ((u, xs), ty) =>
+            (u, xs, PiExpl, Some(ty))
+          }
+        <|> ("(" <~> ")").map(_ =>
+          (Many, List(DontBind), PiExpl, Some(unittype))
         )
-        <|> ("(" <~> ")").map(_ => (List(DontBind), Expl, Some(unittype)))
 
     private lazy val piSigma: Parsley[Tm] =
       ((some(piSigmaParam) <|> app.map(t =>
-        List((List(DontBind), Expl, Some(t)))
+        List((Many, List(DontBind), PiExpl, Some(t)))
       )) <~> ("->" #> false <|> "**" #> true) <~> tm)
         .map { case ((ps, isSigma), rt) =>
-          ps.foldRight(rt) { case ((xs, i, ty), rt) =>
+          ps.foldRight(rt) { case ((u, xs, i, ty), rt) =>
             xs.foldRight(rt)((x, rt) =>
               if isSigma then Sigma(x, ty.getOrElse(hole), rt)
-              else Pi(x, i, ty.getOrElse(hole), rt)
+              else Pi(u, x, i, ty.getOrElse(hole), rt)
             )
           }
         }
 
-    private lazy val tcon: Parsley[Tm] = positioned(
-      ("tcon" *> bind <~> "." *> many("(" *> many(projAtom) <* ")"))
-        .map(TCon.apply)
-    )
-    private lazy val con: Parsley[Tm] = positioned(
-      ("con" *> "#" *> natural <~> many(projAtom)).map(Con.apply)
-    )
-    private lazy val caseP: Parsley[Tm] = positioned(
-      ("case" *> projAtom <~> many(projAtom) <~> option(lam)).map {
-        case ((scrut, cs), opt) => Case(scrut, cs ++ opt)
-      }
-    )
-
-    private lazy val foreignP: Parsley[Tm] = positioned(
-      ("foreign" *> projAtom <~> projAtom <~> many(projAtom)).map {
-        case ((rt, l), as) => Foreign(rt, l, as)
-      }
-    )
-
     private lazy val fix: Parsley[Tm] = positioned(
       ("fix" *> "(" *> bind <~> bind <~> "." *> tm <* ")" <~> projAtom <~> many(
         arg
-      ) <~> option(lam)).map { case (((((g, x), b), arg), args), opt) =>
-        val fn = Fix(g, x, b, arg)
-        (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
-          .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
+      ) <~> option(lam <|> doP <|> ifP <|> matchP)).map {
+        case (((((g, x), b), arg), args), opt) =>
+          val fn = Fix(g, x, b, arg)
+          (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
+            .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
       }
     )
 
-    private type DefParam = (List[Bind], Icit, Option[Ty])
-    private lazy val defParam: Parsley[DefParam] =
-      attempt(piSigmaParam) <|> bind.map(x => (List(x), Expl, None))
+    private lazy val unfoldP: Parsley[Tm] = positioned(
+      ("unfold" *> some(identOrOp) <~> ";" *> tm).map(Unfold.apply)
+    )
 
+    private lazy val foreignP: Parsley[Tm] = positioned(
+      (("foreignIO" #> true <|> "foreign" #> false) <~> projAtom <~> projAtom <~> many(
+        projAtom
+      ))
+        .map { case (((io, rt), l), as) =>
+          Foreign(io, rt, l, as)
+        }
+    )
+
+    private lazy val dataP: Parsley[Tm] = positioned(
+      ("data" *> option(bind) <~> ("." <|> "|") *> sepBy(
+        pos <~> identOrOp <~> many(
+          attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
+            (DontBind, t)
+          )
+        ),
+        "|"
+      )).map((x, cs) =>
+        Data(
+          x.getOrElse(DontBind),
+          cs.map { case ((pos, x), as) => (pos, x, as) }
+        )
+      )
+    )
+
+    private lazy val conP: Parsley[Tm] = positioned(
+      ("con" *> identOrOp <~> option("{" *> tm <* "}") <~> many(projAtom)).map {
+        case ((c, t), as) => Con(c, t, as)
+      }
+    )
+
+    private lazy val matchP: Parsley[Tm] = positioned(
+      ("match" *> tm <~> many(
+        attempt(
+          pos <~>
+            "|" *> identOrOp.flatMap(x =>
+              if x.expose == "_" then empty else pure(x)
+            ) <~> option("{" *> identOrOp <* "}") <~> many(bind) <~> "." *> tm
+        )
+      ) <~> option(pos <~> "|" *> option("_") *> "." *> tm)).map {
+        case ((scrut, cs), other) =>
+          Match(
+            scrut,
+            cs.map { case ((((pos, c), cx), ps), b) => (pos, c, cx, ps, b) },
+            other
+          )
+      }
+    )
+
+    private type DefParam = (Usage, List[Bind], PiIcit, Option[Ty])
+    private lazy val defParam: Parsley[DefParam] =
+      attempt(piSigmaParam) <|> bind.map(x => (Many, List(x), PiExpl, None))
+
+    private val nConsumeLinearUnit = Var(Name("consumeLinearUnit"))
     private lazy val let: Parsley[Tm] =
       positioned(
-        ("let" *> identOrOp <~> many(defParam) <~> option(
-          ":" *> tm
-        ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
-          .map { case (((((x, ps), ty), m), v), b) =>
-            Let(
-              x,
-              m,
-              ty.map(typeFromParams(ps, _)),
-              lamFromDefParams(ps, v, ty.isEmpty),
-              b
-            )
+        attempt(
+          ("let" *> ("(" *> ")") *> "=" *> tm <~> ";" *> tm)
+        ).map { case (v, b) =>
+          App(App(nConsumeLinearUnit, v, ArgIcit(Expl)), b, ArgIcit(Expl))
+        } <|>
+          ("let" *> usage <~> option("auto") <~> identOrOp <~> many(
+            defParam
+          ) <~> option(
+            ":" *> tm
+          ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
+            .map { case (((((((u, auto), x), ps), ty), m), v), b) =>
+              Let(
+                u,
+                auto.isDefined,
+                x,
+                m,
+                ty.map(typeFromParams(ps, _)),
+                lamFromDefParams(ps, v, ty.isEmpty),
+                b
+              )
+            }
+      )
+
+    private enum DoEntry:
+      case DoBind(pos: PosInfo, x: Bind, t: Option[Ty], v: Tm)
+      case DoLet(
+          pos: PosInfo,
+          usage: Usage,
+          auto: Boolean,
+          x: Name,
+          m: Boolean,
+          t: Option[Ty],
+          v: Tm
+      )
+      case DoTm(t: Tm)
+    import DoEntry.*
+    private val bindVar = Var(Name(">>="))
+    private lazy val doP: Parsley[Tm] =
+      positioned(
+        ("do" *> option("{" *> identOrOp <* "}") <~> many(
+          attempt(doEntry)
+        ) <~> tm)
+          .map { case ((monad, es), b) =>
+            val body = es.foldRight(b) {
+              // (>>=) {_} {t} v (\x. b)
+              case (DoBind(p, x, Some(t), v), b) =>
+                Pos(
+                  p,
+                  App(
+                    App(
+                      App(
+                        App(bindVar, Hole(None), ArgIcit(Impl)),
+                        t,
+                        ArgIcit(Impl)
+                      ),
+                      v,
+                      ArgIcit(Expl)
+                    ),
+                    Lam(x, ArgIcit(Expl), None, b),
+                    ArgIcit(Expl)
+                  )
+                )
+              // (>>=) v (\x. b)
+              case (DoBind(p, x, None, v), b) =>
+                Pos(
+                  p,
+                  App(
+                    App(
+                      bindVar,
+                      v,
+                      ArgIcit(Expl)
+                    ),
+                    Lam(x, ArgIcit(Expl), None, b),
+                    ArgIcit(Expl)
+                  )
+                )
+              case (DoLet(p, u, auto, x, m, t, v), b) =>
+                Pos(p, Let(u, auto, x, m, t, v, b))
+              // (>>=) v (\_. b)
+              case (DoTm(v), b) =>
+                App(
+                  App(
+                    bindVar,
+                    v,
+                    ArgIcit(Expl)
+                  ),
+                  Lam(DontBind, ArgIcit(Expl), None, b),
+                  ArgIcit(Expl)
+                )
+            }
+            monad match
+              case None => body
+              case Some(m) =>
+                Let(Many, false, Name(">>="), true, None, Var(m, true), body)
           }
       )
+    private lazy val doEntry: Parsley[DoEntry] =
+      attempt(pos <~> bind <~> option(":" *> tm) <~> "<-" *> tm <* ";").map {
+        case (((pos, x), t), v) =>
+          DoBind(pos, x, t, v)
+      } <|>
+        attempt(
+          pos <~> "let" *> usage <~> option("auto") <~> identOrOp <~> (
+            ":=" #> false <|> "=" #> true
+          ) <~> option(
+            ":" *> tm
+          ) <~> tm <* ";"
+        )
+          .map { case ((((((pos, u), auto), x), m), t), v) =>
+            DoLet(pos, u, auto.isDefined, x, m, t, v)
+          } <|> (tm <* ";").map(DoTm.apply)
 
     private type LamParam = (List[Bind], ArgInfo, Option[Ty])
     private lazy val lamParam: Parsley[LamParam] =
       attempt(
         "{" *> some(bind) <~> option(":" *> tm) <~> "=" *> identOrOp <* "}"
       ).map { case ((xs, ty), y) => (xs, ArgNamed(y), ty) }
-        <|> attempt(piSigmaParam).map((xs, i, ty) => (xs, ArgIcit(i), ty))
+        <|> attempt(piSigmaParam).map((_, xs, i, ty) =>
+          (xs, ArgIcit(i.toIcit), ty)
+        )
         <|> bind.map(x => (List(x), ArgIcit(Expl), None))
 
     private lazy val lam: Parsley[Tm] =
       positioned(("\\" *> many(lamParam) <~> "." *> tm).map(lamFromLamParams _))
 
-    private val caseBoolVar: Tm = Var(Name("caseBool"))
-    private val tyName = Name("ty")
     private lazy val ifP: Parsley[Tm] =
       positioned(
-        ("if" *> tm <~> "then" *> tm <~> "else" *> tm)
-          .map { case ((c, t), f) => Case(c, List(f, t)) }
+        ("if" *> tm <~> "then" *> (pos <~> tm) <~> "else" *> (pos <~> tm))
+          .map { case ((c, (pt, t)), (pf, f)) =>
+            val x = Name("b")
+            Match(
+              Let(Many, false, x, true, Some(Var(Name("Bool"))), c, Var(x)),
+              List(
+                (pt, Name("True"), None, Nil, t),
+                (pf, Name("False"), None, Nil, f)
+              ),
+              None
+            )
+          }
       )
 
     private lazy val app: Parsley[Tm] =
@@ -259,7 +420,7 @@ object Parser:
       )
 
     private lazy val appAtom: Parsley[Tm] = positioned(
-      (projAtom <~> many(arg) <~> option(lam))
+      (projAtom <~> many(arg) <~> option(lam <|> doP <|> ifP <|> matchP))
         .map { case ((fn, args), opt) =>
           (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
             .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
@@ -282,8 +443,8 @@ object Parser:
       "." *> ("1" #> Fst <|> "2" #> Snd <|> identOrOp.map(Named.apply))
 
     private def typeFromParams(ps: List[DefParam], rt: Ty): Ty =
-      ps.foldRight(rt) { case ((xs, i, ty), b) =>
-        xs.foldRight(b)(Pi(_, i, ty.getOrElse(hole), _))
+      ps.foldRight(rt) { case ((u, xs, i, ty), b) =>
+        xs.foldRight(b)(Pi(u, _, i, ty.getOrElse(hole), _))
       }
 
     private def lamFromDefParams(
@@ -291,11 +452,11 @@ object Parser:
         b: Tm,
         useTypes: Boolean
     ): Tm =
-      ps.foldRight(b) { case ((xs, i, ty), b) =>
+      ps.foldRight(b) { case ((u, xs, i, ty), b) =>
         xs.foldRight(b)(
           Lam(
             _,
-            ArgIcit(i),
+            ArgIcit(i.toIcit),
             if useTypes then Some(ty.getOrElse(hole)) else None,
             _
           )
@@ -337,15 +498,21 @@ object Parser:
 
     // definitions
     lazy val defs: Parsley[Defs] =
-      many(defP <|> dataP <|> includeP).map(Defs.apply)
+      many(defP <|> dataDefP <|> importP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
-      (pos <~> "def" *> identOrOp <~> many(defParam) <~> option(
+      (pos <~> option("auto") <~> option(
+        "opaque"
+      ) <~> "def" *> identOrOp <~> many(
+        defParam
+      ) <~> option(
         ":" *> tm
       ) <~> (":=" #> false <|> "=" #> true) <~> tm)
-        .map { case (((((pos, x), ps), ty), m), v) =>
+        .map { case (((((((pos, auto), opq), x), ps), ty), m), v) =>
           DDef(
             pos,
+            auto.isDefined,
+            opq.isDefined,
             x,
             m,
             ty.map(typeFromParams(ps, _)),
@@ -353,24 +520,41 @@ object Parser:
           )
         }
 
-    private lazy val dataP: Parsley[Def] =
-      (pos <~> "data" *> identOrOp <~> many(identOrOp) <~> "=" *> sepBy(
-        identOrOp <~> many(projAtom),
-        "|"
+    private lazy val dataDefP: Parsley[Def] =
+      (pos <~> "data" *> identOrOp <~> many(
+        identOrOp
+      ) <~> option(
+        (":=" <|> "|") *> sepBy(
+          pos <~> identOrOp <~> many(
+            attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
+              (DontBind, t)
+            )
+          ),
+          "|"
+        )
       ))
         .map { case (((pos, x), ps), cs) =>
-          DData(pos, x, ps, cs)
+          DData(
+            pos,
+            x,
+            ps,
+            cs.map(cs => cs.map { case ((pos, x), ts) => (pos, x, ts) })
+              .getOrElse(Nil)
+          )
         }
 
-    private lazy val includeP: Parsley[Def] =
-      (pos <~> ("import" #> false <|> "export" #> true) <~> string <~> option(
-        "(" *> ("..." #> Left(()) <|> sepEndBy(identOrOp, ",")
-          .map(Right.apply)) <* ")"
-      )).map {
-        case (((pos, exp), m), None) => DImport(pos, exp, m, false, Nil)
-        case (((pos, exp), m), Some(Left(_))) => DImport(pos, exp, m, true, Nil)
-        case (((pos, exp), m), Some(Right(xs))) =>
-          DImport(pos, exp, m, false, xs)
+    private lazy val importP: Parsley[Def] =
+      (pos <~> "import" *> string <~> option("as" *> ident) <~> option(
+        "(" *> ("...".map(_ => Left(())) <|> sepEndBy(
+          attempt(identOrOp <~> "=" *> identOrOp).map((x, y) =>
+            (Some(x), y)
+          ) <|> identOrOp.map(x => (None, x)),
+          ","
+        ).map(xs => Right(xs))) <* ")"
+      ) <~> option(
+        "hiding" *> "(" *> sepEndBy(identOrOp, ",") <* ")"
+      )).map { case ((((pos, m), mx), ids), hiding) =>
+        DImport(pos, m, mx, ids, hiding)
       }
 
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)

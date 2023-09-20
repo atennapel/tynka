@@ -1,0 +1,27 @@
+import "lib/Base" (...)
+import "lib/JVM" hiding (subInt, addInt, eqInt)
+import "lib/JVM" ((-) = subInt, (+) = addInt, (==) = eqInt)
+
+data StrSlice := MkStrSlice Int Str
+
+def fromStr (s : Str) : StrSlice = MkStrSlice 0 s
+
+def length (s : StrSlice) : Int = lengthStr s.2 - s.1
+
+def isEmpty (s : StrSlice) : Bool = 0 == length s
+
+def unsafeHead (s : StrSlice) : Char = unsafeIndexStr s.1 s.2
+def unsafeTail (s : StrSlice) : StrSlice = MkStrSlice (1 + s.1) s.2
+def unsafeTailMut (s : StrSlice) : StrSlice = foreign StrSlice "mutateData:0" s (1 + s.1)
+
+def case {cv} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
+  if isEmpty s then
+    ifEmpty
+  else
+    ifNonEmpty (unsafeHead s) (unsafeTail s)
+
+def unsafeCaseMut {cv : CV} {A : Ty cv} (s : StrSlice) (ifEmpty : A) (ifNonEmpty : Char -> StrSlice -> A) : A =
+  if isEmpty s then
+    ifEmpty
+  else
+    ifNonEmpty (unsafeHead s) (unsafeTailMut s)

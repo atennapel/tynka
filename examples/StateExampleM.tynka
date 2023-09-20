@@ -1,0 +1,20 @@
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/StateM" as StateM
+import "lib/StateM" (StateM)
+
+def (+) = addInt
+def (>>>) = StateM/seq
+def (<$>) = StateM/map
+
+def FibState = Pair Int Int
+
+def fibStep (st : FibState) : FibState =
+  casePair st \x1 x2. MkPair x2 (x1 + x2)
+
+def fibState (n : Int) : StateM FibState Int =
+  StateM/updateN n fibStep >>> (fst <$> StateM/get)
+
+def fib (n : Int) : Int := StateM/exec (fibState n) (0, 1)
+
+def main (_ : Array Str) := putLn (fib 8)

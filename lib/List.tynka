@@ -1,9 +1,31 @@
-import "lib/Prelude" (...)
+import "lib/Base" (...)
+import "lib/IO" (return, (>>=) = bind, (>>>) = seq)
+import "lib/Functor" as Functor
+import "lib/Show" (...)
+import "lib/Monoid" (...)
+import "lib/JVM" (Str, appendStr)
 
-data List A = Nil | (::) A List
+data List A
+  | Nil
+  | (::) A List
 
-def foldr {A : VTy} {vf} {B : Ty vf} (n : B) (c : A -> B -> B) (l : List A) : B =
-  fix (go l. case l n (\hd tl. c hd (go tl))) l
+def singleton {A} (x : A) : List A = x :: Nil
+
+def isEmpty {A : VTy} (l : List A) : Bool =
+  match l
+  | Nil. True
+  | _. False
+
+def head {A : VTy} (l : List A) : Option A =
+  match l
+  | Nil. None
+  | (::) hd _. Some hd
+
+def foldr {A : VTy} {cv : CV} {B : Ty cv} (n : B) (c : A -> B -> B) (l : List A) : B =
+  fix (go l. match l
+  | Nil. n
+  | (::) hd tl. c hd (go tl)
+  ) l
 
 def foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
   foldr (\acc. acc) (\hd go acc. go (c acc hd)) l n
@@ -11,13 +33,51 @@ def foldl {A B : VTy} (n : B) (c : B -> A -> B) (l : List A) : B =
 def map {A B : VTy} (f : A -> B) (l : List A) : List B =
   foldr Nil (\hd tl. f hd :: tl) l
 
-def (++) {A : VTy} (a b : List A) : List A = foldr b (::) a
+auto def FunctorList : Functor/Functor List = Functor/MkFunctor map
 
-def sum = foldl 0 (+)
-def product = foldl 1 (*)
+def append {A : VTy} (a b : List A) : List A = foldr b (::) a
+
+auto def MonoidList {A} : Monoid (List A) = MkMonoid Nil append
+
+def mconcat {A} {auto monoid : Monoid A} (l : List A) : A =
+  foldr munit (++) l
+
+def reverse {A : VTy} (l : List A) : List A =
+  fix (go l. \acc. match l
+  | Nil. acc
+  | (::) hd tl. go tl (hd :: acc)
+  ) l Nil
 
 def traverseIO {A B : VTy} (f : A -> IO B) (l : List A) : IO (List B) =
-  foldr (returnIO Nil) (\hd tl. f hd >>= \fhd. tl >>= \ftl. returnIO (fhd :: ftl)) l
+  foldr (return Nil) (\hd tl. do fhd <- f hd; ftl <- tl; return (fhd :: ftl)) l
 
 def traverseIO_ {A B : VTy} (f : A -> IO B) (l : List A) : IO Unit =
-  foldr (returnIO U) (\hd tl. f hd >>> tl) l 
+  foldr (return U) (\hd tl. f hd >>> tl) l
+
+def foldlIO {A B : VTy} (start : B) (f : B -> A -> IO B) (l : List A) : IO B =
+  foldr (\acc. return acc) (\hd tl acc. f acc hd >>= tl) l start
+
+def Con:: {A : VTy} (hd : A) (tl : List A) : Con (List A) "::" =
+  foreign (Con (List A) "::") "castCon:::" (hd :: tl)
+
+-- not thread-safe
+def fastmap {A B : VTy} (f : A -> B) (l : List A) : List B =
+  match l
+  | Nil. Nil
+  | (::) hd tl.
+    unsafePerformIO do
+      let start := Con:: (f hd) Nil;
+      foldlIO start (\pointer hd. do
+        let next := Con:: (f hd) Nil;
+        foreignIO Unit "mutateConUnit::::1" pointer (exposeCon next);
+        return next
+      ) tl;
+      return start
+
+def join {A} {auto _ : Show A} (s : Str) (l : List A) : Str =
+  match l
+  | Nil. ""
+  | (::) hd tl. foldl (show hd) (\acc hd'. acc ++ s ++ show hd') tl
+
+auto def ShowList {A} {auto _ : Show A} : Show (List A) =
+  MkShow {List A} \l. "[" ++ join "," l ++ "]"

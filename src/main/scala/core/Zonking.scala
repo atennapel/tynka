@@ -29,8 +29,8 @@ object Zonking:
 
   private def meta(id: MetaId)(implicit l: Lvl, e: Env): VT =
     getMeta(id) match
-      case Solved(v, _, _) => Left(v)
-      case Unsolved(_, _)  => Right(Meta(id))
+      case Solved(_, v, _, _)   => Left(v)
+      case Unsolved(_, _, _, _) => Right(Meta(id))
 
   private def zonkSp(t: Tm)(implicit l: Lvl, e: Env): VT = t match
     case Meta(id)            => meta(id)
@@ -45,16 +45,17 @@ object Zonking:
     case Var(ix)      => t
     case Global(_, _) => t
     case Prim(x)      => t
-    case IntLit(n)    => t
-    case StringLit(_) => t
     case Irrelevant   => t
-    case Let(x, t, s, bt, v, b) =>
-      Let(x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))
+    case IntLit(_)    => t
+    case StringLit(_) => t
+    case Let(u, x, t, s, bt, v, b) =>
+      Let(u, x, zonk(t), s, zonk(bt), zonk(v), zonkLift(b))
     case U(s) => U(s.map(zonk))
 
-    case Pi(x, i, t, b)   => Pi(x, i, zonk(t), zonkLift(b))
-    case Lam(x, i, ty, b) => Lam(x, i, zonk(ty), zonkLift(b))
-    case App(_, _, _)     => quoteVT(zonkSp(t))
+    case Pi(u, x, i, t, b) => Pi(u, x, i, zonk(t), zonkLift(b))
+    case Fun(u, a, b, c)   => Fun(u, zonk(a), zonk(b), zonk(c))
+    case Lam(x, i, ty, b)  => Lam(x, i, zonk(ty), zonkLift(b))
+    case App(_, _, _)      => quoteVT(zonkSp(t))
     case Fix(ty, rty, g, x, b, arg) =>
       Fix(
         zonk(ty),
@@ -66,25 +67,30 @@ object Zonking:
       )
 
     case Sigma(x, t, b) => Sigma(x, zonk(t), zonkLift(b))
-    case TPair(a, b)    => TPair(zonk(a), zonk(b))
     case Pair(a, b, t)  => Pair(zonk(a), zonk(b), zonk(t))
     case Proj(_, _, _, _) =>
       quoteVT(zonkSp(t)) match
         case Proj(t, p, ty, pty) => Proj(t, p, zonk(ty), zonk(pty))
         case t                   => t
 
-    case TCon(x, cs) =>
-      TCon(x, cs.map(as => as.map(a => zonk(a)(l + 1, VVar(l) :: e))))
-    case Con(ty, i, as) => Con(zonk(ty), i, as.map(zonk))
-    case Case(ty, rty, scrut, cs) =>
-      Case(zonk(ty), zonk(rty), zonk(scrut), cs.map(zonk))
-
-    case Lift(vf, t) => Lift(zonk(vf), zonk(t))
+    case Lift(cv, t) => Lift(zonk(cv), zonk(t))
     case Quote(t)    => zonk(t).quote
     case Splice(_)   => quoteVT(zonkSp(t))
 
-    case Foreign(rt, cmd, as) =>
-      Foreign(zonk(rt), zonk(cmd), as.map((a, t) => (zonk(a), zonk(t))))
+    case Foreign(io, rt, cmd, as) =>
+      Foreign(io, zonk(rt), zonk(cmd), as.map((a, t) => (zonk(a), zonk(t))))
+
+    case Data(x, cs) =>
+      Data(x, cs.map((c, as) => (c, as.map((x, a) => (x, zonkLift(a))))))
+    case Con(x, t, as) => Con(x, zonk(t), as.map(zonk))
+    case Match(dty, rty, scrut, cs, other) =>
+      Match(
+        zonk(dty),
+        zonk(rty),
+        zonk(scrut),
+        cs.map((x, c, i, b) => (x, c, i, zonk(b))),
+        other.map(zonk)
+      )
 
     case Wk(tm) => Wk(zonk(tm)(l - 1, e.tail))
 

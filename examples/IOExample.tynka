@@ -1,0 +1,15 @@
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/IO" (return, (>>=) = bind, fixIO)
+import "lib/Monoid" ((++))
+import "lib/Eq" ((==))
+
+def main (_ : Array Str) : IO Unit :=
+  fixIO \go. do
+    name <- getLn;
+    if name == "exit" then
+      return U
+    else do
+      putLn ("hi " ++ name);
+      putLn (lengthStr name);
+      go

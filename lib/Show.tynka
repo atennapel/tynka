@@ -1,0 +1,16 @@
+import "lib/Base" (VTy, Unit, Bool)
+import "lib/JVM" (...)
+
+opaque def Show (A : VTy) = A -> Str
+def MkShow {A : VTy} (show : A -> Str) : Show A = unfold Show; show
+def show {A} {auto show : Show A} (x : A) : Str = unfold Show; show x
+
+auto def ShowInt : Show Int = MkShow intToString
+auto def ShowChar : Show Char = MkShow charToString
+auto def ShowLong : Show Long = MkShow longToString
+auto def ShowStr : Show Str = MkShow \s. s
+
+auto def ShowUnit : Show Unit = MkShow "U"
+auto def ShowBool : Show Bool = MkShow \b. if b then "True" else "False"
+
+def putShowLn {A} {auto _ : Show A} (x : A) : IO Unit = putLn (show x)

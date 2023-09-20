@@ -1,132 +1,316 @@
 package ir
 
-import common.Common.{impossible, PrimName}
+import common.Common.impossible
 
 object Syntax:
   type LName = Int
   type GName = String
 
   enum Ty:
-    case TUnit
-    case TBool
-    case TInt
-    case TBox
-    case TCon(name: GName)
-    case TForeign(cls: String)
+    case TCon(x: GName)
+    case TConCon(x: GName, cx: GName)
+    case TForeign(x: String)
+    case TArray(ty: Ty)
 
     override def toString: String = this match
-      case TUnit         => "Unit"
-      case TBool         => "Bool"
-      case TInt          => "Int"
-      case TBox          => s"Box"
-      case TCon(x)       => s"$x"
-      case TForeign(cls) => s"Foreign($cls)"
+      case TCon(x)        => s"$x"
+      case TConCon(x, cx) => s"Con($x, $cx)"
+      case TForeign(x)    => s"Foreign($x)"
+      case TArray(ty)     => s"Array($ty)"
 
     def tdef: TDef = TDef(this)
   export Ty.*
 
-  final case class TDef(ps: Option[List[Ty]], rt: Ty):
+  final case class TDef(ps: List[Ty], io: Boolean, rt: Ty):
     override def toString: String = ps match
-      case None => rt.toString
-      case _    => s"(${ps.get.mkString(", ")}) -> $rt"
-    def head: Ty = ps.get.head
-    def tail: TDef = TDef(ps.get.tail, rt)
+      case Nil if !io => rt.toString
+      case _ => s"(${ps.mkString(", ")}) ->${if io then " IO" else ""} $rt"
+    def head: Ty = ps.head
+    def tail: TDef = TDef(ps.tail, io, rt)
     def ty: Ty =
-      if ps.nonEmpty then impossible()
+      if ps.nonEmpty || io then impossible()
       else rt
-    def drop(n: Int): TDef = TDef(ps.get.drop(n), rt)
-    def params: List[Ty] = ps.getOrElse(Nil)
+    def drop(n: Int): TDef = TDef(ps.drop(n), io, rt)
+    def params: List[Ty] = ps
   object TDef:
-    def apply(rt: Ty): TDef = TDef(None, rt)
-    def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), t2)
-    def apply(t1: Ty, t2: TDef): TDef =
-      t2.ps match
-        case None     => TDef(List(t1), t2.rt)
-        case Some(ps) => TDef(t1 :: ps, t2.rt)
-    def apply(ps: List[Ty], t2: Ty): TDef = TDef(Some(ps), t2)
-    def apply(ps: List[Ty], t2: TDef): TDef =
-      t2.ps match
-        case None      => TDef(ps, t2.rt)
-        case Some(ps2) => TDef(ps ++ ps2, t2.rt)
+    def apply(rt: Ty): TDef = TDef(Nil, false, rt)
+    def apply(io: Boolean, rt: Ty): TDef = TDef(Nil, io, rt)
+    def apply(t1: Ty, t2: Ty): TDef = TDef(List(t1), false, t2)
+    def apply(t1: Ty, t2: TDef): TDef = TDef(t1 :: t2.ps, t2.io, t2.rt)
+    def apply(ps: List[Ty], t2: TDef): TDef = TDef(ps ++ t2.ps, t2.io, t2.rt)
 
   final case class Defs(defs: List[Def]):
     override def toString: String = defs.mkString("\n")
-
     def toList: List[Def] = defs
 
   enum Def:
-    case DDef(
-        module: GName,
-        name: GName,
-        gen: Boolean,
-        ty: TDef,
-        ps: List[(LName, Ty)],
-        value: Expr
-    )
-    case DData(name: GName, cons: List[List[Ty]])
+    case DDef(module: String, name: GName, gen: Boolean, ty: TDef, value: Tm)
+    case DData(name: GName, cs: List[(GName, List[Ty])])
 
     override def toString: String = this match
-      case DDef(m, x, _, TDef(None, t), _, v) => s"def $m:$x : $t = $v"
-      case DDef(m, x, _, t, Nil, v)           => s"def $m:$x () : $t = $v"
-      case DDef(m, x, _, t, ps, v) =>
-        s"def $m:$x ${ps.map((x, t) => s"($x : $t)").mkString(" ")} : ${t.rt} = $v"
-      case DData(x, Nil) => s"data $x"
+      case DDef(m, x, _, t, v) => s"def $m/$x : $t = $v"
+      case DData(x, Nil)       => s"data $x"
       case DData(x, cs) =>
-        s"data $x = ${cs.map(as => s"(${as.mkString(" ")})").mkString(" | ")}"
+        s"data $x = ${cs
+            .map((x, ts) => s"$x${if ts.isEmpty then "" else " "}${ts.mkString(" ")}")
+            .mkString(" | ")}"
   export Def.*
 
-  enum Expr:
-    case Var(name: LName)
-    case Global(module: GName, name: GName, ty: Ty)
+  enum Tm:
+    case Var(name: LName, ty: TDef)
+    case Global(module: String, name: GName, ty: TDef)
 
-    case Let(name: LName, isUsed: Boolean, ty: Ty, value: Expr, body: Expr)
+    case IntLit(n: Int)
+    case BoolLit(b: Boolean)
+    case StringLit(s: String)
 
-    case GlobalApp(
-        module: GName,
-        name: GName,
+    case App(fn: Tm, arg: Tm)
+    case Lam(name: LName, t1: Ty, t2: TDef, body: Tm)
+    case Fix(ty: Ty, rty: TDef, g: LName, x: LName, b: Tm, arg: Tm)
+    case Let(
+        name: LName,
         ty: TDef,
-        tc: Boolean,
-        as: List[Expr]
+        bty: TDef,
+        value: Tm,
+        body: Tm
     )
-    case PrimApp(name: PrimName, args: List[Expr])
-    case Foreign(rt: Ty, cmd: String, args: List[(Expr, Ty)])
 
-    case UnitLit
-    case IntLit(value: Int)
-    case BoolLit(value: Boolean)
-    case StringLit(value: String)
+    case Con(name: GName, con: GName, args: List[Tm])
+    case Field(dty: GName, con: GName, scrut: Tm, ix: Int)
+    case Match(
+        dty: GName,
+        rty: TDef,
+        x: LName,
+        scrut: Tm,
+        cs: List[(GName, Tm)],
+        other: Option[Tm]
+    )
 
-    case Con(ty: GName, ix: Int, as: List[Expr])
-    case Case(ty: GName, scrut: Expr, x: LName, cs: List[Expr])
-    case Field(ty: GName, rty: Ty, conix: Int, ix: Int, tm: Expr)
+    case ReturnIO(value: Tm)
+    case BindIO(t1: Ty, t2: Ty, x: LName, value: Tm, body: Tm)
+    case RunIO(value: Tm)
 
-    case Box(ty: Ty, value: Expr)
-    case Unbox(ty: Ty, v: Expr)
+    case Foreign(io: Boolean, rt: Ty, cmd: String, args: List[(Tm, Ty)])
 
     override def toString: String = this match
-      case Var(x)                 => s"'$x"
-      case Global(m, x, _)        => s"$m:$x"
-      case Let(x, false, t, v, b) => s"(let _ : $t = $v; $b)"
-      case Let(x, _, t, v, b)     => s"(let $x : $t = $v; $b)"
+      case Var(x, _)       => s"'$x"
+      case Global(m, x, _) => s"$m/$x"
 
-      case UnitLit      => "()"
-      case IntLit(v)    => s"$v"
-      case BoolLit(v)   => if v then "True" else "False"
-      case StringLit(v) => s"\"$v\""
+      case IntLit(n)    => s"$n"
+      case BoolLit(n)   => s"$n"
+      case StringLit(s) => s"\"$s\""
 
-      case Con(t, i, Nil) => s"(con $t #$i)"
-      case Con(t, i, as)  => s"(con $t #$i ${as.mkString(" ")})"
+      case App(f, a)               => s"($f $a)"
+      case Lam(x, t, _, b)         => s"(\\($x : $t). $b)"
+      case Fix(_, _, g, x, b, arg) => s"(fix ($g $x. $b) $arg)"
+      case Let(x, t, _, v, b)      => s"(let $x : $t = $v; $b)"
 
-      case Box(_, v) => s"(box $v)"
+      case Con(x, cx, Nil)   => s"(con $x $cx)"
+      case Con(x, cx, as)    => s"(con $x $cx ${as.mkString(" ")})"
+      case Field(_, _, s, i) => s"(field #$i $s)"
 
-      case GlobalApp(m, x, _, tc, as) =>
-        s"(${if tc then "[tailcall] " else ""}$m:$x ${as.mkString(" ")})"
-      case PrimApp(f, as)        => s"($f ${as.mkString(" ")})"
-      case Case(ty, s, x, Nil)   => s"(case $x : $ty = $s)"
-      case Case(ty, s, x, cs)    => s"(case $x : $ty = $s; ${cs.mkString(" ")})"
-      case Field(_, _, ci, i, v) => s"(field $ci#$i $v)"
-      case Unbox(_, v)           => s"(unbox $v)"
-      case Foreign(rt, cmd, Nil) => s"(foreign $rt $cmd)"
-      case Foreign(rt, cmd, as) =>
-        s"(foreign $rt $cmd ${as.map((v, t) => s"$v").mkString(" ")})"
-  export Expr.*
+      case Match(_, _, x, scrut, cs, other) =>
+        s"(match $x = $scrut; ${cs
+            .map((c, b) => s"| $c $b")
+            .mkString(" ")} ${other.map(t => s"| $t").getOrElse("")})"
+
+      case ReturnIO(v)           => s"(returnIO $v)"
+      case BindIO(_, _, x, v, b) => s"($x <- $v; $b)"
+      case RunIO(v)              => s"(unsafePerformIO $v)"
+
+      case Foreign(io, rt, l, Nil) =>
+        s"(foreign${if io then "IO" else ""} $rt $l)"
+      case Foreign(io, rt, l, as) =>
+        s"(foreign${if io then "IO" else ""} $rt $l ${as.map(_._1).mkString(" ")})"
+
+    def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
+      ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
+        (Lam(x, t, rt, b), TDef(t, rt))
+      }._1
+
+    def flattenLams: (Option[(List[(LName, Ty)], TDef)], Tm) =
+      def go(t: Tm): (Option[(List[(LName, Ty)], TDef)], Tm) = t match
+        case Lam(x, t1, t2, b) =>
+          val (opt, b2) = go(b)
+          opt match
+            case None => (Some((List((x, t1)), t2)), b2)
+            case Some((xs, rt)) =>
+              (Some(((x, t1) :: xs, rt)), b2)
+        case b => (None, b)
+      go(this)
+
+    def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
+
+    def flattenApps: (Tm, List[Tm]) = this match
+      case App(f, a) =>
+        val (hd, as) = f.flattenApps
+        (hd, as ++ List(a))
+      case t => (t, Nil)
+
+    // may contain duplicates, to be used for usage counts
+    def fvs: List[(LName, TDef)] = this match
+      case Var(x, t)       => List((x, t))
+      case Global(_, _, _) => Nil
+      case IntLit(_)       => Nil
+      case BoolLit(_)      => Nil
+      case StringLit(_)    => Nil
+
+      case App(f, a)       => f.fvs ++ a.fvs
+      case Lam(x, _, _, b) => b.fvs.filterNot((y, _) => y == x)
+      case Fix(_, _, go, x, b, arg) =>
+        b.fvs.filterNot((y, _) => y == go || y == x) ++ arg.fvs
+      case Let(x, _, _, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+
+      case Con(x, cx, as)    => as.flatMap(_.fvs)
+      case Field(_, _, s, i) => s.fvs
+      case Match(_, _, x, s, cs, o) =>
+        s.fvs ++ cs.flatMap(_._2.fvs.filterNot((y, _) => x == y)) ++ o
+          .map(_.fvs)
+          .getOrElse(Nil)
+
+      case ReturnIO(v)           => v.fvs
+      case BindIO(_, _, x, v, b) => v.fvs ++ b.fvs.filterNot((y, _) => x == y)
+      case RunIO(v)              => v.fvs
+
+      case Foreign(_, _, _, as) => as.flatMap(_._1.fvs)
+
+    def usedNames: Set[LName] = this match
+      case Var(x, _)       => Set(x)
+      case Global(_, _, _) => Set.empty
+      case IntLit(_)       => Set.empty
+      case BoolLit(_)      => Set.empty
+      case StringLit(_)    => Set.empty
+
+      case App(f, a)               => f.usedNames ++ a.usedNames
+      case Lam(_, _, _, b)         => b.usedNames
+      case Let(_, _, _, v, b)      => v.usedNames ++ b.usedNames
+      case Fix(_, _, _, _, b, arg) => b.usedNames ++ arg.usedNames
+
+      case Con(_, _, as)     => as.flatMap(_.usedNames).toSet
+      case Field(_, _, s, i) => s.usedNames
+      case Match(_, _, x, s, cs, o) =>
+        s.usedNames ++ cs
+          .flatMap(_._2.usedNames) ++ o.map(_.usedNames).getOrElse(Set.empty)
+
+      case ReturnIO(v)           => v.usedNames
+      case BindIO(_, _, x, v, b) => v.usedNames ++ b.usedNames
+      case RunIO(v)              => v.usedNames
+
+      case Foreign(_, _, _, as) => as.toSet.flatMap(_._1.usedNames)
+
+    def maxName: LName = this match
+      case Var(x, _)       => x
+      case Global(_, _, _) => -1
+      case IntLit(_)       => -1
+      case BoolLit(_)      => -1
+      case StringLit(_)    => -1
+
+      case App(f, a)               => f.maxName max a.maxName
+      case Lam(x, _, _, b)         => x max b.maxName
+      case Let(x, _, _, v, b)      => x max v.maxName max b.maxName
+      case Fix(_, _, x, y, b, arg) => x max y max b.maxName max arg.maxName
+
+      case Con(_, _, as)     => as.map(_.maxName).fold(-1)(_ max _)
+      case Field(_, _, s, i) => s.maxName
+      case Match(_, _, x, s, cs, o) =>
+        x max s.maxName max cs.map(_._2.maxName).fold(-1)(_ max _) max o
+          .map(_.maxName)
+          .getOrElse(-1)
+
+      case ReturnIO(v)           => v.maxName
+      case BindIO(_, _, x, v, b) => v.maxName max b.maxName
+      case RunIO(v)              => v.maxName
+
+      case Foreign(_, _, _, as) => as.map(_._1.maxName).fold(-1)(_ max _)
+
+    def subst(sub: Map[LName, Tm]): Tm =
+      subst(
+        sub,
+        sub.values
+          .foldRight(Set.empty[LName])((a, b) => a.fvs.map(_._1).toSet ++ b)
+      )
+    def subst(sub: Map[LName, Tm], scope: Set[LName]): Tm =
+      def underN(
+          ps: List[(LName, TDef)],
+          b: Tm,
+          sub: Map[LName, Tm],
+          scope: Set[LName]
+      ): (List[(LName, TDef)], Tm) =
+        def go(
+            ps: List[(LName, TDef)],
+            nps: List[(LName, TDef)],
+            sub: Map[LName, Tm],
+            scope: Set[LName]
+        ): (List[(LName, TDef)], Tm) = ps match
+          case Nil => (nps, b.subst(sub, scope))
+          case (x, t) :: ps =>
+            if scope.contains(x) then
+              val y = scope.max + 1
+              go(
+                ps,
+                nps ++ List((y, t)),
+                sub + (x -> Var(y, t)),
+                scope + y
+              )
+            else go(ps, nps ++ List((x, t)), sub - x, scope + x)
+        go(ps, Nil, sub, scope)
+      this match
+        case Var(x, _)       => sub.get(x).getOrElse(this)
+        case Global(_, _, _) => this
+        case IntLit(_)       => this
+        case BoolLit(_)      => this
+        case StringLit(_)    => this
+
+        case App(f, a) => App(f.subst(sub, scope), a.subst(sub, scope))
+        case Lam(x0, t1, t2, b0) =>
+          val (List((x, _)), b) =
+            underN(List((x0, TDef(t1))), b0, sub, scope)
+          Lam(x, t1, t2, b)
+        case Fix(t1, t2, g0, x0, b0, arg) =>
+          val (List((g, _), (x, _)), b) = underN(
+            List((g0, TDef(t1, t2)), (x0, TDef(t1))),
+            b0,
+            sub,
+            scope
+          )
+          Fix(t1, t2, g, x, b, arg.subst(sub, scope))
+        case Let(x0, t, bt, v, b0) =>
+          val (List((x, _)), b) = underN(List((x0, t)), b0, sub, scope)
+          Let(x, t, bt, v.subst(sub, scope), b)
+
+        case Con(x, cx, as) => Con(x, cx, as.map(_.subst(sub, scope)))
+        case Field(dty, cx, s, i) =>
+          Field(dty, cx, s.subst(sub, scope), i)
+        case Match(dty, rty, x, scrut, cs, other) if scope.contains(x) =>
+          val y = scope.max
+          val nsub = sub + (x -> Var(y, TDef(TCon(dty))))
+          val nscope = scope + y
+          Match(
+            dty,
+            rty,
+            y,
+            scrut.subst(sub, scope),
+            cs.map((x, t) => (x, t.subst(nsub, nscope))),
+            other.map(_.subst(sub, scope))
+          )
+        case Match(dty, rty, x, scrut, cs, other) =>
+          val nsub = sub - x
+          val nscope = scope + x
+          Match(
+            dty,
+            rty,
+            x,
+            scrut.subst(sub, scope),
+            cs.map((x, t) => (x, t.subst(nsub, nscope))),
+            other.map(_.subst(sub, scope))
+          )
+
+        case ReturnIO(v) => ReturnIO(v.subst(sub, scope))
+        case BindIO(t1, t2, x0, v, b0) =>
+          val (List((x, _)), b) = underN(List((x0, TDef(t1))), b0, sub, scope)
+          BindIO(t1, t2, x, v.subst(sub, scope), b)
+        case RunIO(v) => RunIO(v.subst(sub, scope))
+
+        case Foreign(io, rt, cmd, args) =>
+          Foreign(io, rt, cmd, args.map((t, ty) => (t.subst(sub, scope), ty)))
+  export Tm.*

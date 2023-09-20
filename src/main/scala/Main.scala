@@ -1,33 +1,46 @@
 import surface.Parser.defsParser
+import common.Common.Name
 import common.Debug.*
 import core.Pretty.pretty
-import core.Staging.stage
-import elaboration.Elaboration.ElaborateError
+import core.Globals.getGlobal
+import core.Evaluation.nf
 import elaboration.ModuleLoading.load
-import ir.JvmGenerator.generate
+import elaboration.Elaboration.elaborate
+import elaboration.Elaboration.ElaborateError
+import core.Staging.stage
+import ir.Compilation.compile
+import jvmir.JvmGenerator.generate
 
 import java.io.File
 import scala.io.Source
 import parsley.io.given
 
 object Main:
-  @main def run(filename0: String): Unit =
+  @main def run(filename0: String, options: String*): Unit =
     setDebug(false)
     try
       val etimeStart = System.nanoTime()
       val (filename, eds) = load(filename0)
-      val moduleName = filename.split("/").last
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
-
       println(pretty(eds))
+
+      if options.contains("typecheck") then return
 
       println("\nstaging:")
       val irds = stage(filename, eds)
       println(irds)
 
+      if options.contains("stage") then return
+
+      println("\ncompilation:")
+      val jvmirds = compile(irds)
+      println(jvmirds)
+
+      if options.contains("compile") then return
+
       println("\ngenerate JVM bytecode")
-      generate(filename, irds)
+      generate(filename, jvmirds)
     catch
       case err: ElaborateError =>
         println(err.getMessage)

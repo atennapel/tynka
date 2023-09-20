@@ -1,0 +1,113 @@
+import "lib/Base" (...)
+import "lib/JVM" (...)
+import "lib/IO" as IO
+import "lib/Free" as Free
+import "lib/Free" (Free, FunctorM)
+
+def (>>=) = Free/bind
+def return = Free/return
+def (+) a b = addInt a b
+def (<) a b = ltInt a b
+
+def StackF (K : Meta) =
+  (cv : CV) (R : Ty cv) ->
+
+    (Str -> (Void -> K) -> R) ->
+
+    ((Int -> K) -> R) ->
+    
+    (Long -> K -> R) ->
+
+    ((Int -> K) -> R) ->
+    (Int -> K -> R) ->
+    
+    R
+
+def handleStackF {K : Meta} {cv : CV} {R : Ty cv}
+  (throw : Str -> (Void -> K) -> R)
+  (read : (Int -> K) -> R)
+  (write : Long -> K -> R)
+  (get : (Int -> K) -> R)
+  (put : Int -> K -> R)
+  (s : StackF K) : R =
+  s _ R throw read write get put
+
+def FunctorMStackF : FunctorM StackF =
+  \f x. \cv R throw read write get put.
+    x _ R
+      (\msg k. throw msg (\x. f (k x)))
+      (\k. read (\x. f (k x)))
+      (\w k. write w (f k))
+      (\k. get (\x. f (k x)))
+      (\s k. put s (f k))
+
+def throw {A} (msg : Str) : Free StackF A =
+  Free/lift FunctorMStackF (\cv R throw read write get put. throw msg (\x. absurd x))
+def read : Free StackF Int =
+  Free/lift FunctorMStackF (\cv R throw read write get put. read (\s. s))
+def write (s : Long) : Free StackF Unit =
+  Free/lift FunctorMStackF (\cv R throw read write get put. write s U)
+def get : Free StackF Int =
+  Free/lift FunctorMStackF (\cv R throw read write get put. get (\s. s))
+def put (s : Int) : Free StackF Unit =
+  Free/lift FunctorMStackF (\cv R throw read write get put. put s U)
+
+def M (A : VTy) = Int -> Long -> Int -> Either Str (Pair (Pair Int A) Long)
+
+def returnM {A : VTy} (a : A) : M A = \r w s. Right (MkPair (MkPair s a) w)
+def bindM {A B : VTy} (c : M A) (f : A -> M B) : M B =
+  \r w s.
+    match c r w s
+    | Left msg. Left msg
+    | Right p. match p | MkPair st w'. match st | MkPair s' res.
+      f res r w' s'
+
+def throwM {A : VTy} (msg : Str) : M A = \r w s. Left msg
+def readM : M Int = \r w s. Right (MkPair (MkPair s r) w)
+def writeM (n : Long) : M Unit = \r w s. Right (MkPair (MkPair s U) (addLong w n))
+def getM : M Int = \r w s. Right (MkPair (MkPair s s) w)
+def putM (s : Int) : M Unit = \r w _. Right (MkPair (MkPair s U) w)
+
+def handle {A} (c : Free StackF A) : M A =
+  Free/handle c (\x. returnM x) \. handleStackF
+    (\msg k. bindM (throwM msg) k)
+    (\k. bindM readM k)
+    (\x k. bindM (writeM x) \_. k)
+    (\k. bindM getM k)
+    (\x k. bindM (putM x) \_. k)
+
+def prog : Free StackF Int =
+  Free/rec (do
+    s <- get;
+    put (s + 1);
+    write (longFromInt s);
+    r <- read;
+    Free/return (MkPair s r)
+  ) \p loop return. match p | MkPair s r.
+    if s < r then
+      loop
+    else
+      return s
+
+def prog2 : Free StackF Int =
+  Free/recLoop \loop done. do
+    s <- get;
+    put (s + 1);
+    write (longFromInt s);
+    r <- read;
+    Free/return
+      if s < r then
+        loop
+      else
+        done s
+
+def res := handle prog 100000 (longFromInt 0) 0
+
+def main (_ : Array Str) :=
+  match res
+  | Left msg. putLn msg
+  | Right p. match p | MkPair st w. match st | MkPair s a.
+    do {IO/bind}
+      putLn a;
+      putLn w;
+      putLn s
