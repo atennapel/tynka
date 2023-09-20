@@ -1,8 +1,0 @@
-import "lib/Base" (VTy)
-import "lib/Jvm" (putLn)
-import "lib/IO" (unsafePerformIO, return, (>>=) = bind)
-
-def trace {A B : VTy} (msg : A) (value : B) : B =
-  unsafePerformIO \. do
-    putLn msg;
-    return value

@@ -1,5 +1,0 @@
-opaque def Tagged (L : Label) {cv} (A : Ty cv) = A
-
-def tag {L : Label} {cv} {A : Ty cv} (x : A) : Tagged L A = unfold Tagged; x
-
-def untag {L : Label} {cv} {A : Ty cv} (x : Tagged L A) : A = unfold Tagged; x

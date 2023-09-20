@@ -1,3 +1,0 @@
-opaque def Ur {cv} (A : Ty cv) = A
-def ur {cv} {A : Ty cv} (x : A) : Ur A = unfold Ur; x
-def unUr {cv} {A : Ty cv} (x : Ur A) : Ur A = unfold Ur; x
