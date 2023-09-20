@@ -14,6 +14,7 @@ object Common:
   extension (i: Ix)
     inline def expose: Int = i
     inline def +(o: Int): Ix = i + o
+    inline def -(o: Int): Ix = i - o
 
   // levels
   opaque type Lvl = Int
@@ -22,7 +23,9 @@ object Common:
   extension (l: Lvl)
     @targetName("addLvl")
     inline def +(o: Int): Lvl = l + o
+    @targetName("subLvl")
     inline def -(o: Int): Lvl = l - o
+    inline def <(o: Lvl): Boolean = l < o
     @targetName("exposeLvl")
     inline def expose: Int = l
     inline def toIx(implicit k: Lvl): Ix = k - l - 1
@@ -66,6 +69,7 @@ object Common:
     case PESkip
     case PEBind0
     case PEBind1(icit: Icit)
+  export PruneEntry.*
   type Pruning = List[PruneEntry]
 
   opaque type RevPruning = Pruning
@@ -73,7 +77,7 @@ object Common:
     @targetName("exposeRevPruning")
     inline def expose: Pruning = r
   object RevPruning:
-    def apply(p: Pruning): RevPruning = p.reverse
+    inline def apply(p: Pruning): RevPruning = p.reverse
 
   // meta ids
   opaque type MetaId = Int
