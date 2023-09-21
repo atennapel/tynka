@@ -15,7 +15,6 @@ object Unification:
 
   // partial substitution
   private enum PSEntry:
-    case PSNonLinear
     case PS0(value: Val0)
     case PS1(value: Val1)
   import PSEntry.*
@@ -24,101 +23,89 @@ object Unification:
       occ: Option[MetaId],
       dom: Lvl,
       cod: Lvl,
-      sub: IntMap[PSEntry],
-      isLinear: Boolean
+      sub: IntMap[PSEntry]
   ):
     def lift1: PSub =
       PSub(
         occ,
         dom + 1,
         cod + 1,
-        sub + (cod.expose -> PS1(VVar1(dom))),
-        isLinear
+        sub + (cod.expose -> PS1(VVar1(dom)))
       )
     def lift0: PSub =
       PSub(
         occ,
         dom + 1,
         cod + 1,
-        sub + (cod.expose -> PS0(VVar0(dom))),
-        isLinear
+        sub + (cod.expose -> PS0(VVar0(dom)))
       )
     inline def skip: PSub = copy(cod = cod + 1)
 
   private object PSub:
-    val empty = PSub(None, lvl0, lvl0, IntMap.empty, true)
+    val empty = PSub(None, lvl0, lvl0, IntMap.empty)
 
-  // fresh metas
-  @tailrec
-  private def closeType(ls: Locals, xs: List[Bind], top: Ty): Ty =
-    (ls, xs) match
-      case (LEmpty, Nil) => top
-      case (LDef(ls, ty, v), DoBind(x) :: xs) =>
-        closeType(ls, xs, Let1(x, ty, v, top))
-      case (LBind0(ls, ty, cv), x :: xs) =>
-        closeType(ls, xs, Pi(x, Expl, Lift(cv, ty), top))
-      case (LBind1(ls, ty), x :: xs) =>
-        closeType(ls, xs, Pi(x, Expl, ty, top))
-      case _ => impossible()
+  // invert
+  private type Invert = (Lvl, Set[Lvl], IntMap[PSEntry], Pruning, Boolean)
 
-  def freshMeta(ty: VTy)(implicit ctx: Ctx): Tm1 =
-    val lvl = ctx.lvl
-    val qa = closeType(ctx.locals, ctx.binds, quote1(ty, LiftVars(lvl))(lvl))
-    val id = newMeta(eval1(qa)(EEmpty))
-    AppPruning(Meta(id), ???)
-
-  inline def freshCV()(implicit ctx: Ctx): CV = freshMeta(VCV1)
-
-  // inversion
-  private def invertVal1(v: Val1, rhs: Val1)(implicit psub: PSub): PSub =
+  private def invertVal1(v: Val1, rhs: Val1, i: Icit, data: Invert): Invert =
     forceAll1(v) match
       case VVar1(x) =>
-        val sub = psub.sub
-        if sub.contains(x.expose) then
-          psub.copy(isLinear = false, sub = sub + (x.expose -> PSNonLinear))
-        else psub.copy(sub = sub + (x.expose -> PS1(rhs)))
-      case VQuote(v) => invertVal0(v, vsplice(rhs))
-      case _         => throw UnifyError("non-var in spine")
+        val (dom, domvars, sub, pr, isLinear) = data
+        if domvars.contains(x) then
+          (dom + 1, domvars, sub - x.expose, PESkip :: pr, false)
+        else
+          (
+            dom + 1,
+            domvars + x,
+            sub + (x.expose -> PS1(rhs)),
+            PEBind1(i) :: pr,
+            isLinear
+          )
+      case VQuote(v) => invertVal0(v, vsplice(rhs), i, data)
+      case _         => throw UnifyError("spine error")
 
-  private def invertVal0(v: Val0, rhs: Val0)(implicit psub: PSub): PSub =
+  private def invertVal0(v: Val0, rhs: Val0, i: Icit, data: Invert): Invert =
     forceAll0(v) match
       case VVar0(x) =>
-        val sub = psub.sub
-        if sub.contains(x.expose) then
-          psub.copy(isLinear = false, sub = sub + (x.expose -> PSNonLinear))
-        else psub.copy(sub = sub + (x.expose -> PS0(rhs)))
-      case VSplice(v) => invertVal1(v, vquote(rhs))
-      case _          => throw UnifyError("non-var in spine")
+        val (dom, domvars, sub, pr, isLinear) = data
+        if domvars.contains(x) then
+          (dom + 1, domvars, sub - x.expose, PESkip :: pr, false)
+        else
+          (
+            dom + 1,
+            domvars + x,
+            sub + (x.expose -> PS0(rhs)),
+            PEBind1(i) :: pr,
+            isLinear
+          )
+      case VSplice(v) => invertVal1(v, vquote(rhs), i, data)
+      case _          => throw UnifyError("spine error")
 
-  private def invert(sp: Spine)(implicit lvl: Lvl): PSub = sp match
-    case SId => PSub.empty
-    case SApp(sp, v, i) =>
-      val psub = invert(sp)
-      val d = psub.dom
-      invertVal1(v, VVar1(d))(psub.copy(dom = d + 1))
+  private def invert(sp: Spine)(implicit lvl: Lvl): (PSub, Option[Pruning]) =
+    def go(sp: Spine): Invert =
+      sp match
+        case SId => (lvl0, Set.empty, IntMap.empty, Nil, true)
+        case SApp(sp, v, i) =>
+          val data = go(sp)
+          invertVal1(v, VVar1(data._1), i, data)
+    val (dom, _, sub, pr, isLinear) = go(sp)
+    (PSub(None, dom, lvl, sub), if isLinear then None else Some(pr))
 
-  // expansion
-  private def metaEtaExpansion(id: MetaId, sp: Spine): Val1 =
-    def go(ctx: Ctx, sp: Spine, ty: Val1): Tm1 = (sp, forceAll1(ty)) match
-      case (SId, ty) => freshMeta(ty)(ctx)
-      case (SApp(sp, arg, i), VPi(x, _, a, b)) =>
-        val qa = quote1(a, UnfoldNone)(ctx.lvl)
-        Lam1(x, i, qa, go(ctx.bind1(x, qa, a), sp, b(VVar1(ctx.lvl))))
-      case _ => impossible()
-    eval1(go(Ctx.empty, sp.reverse, unsolvedMetaType(id)))(EEmpty)
-
-  private def expandMeta(ctx: Ctx, id: MetaId, sp: Spine): Val1 =
-    val v = metaEtaExpansion(id, sp)
-    solveWithPSub(id, SId, v)(PSub.empty)
-    vspine(v, sp)
-
-  private def validateRhsType(mty: VTy, sp: Spine)(implicit psub: PSub): Unit =
-    def getTy(ty: VTy, sp: Spine): VTy = (ty, sp) match
-      case (ty, SId)                           => ty
-      case (VPi(x, i, a, b), SApp(sp, arg, _)) => getTy(b(arg), sp)
-      case _                                   => impossible()
-    psubst1(getTy(mty, sp.reverse))
-    ()
+  // pruning
+  private def lams(ty: VTy, b: Tm1)(implicit lvl: Lvl): Tm1 =
+    def go(l1: Lvl, l2: Lvl, ty: VTy, b: Tm1): Tm1 =
+      if l1 == l2 then b
+      else
+        forceAll1(ty) match
+          case VPi(x, i, a, c) =>
+            Lam1(
+              x,
+              i,
+              quote1(a, UnfoldNone)(l2),
+              go(l1, l2 + 1, c(VVar1(l2)), b)
+            )
+          case _ => impossible()
+    go(lvl, lvl0, ty, b)
 
   private def pruneTy(p: RevPruning, ty: VTy): Ty =
     def go(p: Pruning, psub: PSub, ty: VTy): Ty = (p, forceAll1(ty)) match
@@ -130,7 +117,54 @@ object Unification:
       case _ => impossible()
     go(p.expose, PSub.empty, ty)
 
-  // substitution
+  private def pruneMeta(p: Pruning, m: MetaId): MetaId =
+    val mty = unsolvedMetaType(m)
+    val prunedty = eval1(pruneTy(RevPruning(p), mty))(EEmpty)
+    val m2 = newMeta(prunedty)
+    val solution =
+      eval1(lams(mty, AppPruning(Meta(m2), p))(mkLvl(p.size)))(EEmpty)
+    solveMeta(m, solution, Set.empty) // TODO: meta dependencies
+    m2
+
+  private enum SpinePruneStatus:
+    case OKRenaming
+    case OKNonRenaming
+    case NeedsPruning
+  import SpinePruneStatus.*
+
+  private def pruneVFlex(m: MetaId, sp: Spine)(implicit psub: PSub): Tm1 =
+    def go(sp: Spine): (List[(Option[Tm1], Icit)], SpinePruneStatus) = sp match
+      case SId => (Nil, OKRenaming)
+      case SApp(sp, v, i) =>
+        val (sp2, status) = go(sp)
+        forceAll1(v) match
+          case VVar1(x) =>
+            (psub.sub.get(x.expose), status) match
+              case (Some(PS1(v)), _) => ((Some(psubst1(v)), i) :: sp2, status)
+              case (Some(PS0(v)), _) =>
+                ((Some(psubst1(vquote(v))), i) :: sp2, status)
+              case (None, OKNonRenaming) => throw UnifyError("failed to prune")
+              case _                     => ((None, i) :: sp2, NeedsPruning)
+          case t =>
+            status match
+              case NeedsPruning => throw UnifyError("failed to prune")
+              case _            => ((Some(psubst1(t)), i) :: sp2, OKNonRenaming)
+    val (sp2, status) = go(sp)
+    val m2 = status match
+      case OKRenaming    => m
+      case OKNonRenaming => m
+      case NeedsPruning =>
+        val pr = sp2.map { (m, i) =>
+          m match
+            case None    => PESkip
+            case Some(_) => PEBind1(i)
+        }
+        pruneMeta(pr, m)
+    sp2.foldRight(Meta(m2)) { case ((mu, i), t) =>
+      mu.fold(t)(u => App1(t, u, i))
+    }
+
+  // partial substitution action
   private def psubst0(v: Val0)(implicit psub: PSub): Tm0 =
     inline def go0(v: Val0) = psubst0(v)
     inline def go1(v: Val1) = psubst1(v)
@@ -138,10 +172,9 @@ object Unification:
     forceMetas0(v) match
       case VVar0(x) =>
         psub.sub.get(x.expose) match
-          case None              => throw UnifyError(s"out of scope $x")
-          case Some(PS1(_))      => impossible()
-          case Some(PS0(v))      => quote0(v, UnfoldNone)(psub.dom)
-          case Some(PSNonLinear) => throw UnifyError(s"non-linear")
+          case None         => throw UnifyError(s"out of scope $x")
+          case Some(PS1(_)) => impossible()
+          case Some(PS0(v)) => quote0(v, UnfoldNone)(psub.dom)
       case VLet0(x, ty, v, b) => Let0(x, go1(ty), go0(v), goClos(b))
       case VLam0(x, ty, b)    => Lam0(x, go1(ty), goClos(b))
       case VApp0(f, a)        => App0(go0(f), go0(a))
@@ -159,13 +192,12 @@ object Unification:
     forceMetas1(v) match
       case VRigid(x, sp) =>
         psub.sub.get(x.expose) match
-          case None              => throw UnifyError(s"out of scope $x")
-          case Some(PS0(_))      => impossible()
-          case Some(PS1(v))      => goSp(quote1(v, UnfoldNone)(psub.dom), sp)
-          case Some(PSNonLinear) => throw UnifyError("non-linear")
-      case VFlex(id, sp) =>
-        if psub.occ.contains(id) then throw UnifyError(s"occurs error ?$id")
-        else goSp(Meta(id), sp)
+          case None         => throw UnifyError(s"out of scope $x")
+          case Some(PS0(_)) => impossible()
+          case Some(PS1(v)) => goSp(quote1(v, UnfoldNone)(psub.dom), sp)
+      case VFlex(m, sp) =>
+        if psub.occ.contains(m) then throw UnifyError(s"occurs error ?$m")
+        else pruneVFlex(m, sp)
       case VUnfold(_, _, v)   => psubst1(v())
       case VPi(x, i, ty, b)   => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b) => Lam1(x, i, go1(ty), goClos(b))
@@ -179,36 +211,16 @@ object Unification:
       case VQuote(tm)         => Quote(go0(tm))
 
   // solving
-  private def lams(ty: VTy, b: Tm1)(implicit lvl: Lvl): Tm1 =
-    def go(l1: Lvl, l2: Lvl, ty: VTy, b: Tm1): Tm1 =
-      if l1 == l2 then b
-      else
-        forceAll1(ty) match
-          case VPi(x, i, a, c) =>
-            Lam1(
-              x,
-              i,
-              quote1(a, UnfoldNone)(l2),
-              go(l1, l2 + 1, c(VVar1(l2)), b)
-            )
-          case _ => impossible()
-    go(lvl, lvl0, ty, b)
-
   private def solve(id: MetaId, sp: Spine, rhs: Val1)(implicit lvl: Lvl): Unit =
-    val ty = unsolvedMetaType(id)
-    implicit val psub = invert(sp)(lvl)
-    solveWithPSub(id, sp, rhs)
+    solveWithPSub(id, invert(sp), rhs)
 
-  private def solveWithPSub(id: MetaId, sp: Spine, rhs: Val1)(implicit
-      psub: PSub
-  ) =
-    val ty = unsolvedMetaType(id)
-    val qrhs = {
-      if !psub.isLinear then validateRhsType(ty, sp)
-      psubst1(rhs)(psub.copy(occ = Some(id)))
-    }
-    val sol = eval1(lams(ty, qrhs)(psub.dom))(EEmpty)
-    solveMeta(id, sol, Set.empty) // TODO: meta dependencies
+  private def solveWithPSub(m: MetaId, iv: (PSub, Option[Pruning]), rhs: Val1) =
+    implicit val psub: PSub = iv._1
+    val mty = unsolvedMetaType(m)
+    iv._2.foreach(p => pruneTy(RevPruning(p), mty))
+    val rhs2 = psubst1(rhs)(psub.copy(occ = Some(m)))
+    val sol = eval1(lams(mty, rhs2)(psub.dom))(EEmpty)
+    solveMeta(m, sol, Set.empty) // TODO: meta dependencies
 
   // unification
   def unify0(a: Val0, b: Val0)(implicit lvl: Lvl): Unit =
@@ -225,6 +237,32 @@ object Unification:
         throw UnifyError(
           s"cannot unify ${quote0(a, UnfoldNone)} ~ ${quote0(b, UnfoldNone)}"
         )
+
+  private def flexFlex(m1: MetaId, sp1: Spine, m2: MetaId, sp2: Spine)(implicit
+      lvl: Lvl
+  ): Unit =
+    inline def go(m1: MetaId, sp1: Spine, m2: MetaId, sp2: Spine): Unit =
+      try
+        val data = invert(sp1)
+        solveWithPSub(m1, data, VFlex(m2, sp2))
+      catch case _: UnifyError => solve(m2, sp2, VFlex(m1, sp1))
+    if sp1.size < sp2.size then go(m2, sp2, m1, sp1) else go(m1, sp1, m2, sp2)
+
+  private def intersect(m: MetaId, sp1: Spine, sp2: Spine)(implicit
+      lvl: Lvl
+  ): Unit =
+    def go(sp1: Spine, sp2: Spine): Option[Pruning] = (sp1, sp2) match
+      case (SId, SId) => Some(Nil)
+      case (SApp(sp1, t1, i), SApp(sp2, t2, _)) =>
+        (forceAll1(t1), forceAll1(t2)) match
+          case (VVar1(x1), VVar1(x2)) =>
+            go(sp1, sp2).map((if x1 == x2 then PEBind1(i) else PESkip) :: _)
+          case _ => None
+      case _ => impossible()
+    go(sp1, sp2) match
+      case None => unify1(VFlex(m, sp1), sp1, VFlex(m, sp2), sp2)
+      case Some(p) if p.exists(_ == PESkip) => pruneMeta(p, m)
+      case _                                => ()
 
   private def unify1(top1: Val1, sp1: Spine, top2: Val1, sp2: Spine)(implicit
       lvl: Lvl
@@ -274,8 +312,9 @@ object Unification:
         val v = VVar1(lvl)
         unify1(vapp1(f, v, i), b(v))(lvl + 1)
 
-      case (top1 @ VFlex(id1, sp1), top2 @ VFlex(id2, sp2)) if id1 == id2 =>
-        unify1(top1, sp1, top2, sp2)
+      case (VFlex(id1, sp1), VFlex(id2, sp2)) =>
+        if id1 == id2 then intersect(id1, sp1, sp2)
+        else flexFlex(id1, sp1, id2, sp2)
       case (VFlex(id, sp), v) => solve(id, sp, v)
       case (v, VFlex(id, sp)) => solve(id, sp, v)
 
