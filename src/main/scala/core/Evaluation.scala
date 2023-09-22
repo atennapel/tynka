@@ -53,47 +53,54 @@ object Evaluation:
     case SId            => v
     case SApp(sp, a, i) => vapp1(vspine(v, sp), a, i)
 
-  def vappPruning(v: Val1, p: Pruning)(implicit env: Env): Val1 = (env, p) match
-    case (EEmpty, Nil)                 => v
-    case (E1(env, u), PESkip :: p)     => vappPruning(v, p)(env)
-    case (E1(env, u), PEBind1(i) :: p) => vapp1(vappPruning(v, p)(env), u, i)
-    case (E0(env, lvl), PEBind0 :: p) =>
-      vapp1(vappPruning(v, p)(env), VQuote(VVar0(lvl)), Expl)
-    case _ => impossible()
+  def vappPruning(v: Val1, p: Pruning)(implicit env: Env): Val1 =
+    (env, p) match
+      case (EEmpty, Nil)                 => v
+      case (E1(env, u), PESkip :: p)     => vappPruning(v, p)(env)
+      case (E1(env, u), PEBind1(i) :: p) => vapp1(vappPruning(v, p)(env), u, i)
+      case (E0(env, lvl), PEBind0 :: p) =>
+        vapp1(vappPruning(v, p)(env), VQuote(VVar0(lvl)), Expl)
+      case (E1(env, u), PEBind0 :: p) =>
+        vapp1(vappPruning(v, p)(env), u, Expl) // TODO: is this correct?
+      case _ => impossible()
 
-  def eval0(t: Tm0)(implicit env: Env): Val0 = t match
-    case Var0(ix)          => VVar0(vvar0(ix))
-    case Let0(x, ty, v, b) => VLet0(x, eval1(ty), eval0(v), Clos(b))
-    case Lam0(x, ty, b)    => VLam0(x, eval1(ty), Clos(b))
-    case App0(f, a)        => VApp0(eval0(f), eval0(a))
-    case Splice(t)         => vsplice(eval1(t))
-    case Wk10(t)           => eval0(t)(env.wk1)
+  def eval0(t: Tm0)(implicit env: Env): Val0 =
+    t match
+      case Var0(ix)          => VVar0(vvar0(ix))
+      case Prim0(x)          => VPrim0(x)
+      case Let0(x, ty, v, b) => VLet0(x, eval1(ty), eval0(v), Clos(b))
+      case Lam0(x, ty, b)    => VLam0(x, eval1(ty), Clos(b))
+      case App0(f, a)        => VApp0(eval0(f), eval0(a))
+      case Splice(t)         => vsplice(eval1(t))
+      case Wk10(t)           => eval0(t)(env.wk1)
 
-  def eval1(t: Tm1)(implicit env: Env): Val1 = t match
-    case Var1(ix)          => vvar1(ix)
-    case Let1(_, _, v, b)  => eval1(b)(E1(env, eval1(v)))
-    case U0(cv)            => VU0(eval1(cv))
-    case U1                => VU1
-    case Pi(x, i, ty, b)   => VPi(x, i, eval1(ty), Clos(b))
-    case Lam1(x, i, ty, b) => VLam1(x, i, eval1(ty), Clos(b))
-    case App1(f, a, i)     => vapp1(eval1(f), eval1(a), i)
-    case Fun(p, cv, r)     => VFun(eval1(p), eval1(cv), eval1(r))
-    case CV1               => VCV1
-    case Comp              => VComp
-    case Val               => VVal
-    case Lift(cv, ty)      => VLift(eval1(cv), eval1(ty))
-    case Quote(tm)         => vquote(eval0(tm))
-    case AppPruning(tm, p) => vappPruning(eval1(tm), p)
-    case Wk01(tm)          => eval1(tm)(env.wk0)
-    case Wk11(tm)          => eval1(tm)(env.wk1)
-    case Meta(id)          => vmeta(id)
+  def eval1(t: Tm1)(implicit env: Env): Val1 =
+    t match
+      case Var1(ix)          => vvar1(ix)
+      case Prim1(x)          => VPrim1(x)
+      case Let1(_, _, v, b)  => eval1(b)(E1(env, eval1(v)))
+      case U0(cv)            => VU0(eval1(cv))
+      case U1                => VU1
+      case Pi(x, i, ty, b)   => VPi(x, i, eval1(ty), Clos(b))
+      case Lam1(x, i, ty, b) => VLam1(x, i, eval1(ty), Clos(b))
+      case App1(f, a, i)     => vapp1(eval1(f), eval1(a), i)
+      case Fun(p, cv, r)     => VFun(eval1(p), eval1(cv), eval1(r))
+      case CV1               => VCV1
+      case Comp              => VComp
+      case Val               => VVal
+      case Lift(cv, ty)      => VLift(eval1(cv), eval1(ty))
+      case Quote(tm)         => vquote(eval0(tm))
+      case AppPruning(tm, p) => vappPruning(eval1(tm), p)
+      case Wk01(tm)          => eval1(tm)(env.wk0)
+      case Wk11(tm)          => eval1(tm)(env.wk1)
+      case Meta(id)          => vmeta(id)
 
   // forcing
   def force1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
         case Unsolved(_)  => top
-        case Solved(v, _) => VUnfold(id, SId, () => vspine(v, sp))
+        case Solved(v, _) => VUnfold(id, sp, () => vspine(v, sp))
     case v => v
 
   @tailrec
@@ -157,6 +164,7 @@ object Evaluation:
       case LiftVars(_) => force1(v)
     force(v) match
       case VRigid(lvl, sp)    => goSp(Var1(lvl.toIx), sp)
+      case VPrim1(x)          => Prim1(x)
       case VFlex(id, sp)      => goSp(Meta(id), sp)
       case VUnfold(id, sp, _) => goSp(Meta(id), sp)
       case VPi(x, i, ty, b)   => Pi(x, i, go1(ty), goClos(b))
@@ -184,7 +192,12 @@ object Evaluation:
         q match
           case LiftVars(y) if x < y => Splice(Var1(x.toIx))
           case _                    => Var0(x.toIx)
+      case VPrim0(x)          => Prim0(x)
       case VLet0(x, ty, v, b) => Let0(x, go1(ty), go0(v), goClos(b))
       case VLam0(x, ty, b)    => Lam0(x, go1(ty), goClos(b))
       case VApp0(f, a)        => App0(go0(f), go0(a))
       case VSplice(tm)        => Splice(go1(tm))
+
+  def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
+    quote1(eval1(tm)(EEmpty), q)(lvl0)
+  def stage(tm: Tm0): Tm0 = quote0(eval0(tm)(EEmpty), UnfoldAll)(lvl0)

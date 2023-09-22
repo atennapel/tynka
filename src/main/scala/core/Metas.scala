@@ -47,7 +47,7 @@ object Metas:
   def modifyMeta(id: MetaId)(fn: MetaEntry => MetaEntry): Unit =
     metas(id.expose) = fn(metas(id.expose))
 
-  def solveMeta(id: MetaId, v: Val1, deps: Set[MetaId]): Unit =
+  def solveMeta(id: MetaId, v: Val1): Unit =
     val u = getMetaUnsolved(id)
     metas(id.expose) = Solved(v, u.ty)
 

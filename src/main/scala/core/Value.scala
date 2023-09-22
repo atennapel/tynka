@@ -56,6 +56,7 @@ object Value:
 
   enum Val0:
     case VVar0(lvl: Lvl)
+    case VPrim0(name: Name)
     case VLet0(name: Name, ty: VTy, value: Val0, body: Clos[S.Tm0])
     case VLam0(name: Bind, ty: VTy, body: Clos[S.Tm0])
     case VApp0(fn: Val0, arg: Val0)
@@ -64,6 +65,7 @@ object Value:
 
   enum Val1:
     case VRigid(lvl: Lvl, spine: Spine)
+    case VPrim1(name: Name)
     case VFlex(id: MetaId, spine: Spine)
     case VUnfold(id: MetaId, spine: Spine, value: () => Val1)
 
