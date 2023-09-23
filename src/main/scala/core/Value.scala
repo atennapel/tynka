@@ -13,7 +13,7 @@ object Value:
   enum Env:
     case EEmpty
     case E1(env: Env, value: Val1)
-    case E0(env: Env, lvl: Lvl)
+    case E0(env: Env, value: Val0)
 
     def size: Int =
       @tailrec
@@ -37,20 +37,23 @@ object Value:
 
   enum Spine:
     case SId
-    case SApp(sp: Spine, value: Val1, icit: Icit)
+    case SApp(sp: Spine, arg: Val1, icit: Icit)
+    case SMetaApp(sp: Spine, arg: Either[Val0, Val1])
 
     def size: Int =
       @tailrec
       def go(acc: Int, sp: Spine): Int = sp match
-        case SId            => acc
-        case SApp(sp, _, _) => go(acc + 1, sp)
+        case SId             => acc
+        case SApp(sp, _, _)  => go(acc + 1, sp)
+        case SMetaApp(sp, _) => go(acc + 1, sp)
       go(0, this)
 
     def reverse: Spine =
       @tailrec
       def go(acc: Spine, sp: Spine): Spine = sp match
-        case SId            => acc
-        case SApp(sp, v, i) => go(SApp(acc, v, i), sp)
+        case SId             => acc
+        case SApp(sp, v, i)  => go(SApp(acc, v, i), sp)
+        case SMetaApp(sp, v) => go(SMetaApp(acc, v), sp)
       go(SId, this)
   export Spine.*
 
@@ -71,6 +74,9 @@ object Value:
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos[S.Ty])
     case VLam1(name: Bind, icit: Icit, ty: VTy, body: Clos[S.Tm1])
+
+    case VMetaPi(meta: Boolean, ty: VTy, body: Clos[S.Ty])
+    case VMetaLam(meta: Boolean, body: Clos[S.Tm1])
 
     case VU0(cv: VCV)
     case VU1

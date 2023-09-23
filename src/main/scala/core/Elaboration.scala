@@ -44,16 +44,16 @@ object Elaboration:
     case (LDef(ls, a, v), DoBind(x) :: xs) =>
       closeType(ls, xs, Let1(x, a, v, ty))
     case (LBind0(ls, a, cv), x :: xs) =>
-      closeType(ls, xs, Pi(x, Expl, Lift(cv, a), ty))
-    case (LBind1(ls, a), x :: xs) => closeType(ls, xs, Pi(x, Expl, a, ty))
+      closeType(ls, xs, MetaPi(false, a, ty))
+    case (LBind1(ls, a), x :: xs) => closeType(ls, xs, MetaPi(true, a, ty))
     case _                        => impossible()
 
   private def freshMeta(ty: VTy)(implicit ctx: Ctx): Tm1 =
-    val qa = closeType(ctx.locals, ctx.binds, ctx.quote1(ty, LiftVars(ctx.lvl)))
+    val qa = closeType(ctx.locals, ctx.binds, ctx.quote1(ty, UnfoldNone))
     val vqa = eval1(qa)(EEmpty)
     val m = newMeta(vqa)
     debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
-    AppPruning(Meta(m), ctx.pruning)
+    AppPruning(m, ctx.pruning)
 
   private inline def freshCV()(implicit ctx: Ctx): CV = freshMeta(VCV1)
 
@@ -232,8 +232,8 @@ object Elaboration:
 
       case S.Lam(x, i, ma, b) =>
         if i != S.ArgIcit(Expl) then error(s"implicit lambda in Ty")
-        // TODO: use ma
         val (t1, fcv, t2) = ensureFun(ty, cv)
+        ma.foreach { sty => unify1(ctx.eval1(check1(sty, VU0(VVal))), t1) }
         val qt1 = ctx.quote1(t1)
         Lam0(x, qt1, check0(b, t2, fcv)(ctx.bind0(x, qt1, t1, Val, VVal)))
 
@@ -271,7 +271,7 @@ object Elaboration:
       case (S.Pos(pos, tm), _) => check1(tm, ty)(ctx.enter(pos))
 
       case (S.Lam(x, i, ma, b), VPi(x2, i2, t1, t2)) if icitMatch(i, x2, i2) =>
-        // TODO: use ma
+        ma.foreach { sty => unify1(ctx.eval1(check1(sty, VU1)), t1) }
         val qt1 = ctx.quote1(t1)
         Lam1(x, i2, qt1, check1(b, t2(VVar1(ctx.lvl)))(ctx.bind1(x, qt1, t1)))
       case (tm, VPi(x, Impl, t1, t2)) =>
@@ -417,9 +417,8 @@ object Elaboration:
 
       case S.Lam(x, i, mty, b) =>
         i match
-          case S.ArgNamed(_) => error("cannot infer")
-          case S.ArgIcit(Expl) =>
-            error("cannot infer") // TODO: try something here?
+          case S.ArgNamed(_)   => error("cannot infer")
+          case S.ArgIcit(Expl) => error("cannot infer")
           case S.ArgIcit(Impl) =>
             val ety = tyAnnot(mty, VU1)
             val vty = ctx.eval1(ety)

@@ -45,33 +45,39 @@ object Syntax:
 
     case Quote(tm: Tm0)
 
-    case AppPruning(tm: Tm1, pruning: Pruning)
-
     case Wk01(tm: Tm1)
     case Wk11(tm: Tm1)
 
     case Meta(id: MetaId)
+    case MetaPi(meta: Boolean, ty: Ty, body: Ty)
+    case MetaLam(meta: Boolean, body: Tm1)
+    case MetaApp(fn: Tm1, arg: Either[Tm0, Tm1])
+    case AppPruning(id: MetaId, pruning: Pruning)
 
     override def toString: String = this match
-      case Var1(ix)            => s"'$ix"
-      case Prim1(x)            => s"$x"
-      case Let1(x, ty, v, b)   => s"(let $x : $ty = $v; $b)"
-      case U0(cv)              => s"(Ty $cv)"
-      case U1                  => "Meta"
-      case Pi(x, i, ty, b)     => s"(${i.wrap(s"$x : $ty")} -> $b)"
-      case Lam1(x, i, ty, b)   => s"(\\${i.wrap(s"$x : $ty")}. $b)"
-      case App1(fn, arg, Expl) => s"($fn $arg)"
-      case App1(fn, arg, i)    => s"($fn ${i.wrap(arg)})"
-      case Fun(pty, _, rty)    => s"($pty -> $rty)"
-      case CV1                 => "CV"
-      case Comp                => "Comp"
-      case Val                 => "Val"
-      case Lift(_, ty)         => s"^$ty"
-      case Quote(tm)           => s"`$tm"
-      case AppPruning(tm, _)   => s"($tm ...)"
-      case Wk01(tm)            => s"$tm"
-      case Wk11(tm)            => s"$tm"
-      case Meta(id)            => s"?$id"
+      case Var1(ix)             => s"'$ix"
+      case Prim1(x)             => s"$x"
+      case Let1(x, ty, v, b)    => s"(let $x : $ty = $v; $b)"
+      case U0(cv)               => s"(Ty $cv)"
+      case U1                   => "Meta"
+      case Pi(x, i, ty, b)      => s"(${i.wrap(s"$x : $ty")} -> $b)"
+      case Lam1(x, i, ty, b)    => s"(\\${i.wrap(s"$x : $ty")}. $b)"
+      case App1(fn, arg, Expl)  => s"($fn $arg)"
+      case App1(fn, arg, i)     => s"($fn ${i.wrap(arg)})"
+      case Fun(pty, _, rty)     => s"($pty -> $rty)"
+      case CV1                  => "CV"
+      case Comp                 => "Comp"
+      case Val                  => "Val"
+      case Lift(_, ty)          => s"^$ty"
+      case Quote(tm)            => s"`$tm"
+      case AppPruning(id, _)    => s"(?$id ...)"
+      case Wk01(tm)             => s"$tm"
+      case Wk11(tm)             => s"$tm"
+      case Meta(id)             => s"?$id"
+      case MetaPi(m, t, b)      => s"($t ${if m then "1" else "0"}-> $b)"
+      case MetaLam(m, b)        => s"(\\${if m then "1" else "0"}. $b)"
+      case MetaApp(f, Left(a))  => s"($f 0 $a)"
+      case MetaApp(f, Right(a)) => s"($f 1 $a)"
   export Tm1.*
 
   inline def quote(t: Tm0): Tm1 = t match

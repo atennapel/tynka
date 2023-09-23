@@ -88,6 +88,12 @@ object Unification:
         case SApp(sp, v, i) =>
           val data = go(sp)
           invertVal1(v, VVar1(data._1), i, data)
+        case SMetaApp(sp, Left(v)) =>
+          val data = go(sp)
+          invertVal0(v, VVar0(data._1), Expl, data)
+        case SMetaApp(sp, Right(v)) =>
+          val data = go(sp)
+          invertVal1(v, VVar1(data._1), Expl, data)
     val (dom, _, sub, pr, isLinear) = go(sp)
     (PSub(None, dom, lvl, sub), if isLinear then None else Some(pr))
 
@@ -104,26 +110,41 @@ object Unification:
               quote1(a, UnfoldNone)(l2),
               go(l2 + 1, c(VVar1(l2)))
             )
+          case VMetaPi(true, t, c) =>
+            MetaLam(true, go(l2 + 1, c(VVar1(l2))))
+          case VMetaPi(false, t, c) =>
+            MetaLam(false, go(l2 + 1, c(VVar0(l2))))
           case _ => impossible()
     go(lvl0, ty)
 
   private def pruneTy(p: RevPruning, ty: VTy): Ty =
     def go(p: Pruning, psub: PSub, ty: VTy): Ty = (p, forceAll1(ty)) match
       case (Nil, ty) => psubst1(ty)(psub)
+
       case (PESkip :: p, VPi(x, i, a, b)) =>
         go(p, psub.skip, b(VVar1(psub.cod)))
       case (PEBind1(_) :: p, VPi(x, i, a, b)) =>
         Pi(x, i, psubst1(a)(psub), go(p, psub.lift1, b(VVar1(psub.cod))))
+
+      case (PESkip :: p, VMetaPi(true, a, b)) =>
+        go(p, psub.skip, b(VVar1(psub.cod)))
+      case (PESkip :: p, VMetaPi(false, a, b)) =>
+        go(p, psub.skip, b(VVar0(psub.cod)))
+      case (PEBind1(_) :: p, VMetaPi(true, a, b)) =>
+        MetaPi(true, psubst1(a)(psub), go(p, psub.lift1, b(VVar1(psub.cod))))
+      case (PEBind0 :: p, VMetaPi(false, a, b)) =>
+        MetaPi(false, psubst1(a)(psub), go(p, psub.lift0, b(VVar0(psub.cod))))
+
       case _ => impossible()
     go(p.expose, PSub.empty, ty)
 
-  private def pruneMeta(p: Pruning, m: MetaId): MetaId =
-    debug(s"pruneMeta ?$m")
+  private def pruneMeta(p: Pruning, m: MetaId)(implicit lvl: Lvl): MetaId =
+    debug(s"pruneMeta ?$m $p")
     val mty = unsolvedMetaType(m)
     val prunedty = eval1(pruneTy(RevPruning(p), mty))(EEmpty)
     val m2 = newMeta(prunedty)
     val solution =
-      eval1(lams(mkLvl(p.size), mty, AppPruning(Meta(m2), p)))(EEmpty)
+      eval1(lams(mkLvl(p.size), mty, AppPruning(m2, p)))(EEmpty)
     solveMeta(m, solution)
     m2
 
@@ -133,43 +154,76 @@ object Unification:
     case NeedsPruning
   import SpinePruneStatus.*
 
+  private enum PruneTm:
+    case Prune1(tm: Tm1, i: Icit)
+    case PruneMeta1(tm: Tm1)
+    case PruneMeta0(tm: Tm0)
+  import PruneTm.*
+
   private def pruneVFlex(m: MetaId, sp: Spine)(implicit psub: PSub): Tm1 =
-    def go(sp: Spine): (List[(Option[Tm1], Icit)], SpinePruneStatus) = sp match
-      case SId => (Nil, OKRenaming)
-      case SApp(sp, v, i) =>
+    debug(s"pruneVFlex ${quote1(VFlex(m, sp), UnfoldNone)(psub.cod)}")
+    def go(sp: Spine): (List[Option[PruneTm]], SpinePruneStatus) =
+      inline def go1(
+          sp: Spine,
+          v: Val1,
+          inline ptm: Tm1 => PruneTm
+      ): (List[Option[PruneTm]], SpinePruneStatus) =
         val (sp2, status) = go(sp)
         forceAll1(v) match
           case VVar1(x) =>
             (psub.sub.get(x.expose), status) match
-              case (Some(PS1(v)), _) => ((Some(psubst1(v)), i) :: sp2, status)
-              case (Some(PS0(v)), _) =>
-                ((Some(psubst1(vquote(v))), i) :: sp2, status)
+              case (Some(PS1(_)), _) => (Some(ptm(psubst1(v))) :: sp2, status)
+              case (Some(PS0(v)), _) => impossible()
               case (None, OKNonRenaming) => throw UnifyError("failed to prune")
-              case _                     => ((None, i) :: sp2, NeedsPruning)
+              case _                     => (None :: sp2, NeedsPruning)
           case t =>
             status match
               case NeedsPruning => throw UnifyError("failed to prune")
-              case _            => ((Some(psubst1(t)), i) :: sp2, OKNonRenaming)
+              case _            => (Some(ptm(psubst1(t))) :: sp2, OKNonRenaming)
+      sp match
+        case SId                    => (Nil, OKRenaming)
+        case SApp(sp, v, i)         => go1(sp, v, t => Prune1(t, i))
+        case SMetaApp(sp, Right(v)) => go1(sp, v, t => PruneMeta1(t))
+        case SMetaApp(sp, Left(v)) =>
+          val (sp2, status) = go(sp)
+          forceAll0(v) match
+            case VVar0(x) =>
+              (psub.sub.get(x.expose), status) match
+                case (Some(PS1(_)), _) => impossible()
+                case (Some(PS0(v)), _) =>
+                  (Some(PruneMeta0(psubst0(v))) :: sp2, status)
+                case (None, OKNonRenaming) =>
+                  throw UnifyError("failed to prune")
+                case _ => (None :: sp2, NeedsPruning)
+            case t =>
+              status match
+                case NeedsPruning => throw UnifyError("failed to prune")
+                case _ => (Some(PruneMeta0(psubst0(t))) :: sp2, OKNonRenaming)
     val (sp2, status) = go(sp)
     val m2 = status match
       case OKRenaming    => m
       case OKNonRenaming => m
       case NeedsPruning =>
-        val pr = sp2.map { (m, i) =>
+        val pr = sp2.map { m =>
           m match
-            case None    => PESkip
-            case Some(_) => PEBind1(i)
+            case None                => PESkip
+            case Some(Prune1(_, i))  => PEBind1(i)
+            case Some(PruneMeta1(_)) => PEBind1(Expl)
+            case Some(PruneMeta0(_)) => PEBind0
         }
-        pruneMeta(pr, m)
-    sp2.foldRight(Meta(m2)) { case ((mu, i), t) =>
-      mu.fold(t)(u => App1(t, u, i))
+        pruneMeta(pr, m)(psub.cod)
+    sp2.foldRight(Meta(m2)) {
+      case (None, t)                => t
+      case (Some(Prune1(u, i)), t)  => App1(t, u, i)
+      case (Some(PruneMeta1(u)), t) => MetaApp(t, Right(u))
+      case (Some(PruneMeta0(u)), t) => MetaApp(t, Left(u))
     }
 
   // partial substitution action
   private def psubst0(v: Val0)(implicit psub: PSub): Tm0 =
     inline def go0(v: Val0) = psubst0(v)
     inline def go1(v: Val1) = psubst1(v)
-    inline def goClos(c: Clos[Tm0]) = psubst0(c.dive(psub.cod))(psub.lift0)
+    inline def goClos(c: Clos[Tm0]) = psubst0(c(VVar0(psub.cod)))(psub.lift0)
     forceMetas0(v) match
       case VVar0(x) =>
         psub.sub.get(x.expose) match
@@ -185,12 +239,18 @@ object Unification:
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
     case SApp(sp, v, i) => App1(psubstSp(h, sp), psubst1(v), i)
+    case SMetaApp(sp, v) =>
+      val a = v match
+        case Left(v)  => Left(psubst0(v))
+        case Right(v) => Right(psubst1(v))
+      MetaApp(psubstSp(h, sp), a)
 
   private def psubst1(v: Val1)(implicit psub: PSub): Tm1 =
     inline def go0(v: Val0) = psubst0(v)
     inline def go1(v: Val1) = psubst1(v)
     inline def goSp(h: Tm1, sp: Spine) = psubstSp(h, sp)
     inline def goClos(c: Clos[Tm1]) = psubst1(c(VVar1(psub.cod)))(psub.lift1)
+    inline def goClos0(c: Clos[Tm1]) = psubst1(c(VVar0(psub.cod)))(psub.lift1)
     forceMetas1(v) match
       case VRigid(x, sp) =>
         psub.sub.get(x.expose) match
@@ -212,6 +272,9 @@ object Unification:
       case VVal               => Val
       case VLift(cv, ty)      => Lift(go1(cv), go1(ty))
       case VQuote(tm)         => Quote(go0(tm))
+      case VMetaPi(m, t, b) =>
+        MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
+      case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))
 
   // solving
   private def solve(id: MetaId, sp: Spine, rhs: Val1)(implicit lvl: Lvl): Unit =
@@ -223,10 +286,10 @@ object Unification:
   private def solveWithPSub(m: MetaId, iv: (PSub, Option[Pruning]), rhs: Val1)(
       implicit lvl: Lvl
   ) =
-    debug(
-      s"solveWithPSub ?$m := ${quote1(rhs, UnfoldMetas)}"
-    )
     implicit val psub: PSub = iv._1
+    debug(
+      s"solveWithPSub ?$m ($lvl) := ${quote1(rhs, UnfoldMetas)}"
+    )
     val mty = unsolvedMetaType(m)
     iv._2.foreach(p => pruneTy(RevPruning(p), mty))
     val rhs2 = psubst1(rhs)(psub.copy(occ = Some(m)))
@@ -238,7 +301,7 @@ object Unification:
   // unification
   def unify0(a: Val0, b: Val0)(implicit lvl: Lvl): Unit =
     inline def goClos(a: Clos[Tm0], b: Clos[Tm0]) =
-      unify0(a.dive(lvl), b.dive(lvl))(lvl + 1)
+      unify0(a(VVar0(lvl)), b(VVar0(lvl)))(lvl + 1)
     debug(s"unify0 ${quote0(a, UnfoldMetas)} ~ ${quote0(b, UnfoldMetas)}")
     (forceMetas0(a), forceMetas0(b)) match
       case (VVar0(x), VVar0(y)) if x == y   => ()
@@ -266,14 +329,31 @@ object Unification:
   private def intersect(m: MetaId, sp1: Spine, sp2: Spine)(implicit
       lvl: Lvl
   ): Unit =
-    def go(sp1: Spine, sp2: Spine): Option[Pruning] = (sp1, sp2) match
-      case (SId, SId) => Some(Nil)
-      case (SApp(sp1, t1, i), SApp(sp2, t2, _)) =>
+    def go(sp1: Spine, sp2: Spine): Option[Pruning] =
+      inline def go1(
+          sp1: Spine,
+          sp2: Spine,
+          i: Icit,
+          t1: Val1,
+          t2: Val1
+      ): Option[Pruning] =
         (forceAll1(t1), forceAll1(t2)) match
           case (VVar1(x1), VVar1(x2)) =>
             go(sp1, sp2).map((if x1 == x2 then PEBind1(i) else PESkip) :: _)
           case _ => None
-      case _ => impossible()
+      (sp1, sp2) match
+        case (SId, SId) => Some(Nil)
+
+        case (SApp(sp1, t1, i), SApp(sp2, t2, _)) => go1(sp1, sp2, i, t1, t2)
+
+        case (SMetaApp(sp1, Right(t1)), SMetaApp(sp2, Right(t2))) =>
+          go1(sp1, sp2, Expl, t1, t2)
+        case (SMetaApp(sp1, Left(t1)), SMetaApp(sp2, Left(t2))) =>
+          (forceAll0(t1), forceAll0(t2)) match
+            case (VVar0(x1), VVar0(x2)) =>
+              go(sp1, sp2).map((if x1 == x2 then PEBind0 else PESkip) :: _)
+            case _ => None
+        case _ => impossible()
     go(sp1, sp2) match
       case None => unify1(VFlex(m, sp1), sp1, VFlex(m, sp2), sp2)
       case Some(p) if p.exists(_ == PESkip) => pruneMeta(p, m)
@@ -286,6 +366,10 @@ object Unification:
       case (SId, SId) => ()
       case (SApp(sp1, a1, _), SApp(sp2, a2, _)) =>
         unify1(top1, sp1, top2, sp2); unify1(a1, a2)
+      case (SMetaApp(sp1, Left(a1)), SMetaApp(sp2, Left(a2))) =>
+        unify1(top1, sp1, top2, sp2); unify0(a1, a2)
+      case (SMetaApp(sp1, Right(a1)), SMetaApp(sp2, Right(a2))) =>
+        unify1(top1, sp1, top2, sp2); unify1(a1, a2)
       case _ =>
         throw UnifyError(
           s"spine mismatch ${quote1(top1, UnfoldNone)} ~ ${quote1(top2, UnfoldNone)}"
@@ -294,6 +378,9 @@ object Unification:
   def unify1(a: Val1, b: Val1)(implicit lvl: Lvl): Unit =
     inline def goClos(a: Clos[Tm1], b: Clos[Tm1]) =
       val v = VVar1(lvl)
+      unify1(a(v), b(v))(lvl + 1)
+    inline def goClos0(a: Clos[Tm1], b: Clos[Tm1]) =
+      val v = VVar0(lvl)
       unify1(a(v), b(v))(lvl + 1)
     debug(s"unify1 ${quote1(a, UnfoldMetas)} ~ ${quote1(b, UnfoldMetas)}")
     (forceMetas1(a), forceMetas1(b)) match
@@ -313,6 +400,10 @@ object Unification:
       case (VQuote(v1), VQuote(v2)) => unify0(v1, v2)
       case (VPi(_, i1, ty1, b1), VPi(_, i2, ty2, b2)) if i1 == i2 =>
         unify1(ty1, ty2); goClos(b1, b2)
+      case (VMetaPi(true, ty1, b1), VMetaPi(true, ty2, b2)) =>
+        unify1(ty1, ty2); goClos(b1, b2)
+      case (VMetaPi(false, ty1, b1), VMetaPi(false, ty2, b2)) =>
+        unify1(ty1, ty2); goClos0(b1, b2)
       case (VFun(t1, cv1, r1), VFun(t2, cv2, r2)) =>
         unify1(t1, t2); unify1(cv1, cv2); unify1(r1, r2)
       case (VCV1, VCV1)         => ()
@@ -328,6 +419,21 @@ object Unification:
       case (f, VLam1(_, i, _, b)) =>
         val v = VVar1(lvl)
         unify1(vapp1(f, v, i), b(v))(lvl + 1)
+
+      case (VMetaLam(true, b1), VMetaLam(true, b2))   => goClos(b1, b2)
+      case (VMetaLam(false, b1), VMetaLam(false, b2)) => goClos0(b1, b2)
+      case (VMetaLam(true, b), f) =>
+        val v = VVar1(lvl)
+        unify1(b(v), vmetaapp(f, Right(v)))(lvl + 1)
+      case (VMetaLam(false, b), f) =>
+        val v = VVar0(lvl)
+        unify1(b(v), vmetaapp(f, Left(v)))(lvl + 1)
+      case (f, VMetaLam(true, b)) =>
+        val v = VVar1(lvl)
+        unify1(vmetaapp(f, Right(v)), b(v))(lvl + 1)
+      case (f, VMetaLam(false, b)) =>
+        val v = VVar0(lvl)
+        unify1(vmetaapp(f, Left(v)), b(v))(lvl + 1)
 
       case (VFlex(id1, sp1), VFlex(id2, sp2)) =>
         if id1 == id2 then intersect(id1, sp1, sp2)

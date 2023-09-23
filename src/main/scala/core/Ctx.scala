@@ -67,7 +67,7 @@ final case class Ctx(
   def bind0(x: Bind, ty: Ty, vty: VTy, cv: CV, vcv: VCV): Ctx =
     Ctx(
       lvl + 1,
-      E0(env, lvl),
+      E0(env, VVar0(lvl)),
       LBind0(locals, ty, cv),
       PEBind0 :: pruning,
       x :: binds,

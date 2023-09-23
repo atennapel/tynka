@@ -11,17 +11,19 @@ object Evaluation:
   // closures
   extension (c: Clos[Tm1])
     inline def apply(v: Val1): Val1 = eval1(c.tm)(E1(c.env, v))
+    inline def apply(v: Val0): Val1 = eval1(c.tm)(E0(c.env, v))
 
   extension (c: Clos[Tm0])
-    inline def dive(implicit l: Lvl): Val0 = eval0(c.tm)(E0(c.env, l))
+    inline def apply(v: Val1): Val0 = eval0(c.tm)(E1(c.env, v))
+    inline def apply(v: Val0): Val0 = eval0(c.tm)(E0(c.env, v))
 
   // evaluation
   @tailrec
-  def vvar0(ix: Ix)(implicit e: Env): Lvl = e match
-    case E0(_, lvl) if ix.expose == 0 => lvl
-    case E0(env, _)                   => vvar0(ix - 1)(env)
-    case E1(env, _)                   => vvar0(ix - 1)(env)
-    case EEmpty                       => impossible()
+  def vvar0(ix: Ix)(implicit e: Env): Val0 = e match
+    case E0(_, v) if ix.expose == 0 => v
+    case E0(env, _)                 => vvar0(ix - 1)(env)
+    case E1(env, _)                 => vvar0(ix - 1)(env)
+    case EEmpty                     => impossible()
 
   @tailrec
   def vvar1(ix: Ix)(implicit e: Env): Val1 = e match
@@ -47,26 +49,34 @@ object Evaluation:
     case VFlex(id, sp)     => VFlex(id, SApp(sp, a, i))
     case VRigid(h, sp)     => VRigid(h, SApp(sp, a, i))
     case VUnfold(h, sp, v) => VUnfold(h, SApp(sp, a, i), () => vapp1(v(), a, i))
-    case _                 => impossible()
+    case _                 => println(f); println(a); impossible()
+
+  def vmetaapp(f: Val1, a: Either[Val0, Val1]): Val1 = (f, a) match
+    case (VMetaLam(true, b), Right(a)) => b(a)
+    case (VMetaLam(false, b), Left(a)) => b(a)
+    case (VFlex(id, sp), a)            => VFlex(id, SMetaApp(sp, a))
+    case (VUnfold(h, sp, v), a) =>
+      VUnfold(h, SMetaApp(sp, a), () => vmetaapp(v(), a))
+    case _ => impossible()
 
   def vspine(v: Val1, sp: Spine): Val1 = sp match
-    case SId            => v
-    case SApp(sp, a, i) => vapp1(vspine(v, sp), a, i)
+    case SId             => v
+    case SApp(sp, a, i)  => vapp1(vspine(v, sp), a, i)
+    case SMetaApp(sp, a) => vmetaapp(vspine(v, sp), a)
 
-  def vappPruning(v: Val1, p: Pruning)(implicit env: Env): Val1 =
+  def vappPruning(m: MetaId, p: Pruning)(implicit env: Env): Val1 =
     (env, p) match
-      case (EEmpty, Nil)                 => v
-      case (E1(env, u), PESkip :: p)     => vappPruning(v, p)(env)
-      case (E1(env, u), PEBind1(i) :: p) => vapp1(vappPruning(v, p)(env), u, i)
-      case (E0(env, lvl), PEBind0 :: p) =>
-        vapp1(vappPruning(v, p)(env), VQuote(VVar0(lvl)), Expl)
-      case (E1(env, u), PEBind0 :: p) =>
-        vapp1(vappPruning(v, p)(env), u, Expl) // TODO: is this correct?
+      case (EEmpty, Nil)             => vmeta(m)
+      case (E1(env, u), PESkip :: p) => vappPruning(m, p)(env)
+      case (E1(env, u), PEBind1(i) :: p) =>
+        vmetaapp(vappPruning(m, p)(env), Right(u))
+      case (E0(env, u), PEBind0 :: p) =>
+        vmetaapp(vappPruning(m, p)(env), Left(u))
       case _ => impossible()
 
   def eval0(t: Tm0)(implicit env: Env): Val0 =
     t match
-      case Var0(ix)          => VVar0(vvar0(ix))
+      case Var0(ix)          => vvar0(ix)
       case Prim0(x)          => VPrim0(x)
       case Let0(x, ty, v, b) => VLet0(x, eval1(ty), eval0(v), Clos(b))
       case Lam0(x, ty, b)    => VLam0(x, eval1(ty), Clos(b))
@@ -76,24 +86,28 @@ object Evaluation:
 
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
-      case Var1(ix)          => vvar1(ix)
-      case Prim1(x)          => VPrim1(x)
-      case Let1(_, _, v, b)  => eval1(b)(E1(env, eval1(v)))
-      case U0(cv)            => VU0(eval1(cv))
-      case U1                => VU1
-      case Pi(x, i, ty, b)   => VPi(x, i, eval1(ty), Clos(b))
-      case Lam1(x, i, ty, b) => VLam1(x, i, eval1(ty), Clos(b))
-      case App1(f, a, i)     => vapp1(eval1(f), eval1(a), i)
-      case Fun(p, cv, r)     => VFun(eval1(p), eval1(cv), eval1(r))
-      case CV1               => VCV1
-      case Comp              => VComp
-      case Val               => VVal
-      case Lift(cv, ty)      => VLift(eval1(cv), eval1(ty))
-      case Quote(tm)         => vquote(eval0(tm))
-      case AppPruning(tm, p) => vappPruning(eval1(tm), p)
-      case Wk01(tm)          => eval1(tm)(env.wk0)
-      case Wk11(tm)          => eval1(tm)(env.wk1)
-      case Meta(id)          => vmeta(id)
+      case Var1(ix)             => vvar1(ix)
+      case Prim1(x)             => VPrim1(x)
+      case Let1(_, _, v, b)     => eval1(b)(E1(env, eval1(v)))
+      case U0(cv)               => VU0(eval1(cv))
+      case U1                   => VU1
+      case Pi(x, i, ty, b)      => VPi(x, i, eval1(ty), Clos(b))
+      case Lam1(x, i, ty, b)    => VLam1(x, i, eval1(ty), Clos(b))
+      case App1(f, a, i)        => vapp1(eval1(f), eval1(a), i)
+      case Fun(p, cv, r)        => VFun(eval1(p), eval1(cv), eval1(r))
+      case CV1                  => VCV1
+      case Comp                 => VComp
+      case Val                  => VVal
+      case Lift(cv, ty)         => VLift(eval1(cv), eval1(ty))
+      case Quote(tm)            => vquote(eval0(tm))
+      case AppPruning(m, p)     => vappPruning(m, p)
+      case Wk01(tm)             => eval1(tm)(env.wk0)
+      case Wk11(tm)             => eval1(tm)(env.wk1)
+      case Meta(id)             => vmeta(id)
+      case MetaPi(m, t, b)      => VMetaPi(m, eval1(t), Clos(b))
+      case MetaLam(m, b)        => VMetaLam(m, Clos(b))
+      case MetaApp(f, Right(a)) => vmetaapp(eval1(f), Right(eval1(a)))
+      case MetaApp(f, Left(a))  => vmetaapp(eval1(f), Left(eval0(a)))
 
   // forcing
   def force1(v: Val1): Val1 = v match
@@ -151,12 +165,18 @@ object Evaluation:
   ): Tm1 = sp match
     case SId            => h
     case SApp(sp, v, i) => App1(quote1(h, sp, q), quote1(v, q), i)
+    case SMetaApp(sp, v) =>
+      val a = v match
+        case Left(v)  => Left(quote0(v, q))
+        case Right(v) => Right(quote1(v, q))
+      MetaApp(quote1(h, sp, q), a)
 
   def quote1(v: Val1, q: QuoteOption)(implicit lvl: Lvl): Tm1 =
     inline def go0(v: Val0): Tm0 = quote0(v, q)
     inline def go1(v: Val1): Tm1 = quote1(v, q)
     inline def goSp(h: Tm1, sp: Spine): Tm1 = quote1(h, sp, q)
     inline def goClos(c: Clos[Tm1]): Tm1 = quote1(c(VVar1(lvl)), q)(lvl + 1)
+    inline def goClos0(c: Clos[Tm1]): Tm1 = quote1(c(VVar0(lvl)), q)(lvl + 1)
     inline def force(v: Val1): Val1 = q match
       case UnfoldAll   => forceAll1(v)
       case UnfoldMetas => forceMetas1(v)
@@ -177,11 +197,14 @@ object Evaluation:
       case VVal               => Val
       case VLift(cv, ty)      => Lift(go1(cv), go1(ty))
       case VQuote(tm)         => Quote(go0(tm))
+      case VMetaPi(m, t, b) =>
+        MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
+      case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))
 
   def quote0(v: Val0, q: QuoteOption)(implicit lvl: Lvl): Tm0 =
     inline def go0(v: Val0): Tm0 = quote0(v, q)
     inline def go1(v: Val1): Tm1 = quote1(v, q)
-    inline def goClos(c: Clos[Tm0]): Tm0 = quote0(c.dive, q)(lvl + 1)
+    inline def goClos(c: Clos[Tm0]): Tm0 = quote0(c(VVar0(lvl)), q)(lvl + 1)
     inline def force(v: Val0): Val0 = q match
       case UnfoldAll   => forceAll0(v)
       case UnfoldMetas => forceMetas0(v)

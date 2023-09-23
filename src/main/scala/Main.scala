@@ -8,17 +8,28 @@ import core.Evaluation.*
 import java.io.File
 import scala.io.Source
 import parsley.io.given
+import core.Metas.getMetas
+import core.Ctx
 
 object Main:
   @main def run(filename: String): Unit =
     setDebug(false)
     try
+      implicit val ctx: Ctx = Ctx.empty((0, 0))
+
       val etimeStart = System.nanoTime()
       val text = Source.fromFile(filename).mkString
       val stm = parser.parse(text).toTry.get
       val (tm, ty) = elaborate0(stm)
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
+
+      getMetas().foreach((m, t, v) =>
+        v match
+          case None    => println(s"?$m : ${ctx.pretty(t)}")
+          case Some(v) => println(s"?$m : ${ctx.pretty(t)} = ${ctx.pretty(v)}")
+      )
+
       println(tm)
       println(ty)
       println(stage(tm))

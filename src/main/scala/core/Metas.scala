@@ -51,6 +51,12 @@ object Metas:
     val u = getMetaUnsolved(id)
     metas(id.expose) = Solved(v, u.ty)
 
+  def getMetas(): List[(MetaId, VTy, Option[Val1])] =
+    metas.zipWithIndex.collect {
+      case (Solved(v, ty), ix) => (metaId(ix), ty, Some(v))
+      case (Unsolved(ty), ix)  => (metaId(ix), ty, None)
+    }.toList
+
   def unsolvedMetas(): List[(MetaId, VTy)] =
     metas.zipWithIndex.collect { case (Unsolved(ty), ix) =>
       (metaId(ix), ty)
