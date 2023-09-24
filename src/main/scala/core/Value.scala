@@ -66,9 +66,13 @@ object Value:
     case VSplice(tm: Val1)
   export Val0.*
 
+  enum Head:
+    case HVar(lvl: Lvl)
+    case HPrim(name: Name)
+  export Head.*
+
   enum Val1:
-    case VRigid(lvl: Lvl, spine: Spine)
-    case VPrim1(name: Name)
+    case VRigid(head: Head, spine: Spine)
     case VFlex(id: MetaId, spine: Spine)
     case VUnfold(id: MetaId, spine: Spine, value: () => Val1)
 
@@ -91,7 +95,13 @@ object Value:
   export Val1.*
 
   object VVar1:
-    def apply(lvl: Lvl): Val1 = VRigid(lvl, SId)
+    def apply(lvl: Lvl): Val1 = VRigid(HVar(lvl), SId)
     def unapply(value: Val1): Option[Lvl] = value match
-      case VRigid(hd, SId) => Some(hd)
-      case _               => None
+      case VRigid(HVar(hd), SId) => Some(hd)
+      case _                     => None
+
+  object VPrim1:
+    def apply(name: Name): Val1 = VRigid(HPrim(name), SId)
+    def unapply(value: Val1): Option[Name] = value match
+      case VRigid(HPrim(name), SId) => Some(name)
+      case _                        => None

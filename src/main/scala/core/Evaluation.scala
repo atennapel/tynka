@@ -49,7 +49,7 @@ object Evaluation:
     case VFlex(id, sp)     => VFlex(id, SApp(sp, a, i))
     case VRigid(h, sp)     => VRigid(h, SApp(sp, a, i))
     case VUnfold(h, sp, v) => VUnfold(h, SApp(sp, a, i), () => vapp1(v(), a, i))
-    case _                 => println(f); println(a); impossible()
+    case _                 => impossible()
 
   def vmetaapp(f: Val1, a: Either[Val0, Val1]): Val1 = (f, a) match
     case (VMetaLam(true, b), Right(a)) => b(a)
@@ -183,8 +183,10 @@ object Evaluation:
       case UnfoldNone  => force1(v)
       case LiftVars(_) => force1(v)
     force(v) match
-      case VRigid(lvl, sp)    => goSp(Var1(lvl.toIx), sp)
-      case VPrim1(x)          => Prim1(x)
+      case VRigid(hd, sp) =>
+        hd match
+          case HVar(lvl) => goSp(Var1(lvl.toIx), sp)
+          case HPrim(x)  => goSp(Prim1(x), sp)
       case VFlex(id, sp)      => goSp(Meta(id), sp)
       case VUnfold(id, sp, _) => goSp(Meta(id), sp)
       case VPi(x, i, ty, b)   => Pi(x, i, go1(ty), goClos(b))

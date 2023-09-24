@@ -252,16 +252,16 @@ object Unification:
     inline def goClos(c: Clos[Tm1]) = psubst1(c(VVar1(psub.cod)))(psub.lift1)
     inline def goClos0(c: Clos[Tm1]) = psubst1(c(VVar0(psub.cod)))(psub.lift1)
     forceMetas1(v) match
-      case VRigid(x, sp) =>
+      case VRigid(HPrim(x), sp) => goSp(Prim1(x), sp)
+      case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
           case None         => throw UnifyError(s"out of scope $x")
           case Some(PS0(_)) => impossible()
           case Some(PS1(v)) => goSp(quote1(v, UnfoldNone)(psub.dom), sp)
-      case VPrim1(x) => Prim1(x)
       case VFlex(m, sp) =>
         if psub.occ.contains(m) then throw UnifyError(s"occurs error ?$m")
         else pruneVFlex(m, sp)
-      case VUnfold(_, _, v)   => psubst1(v())
+      case VUnfold(m, sp, _)  => goSp(Meta(m), sp)
       case VPi(x, i, ty, b)   => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b) => Lam1(x, i, go1(ty), goClos(b))
       case VU0(cv)            => U0(go1(cv))
@@ -393,7 +393,6 @@ object Unification:
       case (v1, VUnfold(_, _, v2)) => unify1(v1, v2())
 
       case (VRigid(x, sp1), VRigid(y, sp2)) if x == y => unify1(a, sp1, b, sp2)
-      case (VPrim1(x), VPrim1(y)) if x == y           => ()
 
       case (VLift(cv1, ty1), VLift(cv2, ty2)) =>
         unify1(cv1, cv2); unify1(ty1, ty2)

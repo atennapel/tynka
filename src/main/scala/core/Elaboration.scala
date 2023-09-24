@@ -374,6 +374,93 @@ object Elaboration:
         Infer0(Prim0(Name("True")), VPrim1(Name("Bool")), VVal)
       case S.Var(Name("False")) =>
         Infer0(Prim0(Name("False")), VPrim1(Name("Bool")), VVal)
+      case S.Var(Name("if")) =>
+        // {cv} {A : Ty cv} -> Bool -> A -> A -> A
+        val cv = Name("cv")
+        val a = Name("A")
+        val va = S.Var(a)
+        val sty = S.Pi(
+          DoBind(cv),
+          Impl,
+          S.Hole(None),
+          S.Pi(
+            DoBind(a),
+            Impl,
+            S.U0(S.Var(cv)),
+            S.Pi(
+              DontBind,
+              Expl,
+              S.Var(Name("Bool")),
+              S.Pi(
+                DontBind,
+                Expl,
+                va,
+                S.Pi(DontBind, Expl, va, va)
+              )
+            )
+          )
+        )
+        val ety = check1(sty, VU1)
+        Infer1(Prim1(Name("if")), ctx.eval1(ety))
+
+      case S.Var(Name("Nat")) => Infer1(Prim1(Name("Nat")), VU0(VVal))
+      case S.Var(Name("Z")) =>
+        Infer0(Prim0(Name("Z")), VPrim1(Name("Nat")), VVal)
+      case S.Var(Name("S")) =>
+        // ^Nat -> ^Nat
+        // \n. `(S $n)
+        val nat = Name("Nat")
+        val lnat = VLift(VVal, VPrim1(nat))
+        val qnat = Lift(Val, Prim1(nat))
+        Infer1(
+          Lam1(
+            DoBind(Name("n")),
+            Expl,
+            qnat,
+            Quote(App0(Prim0(Name("S")), Splice(Var1(ix0))))
+          ),
+          VPi(DontBind, Expl, lnat, Clos(EEmpty, qnat))
+        )
+      case S.Var(Name("foldNat")) =>
+        // {cv} {A : Ty cv} -> Nat -> A -> (Nat -> A -> A) -> A
+        val cv = Name("cv")
+        val a = Name("A")
+        val nat = Name("Nat")
+        val va = S.Var(a)
+        val sty = S.Pi(
+          DoBind(cv),
+          Impl,
+          S.Hole(None),
+          S.Pi(
+            DoBind(a),
+            Impl,
+            S.U0(S.Var(cv)),
+            S.Pi(
+              DontBind,
+              Expl,
+              S.Var(nat),
+              S.Pi(
+                DontBind,
+                Expl,
+                va,
+                S.Pi(
+                  DontBind,
+                  Expl,
+                  S.Pi(
+                    DontBind,
+                    Expl,
+                    S.Var(nat),
+                    S.Pi(DontBind, Expl, va, va)
+                  ),
+                  va
+                )
+              )
+            )
+          )
+        )
+        val ety = check1(sty, VU1)
+        Infer1(Prim1(Name("foldNat")), ctx.eval1(ety))
+
       case S.Var(x) =>
         ctx.lookup(x) match
           case None                   => error(s"undefined variable $x")

@@ -32,7 +32,7 @@ object Parser:
         "match",
         "Meta",
         "Ty",
-        "if",
+        // "if",
         "then",
         "else",
         "foreign",
