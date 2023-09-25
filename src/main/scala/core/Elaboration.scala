@@ -237,14 +237,19 @@ object Elaboration:
         val qt1 = ctx.quote1(t1)
         Lam0(x, qt1, check0(b, t2, fcv)(ctx.bind0(x, qt1, t1, Val, VVal)))
 
-      case S.Let(x, false, ma, v, b) =>
-        val cv2 = freshCV()
-        val vcv2 = ctx.eval1(cv2)
-        val ety = tyAnnot(ma, VU0(vcv2))
+      case S.Let(x, rec, false, ma, v, b) =>
+        val (ety, cv2, vcv2) =
+          if rec then (tyAnnot(ma, VU0(VComp)), Comp, VComp)
+          else
+            val cv2 = freshCV()
+            val vcv2 = ctx.eval1(cv2)
+            val ety = tyAnnot(ma, VU0(vcv2))
+            (ety, cv2, vcv2)
         val vty = ctx.eval1(ety)
-        val ev = check0(v, vty, vcv2)
-        val eb = check0(b, ty, cv)(ctx.bind0(DoBind(x), ety, vty, cv2, vcv2))
-        Let0(x, ety, ev, eb)
+        val nctx = ctx.bind0(DoBind(x), ety, vty, cv2, vcv2)
+        val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
+        val eb = check0(b, ty, cv)(nctx)
+        if rec then LetRec(x, ety, ev, eb) else Let0(x, ety, ev, eb)
 
       case S.Hole(_) => splice(freshMeta(VLift(cv, ty)))
 
@@ -294,7 +299,8 @@ object Elaboration:
         val cv = freshCV()
         Lift(cv, check1(tm, VU0(ctx.eval1(cv))))
 
-      case (S.Let(x, true, mlty, v, b), _) =>
+      case (S.Let(x, rec, true, mlty, v, b), _) =>
+        if rec then error("let rec is not allowed for meta definitions")
         val lty = tyAnnot(mlty, VU1)
         val vlty = ctx.eval1(lty)
         val ev = check1(v, vlty)
@@ -374,7 +380,7 @@ object Elaboration:
         Infer0(Prim0(Name("True")), VPrim1(Name("Bool")), VVal)
       case S.Var(Name("False")) =>
         Infer0(Prim0(Name("False")), VPrim1(Name("Bool")), VVal)
-      case S.Var(Name("if")) =>
+      case S.Var(Name("caseBool")) =>
         // {cv} {A : Ty cv} -> Bool -> A -> A -> A
         val cv = Name("cv")
         val a = Name("A")
@@ -401,7 +407,7 @@ object Elaboration:
           )
         )
         val ety = check1(sty, VU1)
-        Infer1(Prim1(Name("if")), ctx.eval1(ety))
+        Infer1(Prim1(Name("caseBool")), ctx.eval1(ety))
 
       case S.Var(Name("Nat")) => Infer1(Prim1(Name("Nat")), VU0(VVal))
       case S.Var(Name("Z")) =>
@@ -421,8 +427,8 @@ object Elaboration:
           ),
           VPi(DontBind, Expl, lnat, Clos(EEmpty, qnat))
         )
-      case S.Var(Name("foldNat")) =>
-        // {cv} {A : Ty cv} -> Nat -> A -> (Nat -> A -> A) -> A
+      case S.Var(Name("caseNat")) =>
+        // {cv} {A : Ty cv} -> Nat -> A -> (Nat -> A) -> A
         val cv = Name("cv")
         val a = Name("A")
         val nat = Name("Nat")
@@ -450,7 +456,7 @@ object Elaboration:
                     DontBind,
                     Expl,
                     S.Var(nat),
-                    S.Pi(DontBind, Expl, va, va)
+                    va
                   ),
                   va
                 )
@@ -459,7 +465,7 @@ object Elaboration:
           )
         )
         val ety = check1(sty, VU1)
-        Infer1(Prim1(Name("foldNat")), ctx.eval1(ety))
+        Infer1(Prim1(Name("caseNat")), ctx.eval1(ety))
 
       case S.Var(x) =>
         ctx.lookup(x) match
@@ -473,16 +479,25 @@ object Elaboration:
               case Some(GlobalEntry1(_, _, _, _, ty)) =>
                 Infer1(Global1(x), ty)
 
-      case S.Let(x, false, mty, v, b) =>
-        val cv2 = freshCV()
-        val vcv2 = ctx.eval1(cv2)
-        val ety = tyAnnot(mty, VU0(vcv2))
+      case S.Let(x, rec, false, mty, v, b) =>
+        val (ety, cv2, vcv2) =
+          if rec then (tyAnnot(mty, VU0(VComp)), Comp, VComp)
+          else
+            val cv2 = freshCV()
+            val vcv2 = ctx.eval1(cv2)
+            val ety = tyAnnot(mty, VU0(vcv2))
+            (ety, cv2, vcv2)
         val vty = ctx.eval1(ety)
-        val ev = check0(v, vty, vcv2)
-        val (eb, rty, rcv) =
-          infer0(b)(ctx.bind0(DoBind(x), ety, vty, cv2, vcv2))
-        Infer0(Let0(x, ety, ev, eb), rty, rcv)
-      case S.Let(x, true, mty, v, b) =>
+        val nctx = ctx.bind0(DoBind(x), ety, vty, cv2, vcv2)
+        val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
+        val (eb, rty, rcv) = infer0(b)(nctx)
+        Infer0(
+          if rec then LetRec(x, ety, ev, eb) else Let0(x, ety, ev, eb),
+          rty,
+          rcv
+        )
+      case S.Let(x, rec, true, mty, v, b) =>
+        if rec then error("let rec is not allowed in meta definitions")
         val lty = tyAnnot(mty, VU1)
         val vlty = ctx.eval1(lty)
         val ev = check1(v, vlty)
@@ -567,10 +582,11 @@ object Elaboration:
 
   // elaboration
   def elaborate(d: S.Def): Unit = d match
-    case S.DDef(pos, x, m, mty, v) =>
+    case S.DDef(pos, x, rec, m, mty, v) =>
       implicit val ctx: Ctx = Ctx.empty(pos)
       if getGlobal(x).isDefined then error(s"duplicated definition $x")
       if m then
+        if rec then error("def rec not allowed in meta definitions")
         val (ev, ty, vv, vty) = mty match
           case None =>
             val (ev, vty) = infer1(v)
@@ -582,32 +598,28 @@ object Elaboration:
             (ev, ety, ctx.eval1(ev), vty)
         setGlobal(GlobalEntry1(x, ev, ty, vv, vty))
       else
-        val (ev, ty, cv, vv, vty, vcv) = mty match
-          case None =>
+        val (ev, ty, cv, vty, vcv) = mty match
+          case None if !rec =>
             val (ev, vty, vcv) = infer0(v)
-            (
-              ev,
-              ctx.quote1(vty),
-              ctx.quote1(vcv),
-              ctx.eval0(ev),
-              vty,
-              vcv
-            )
-          case Some(sty) =>
-            val cv = freshCV()
+            (ev, ctx.quote1(vty), ctx.quote1(vcv), vty, vcv)
+          case _ =>
+            val cv = if rec then Comp else freshCV()
             val vcv = ctx.eval1(cv)
-            val ety = check1(sty, VU0(vcv))
+            val ety = mty match
+              case None      => freshMeta(VU0(vcv))
+              case Some(sty) => check1(sty, VU0(vcv))
             val vty = ctx.eval1(ety)
-            val ev = check0(v, vty, vcv)
+            val ev = check0(v, vty, vcv)(
+              if rec then ctx.bind0(DoBind(x), ety, vty, cv, vcv) else ctx
+            )
             (
-              ev,
+              if rec then LetRec(x, ety, ev, Var0(ix0)) else ev,
               ety,
               cv,
-              ctx.eval0(ev),
               vty,
               vcv
             )
-        setGlobal(GlobalEntry0(x, ev, ty, cv, vv, vty, vcv))
+        setGlobal(GlobalEntry0(x, ev, ty, cv, ctx.eval0(ev), vty, vcv))
 
   def elaborate(d: S.Defs): Unit = d.toList.foreach(elaborate)
 

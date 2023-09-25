@@ -230,12 +230,13 @@ object Unification:
           case None         => throw UnifyError(s"out of scope $x")
           case Some(PS1(_)) => impossible()
           case Some(PS0(v)) => quote0(v, UnfoldNone)(psub.dom)
-      case VGlobal0(x)        => Global0(x)
-      case VPrim0(x)          => Prim0(x)
-      case VLet0(x, ty, v, b) => Let0(x, go1(ty), go0(v), goClos(b))
-      case VLam0(x, ty, b)    => Lam0(x, go1(ty), goClos(b))
-      case VApp0(f, a)        => App0(go0(f), go0(a))
-      case VSplice(v)         => Splice(go1(v))
+      case VGlobal0(x)          => Global0(x)
+      case VPrim0(x)            => Prim0(x)
+      case VLet0(x, ty, v, b)   => Let0(x, go1(ty), go0(v), goClos(b))
+      case VLetRec(x, ty, v, b) => LetRec(x, go1(ty), goClos(v), goClos(b))
+      case VLam0(x, ty, b)      => Lam0(x, go1(ty), goClos(b))
+      case VApp0(f, a)          => App0(go0(f), go0(a))
+      case VSplice(v)           => Splice(go1(v))
 
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
@@ -310,6 +311,8 @@ object Unification:
       case (VPrim0(x), VPrim0(y)) if x == y => ()
       case (VLet0(_, ty1, v1, b1), VLet0(_, ty2, v2, b2)) =>
         unify1(ty1, ty2); unify0(v1, v2); goClos(b1, b2)
+      case (VLetRec(_, ty1, v1, b1), VLetRec(_, ty2, v2, b2)) =>
+        unify1(ty1, ty2); goClos(v1, v2); goClos(b1, b2)
       case (VSplice(v1), VSplice(v2))         => unify1(v1, v2)
       case (VLam0(_, _, b1), VLam0(_, _, b2)) => goClos(b1, b2)
       case (VApp0(f1, a1), VApp0(f2, a2))     => unify0(f1, f2); unify0(a1, a2)

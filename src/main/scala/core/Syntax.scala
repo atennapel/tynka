@@ -8,20 +8,22 @@ object Syntax:
     case Global0(name: Name)
     case Prim0(name: Name)
     case Let0(name: Name, ty: Ty, value: Tm0, body: Tm0)
+    case LetRec(name: Name, ty: Ty, value: Tm0, body: Tm0)
     case Lam0(name: Bind, ty: Ty, body: Tm0)
     case App0(fn: Tm0, arg: Tm0)
     case Splice(tm: Tm1)
     case Wk10(tm: Tm0)
 
     override def toString: String = this match
-      case Var0(ix)          => s"'$ix"
-      case Global0(x)        => s"$x"
-      case Prim0(x)          => s"$x"
-      case Let0(x, ty, v, b) => s"(let $x : $ty := $v; $b)"
-      case Lam0(x, ty, b)    => s"(\\($x : $ty). $b)"
-      case App0(fn, arg)     => s"($fn $arg)"
-      case Splice(tm)        => s"$$$tm"
-      case Wk10(tm)          => s"$tm"
+      case Var0(ix)            => s"'$ix"
+      case Global0(x)          => s"$x"
+      case Prim0(x)            => s"$x"
+      case Let0(x, ty, v, b)   => s"(let $x : $ty := $v; $b)"
+      case LetRec(x, ty, v, b) => s"(let rec $x : $ty := $v; $b)"
+      case Lam0(x, ty, b)      => s"(\\($x : $ty). $b)"
+      case App0(fn, arg)       => s"($fn $arg)"
+      case Splice(tm)          => s"$$$tm"
+      case Wk10(tm)            => s"$tm"
   export Tm0.*
 
   type Ty = Tm1

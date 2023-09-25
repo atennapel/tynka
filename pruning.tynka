@@ -1,16 +1,14 @@
-let Id {A : Meta} (x y : A) = (P : A -> Meta) -> P x -> P y;
-let Refl {A} {x : A} : Id {A} x x = \P p. p;
+def Id {A : Meta} (x y : A) = (P : A -> Meta) -> P x -> P y
+def Refl {A} {x : A} : Id {A} x x = \P p. p
 
-let the (A : Meta) (x : A) : A = x;
+def the (A : Meta) (x : A) : A = x
 
-let m (A B : Meta) (x y : Meta) : Meta = _;
-let test = \a b. the (Id (m a a) (\x y. y)) Refl;
+def m (A B : Meta) (x y : Meta) : Meta = _
+def test = \a b. the (Id (m a a) (\x y. y)) Refl
 
-let m2 : Meta -> Meta -> Meta -> Meta = _;
-let test = \a b c. the (Id (m2 a b c) (m2 c b a)) Refl;
+def m2 : Meta -> Meta -> Meta -> Meta = _
+def test2 = \a b c. the (Id (m2 a b c) (m2 c b a)) Refl
 
-let pr1 = \f x. f x;
-let pr2 = \f x y. f x y;
-let pr3 = \f. f Meta;
-
-True
+def pr1 = \f x. f x
+def pr2 = \f x y. f x y
+def pr3 = \f. f Meta

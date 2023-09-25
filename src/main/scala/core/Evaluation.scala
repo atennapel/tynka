@@ -84,14 +84,15 @@ object Evaluation:
 
   def eval0(t: Tm0)(implicit env: Env): Val0 =
     t match
-      case Var0(ix)          => vvar0(ix)
-      case Global0(x)        => VGlobal0(x)
-      case Prim0(x)          => VPrim0(x)
-      case Let0(x, ty, v, b) => VLet0(x, eval1(ty), eval0(v), Clos(b))
-      case Lam0(x, ty, b)    => VLam0(x, eval1(ty), Clos(b))
-      case App0(f, a)        => VApp0(eval0(f), eval0(a))
-      case Splice(t)         => vsplice(eval1(t))
-      case Wk10(t)           => eval0(t)(env.wk1)
+      case Var0(ix)            => vvar0(ix)
+      case Global0(x)          => VGlobal0(x)
+      case Prim0(x)            => VPrim0(x)
+      case Let0(x, ty, v, b)   => VLet0(x, eval1(ty), eval0(v), Clos(b))
+      case LetRec(x, ty, v, b) => VLetRec(x, eval1(ty), Clos(v), Clos(b))
+      case Lam0(x, ty, b)      => VLam0(x, eval1(ty), Clos(b))
+      case App0(f, a)          => VApp0(eval0(f), eval0(a))
+      case Splice(t)           => vsplice(eval1(t))
+      case Wk10(t)             => eval0(t)(env.wk1)
 
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
@@ -227,12 +228,13 @@ object Evaluation:
         q match
           case LiftVars(y) if x < y => Splice(Var1(x.toIx))
           case _                    => Var0(x.toIx)
-      case VGlobal0(x)        => Global0(x)
-      case VPrim0(x)          => Prim0(x)
-      case VLet0(x, ty, v, b) => Let0(x, go1(ty), go0(v), goClos(b))
-      case VLam0(x, ty, b)    => Lam0(x, go1(ty), goClos(b))
-      case VApp0(f, a)        => App0(go0(f), go0(a))
-      case VSplice(tm)        => Splice(go1(tm))
+      case VGlobal0(x)          => Global0(x)
+      case VPrim0(x)            => Prim0(x)
+      case VLet0(x, ty, v, b)   => Let0(x, go1(ty), go0(v), goClos(b))
+      case VLetRec(x, ty, v, b) => LetRec(x, go1(ty), goClos(v), goClos(b))
+      case VLam0(x, ty, b)      => Lam0(x, go1(ty), goClos(b))
+      case VApp0(f, a)          => App0(go0(f), go0(a))
+      case VSplice(tm)          => Splice(go1(tm))
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
     quote1(eval1(tm)(EEmpty), q)(lvl0)

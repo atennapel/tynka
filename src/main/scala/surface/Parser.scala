@@ -26,7 +26,7 @@ object Parser:
         "Comp",
         "def",
         "let",
-        "fix",
+        "rec",
         "data",
         "con",
         "match",
@@ -174,14 +174,15 @@ object Parser:
 
     private lazy val let: Parsley[Tm] =
       positioned(
-        ("let" *> identOrOp <~> many(
+        ("let" *> option("rec") <~> identOrOp <~> many(
           defParam
         ) <~> option(
           ":" *> tm
         ) <~> (":=" #> false <|> "=" #> true) <~> tm <~> ";" *> tm)
-          .map { case (((((x, ps), ty), m), v), b) =>
+          .map { case ((((((rec, x), ps), ty), m), v), b) =>
             Let(
               x,
+              rec.isDefined,
               m,
               ty.map(typeFromParams(m, ps, _)),
               lamFromDefParams(ps, v, ty.isEmpty),
@@ -195,6 +196,7 @@ object Parser:
       case DoLet(
           pos: PosInfo,
           x: Name,
+          rec: Boolean,
           m: Boolean,
           t: Option[Ty],
           v: Tm
@@ -241,8 +243,8 @@ object Parser:
                     ArgIcit(Expl)
                   )
                 )
-              case (DoLet(p, x, m, t, v), b) =>
-                Pos(p, Let(x, m, t, v, b))
+              case (DoLet(p, x, rec, m, t, v), b) =>
+                Pos(p, Let(x, rec, m, t, v, b))
               // (>>=) v (\_. b)
               case (DoTm(v), b) =>
                 App(
@@ -258,7 +260,7 @@ object Parser:
             monad match
               case None => body
               case Some(m) =>
-                Let(Name(">>="), true, None, Var(m), body)
+                Let(Name(">>="), false, true, None, Var(m), body)
           }
       )
     private lazy val doEntry: Parsley[DoEntry] =
@@ -267,14 +269,14 @@ object Parser:
           DoBind(pos, x, t, v)
       } <|>
         attempt(
-          pos <~> "let" *> identOrOp <~> (
+          pos <~> "let" *> option("rec") <~> identOrOp <~> (
             ":=" #> false <|> "=" #> true
           ) <~> option(
             ":" *> tm
           ) <~> tm <* ";"
         )
-          .map { case ((((pos, x), m), t), v) =>
-            DoLet(pos, x, m, t, v)
+          .map { case (((((pos, rec), x), m), t), v) =>
+            DoLet(pos, x, rec.isDefined, m, t, v)
           } <|> (tm <* ";").map(DoTm.apply)
 
     private type LamParam = (List[Bind], ArgInfo, Option[Ty])
@@ -383,15 +385,16 @@ object Parser:
     lazy val defs: Parsley[Defs] = many(defP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
-      (pos <~> "def" *> identOrOp <~> many(
+      (pos <~> "def" *> option("rec") <~> identOrOp <~> many(
         defParam
       ) <~> option(
         ":" *> tm
       ) <~> (":=" #> false <|> "=" #> true) <~> tm)
-        .map { case (((((pos, x), ps), ty), m), v) =>
+        .map { case ((((((pos, rec), x), ps), ty), m), v) =>
           DDef(
             pos,
             x,
+            rec.isDefined,
             m,
             ty.map(typeFromParams(m, ps, _)),
             lamFromDefParams(ps, v, ty.isEmpty)

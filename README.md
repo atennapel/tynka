@@ -18,7 +18,8 @@ TODO:
 - [x] Unification
 - [x] Elaboration
 - [x] Definitions
+- [x] Recursive definitions
 - [ ] Pretty
 - [ ] Datatypes
-- [ ] Add `fix`
 - [ ] Primitives
+- [ ] Recursive meta definitions (?)

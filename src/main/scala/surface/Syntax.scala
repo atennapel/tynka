@@ -11,16 +11,17 @@ object Syntax:
     case DDef(
         pos: PosInfo,
         name: Name,
+        rec: Boolean,
         meta: Boolean,
         ty: Option[Ty],
         value: Tm
     )
 
     override def toString: String = this match
-      case DDef(_, x, m, Some(t), v) =>
-        s"def $x : $t ${if m then "" else ":"}= $v"
-      case DDef(_, x, m, None, v) =>
-        s"def $x ${if m then "" else ":"}= $v"
+      case DDef(_, x, rec, m, Some(t), v) =>
+        s"def ${if rec then "rec " else ""}$x : $t ${if m then "" else ":"}= $v"
+      case DDef(_, x, rec, m, None, v) =>
+        s"def ${if rec then "rec " else ""}$x ${if m then "" else ":"}= $v"
   export Def.*
 
   enum ArgInfo:
@@ -33,6 +34,7 @@ object Syntax:
     case Var(name: Name)
     case Let(
         name: Name,
+        rec: Boolean,
         meta: Boolean,
         ty: Option[Ty],
         value: Tm,
@@ -63,8 +65,10 @@ object Syntax:
 
     override def toString: String = this match
       case Var(x) => s"$x"
-      case Let(x, m, ty, v, b) =>
-        s"(let $x${ty.map(t => s" : $t").getOrElse("")} ${if m then "" else ":"}= $v; $b)"
+      case Let(x, rec, m, ty, v, b) =>
+        s"(let ${if rec then "rec " else ""}$x${ty
+            .map(t => s" : $t")
+            .getOrElse("")} ${if m then "" else ":"}= $v; $b)"
       case U0(cv)                         => s"(Ty $cv)"
       case U1                             => "Meta"
       case CV                             => "CV"
