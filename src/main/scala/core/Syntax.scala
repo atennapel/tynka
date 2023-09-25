@@ -5,6 +5,7 @@ import common.Common.*
 object Syntax:
   enum Tm0:
     case Var0(ix: Ix)
+    case Global0(name: Name)
     case Prim0(name: Name)
     case Let0(name: Name, ty: Ty, value: Tm0, body: Tm0)
     case Lam0(name: Bind, ty: Ty, body: Tm0)
@@ -14,6 +15,7 @@ object Syntax:
 
     override def toString: String = this match
       case Var0(ix)          => s"'$ix"
+      case Global0(x)        => s"$x"
       case Prim0(x)          => s"$x"
       case Let0(x, ty, v, b) => s"(let $x : $ty := $v; $b)"
       case Lam0(x, ty, b)    => s"(\\($x : $ty). $b)"
@@ -27,6 +29,7 @@ object Syntax:
 
   enum Tm1:
     case Var1(ix: Ix)
+    case Global1(name: Name)
     case Prim1(name: Name)
     case Let1(name: Name, ty: Ty, value: Tm1, body: Tm1)
 
@@ -56,6 +59,7 @@ object Syntax:
 
     override def toString: String = this match
       case Var1(ix)             => s"'$ix"
+      case Global1(x)           => s"$x"
       case Prim1(x)             => s"$x"
       case Let1(x, ty, v, b)    => s"(let $x : $ty = $v; $b)"
       case U0(cv)               => s"(Ty $cv)"

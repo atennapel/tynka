@@ -4,6 +4,7 @@ import common.Common.*
 import Syntax.*
 import Value.*
 import Metas.*
+import Globals.*
 
 import scala.annotation.tailrec
 
@@ -32,9 +33,15 @@ object Evaluation:
     case E1(env, _)                 => vvar1(ix - 1)(env)
     case EEmpty                     => impossible()
 
+  def vglobal1(x: Name): Val1 =
+    getGlobal(x) match
+      case Some(GlobalEntry1(_, _, _, v, _)) =>
+        VUnfold(UGlobal(x), SId, () => v)
+      case _ => impossible()
+
   inline def vmeta(id: MetaId): Val1 = getMeta(id) match
     case Unsolved(_)      => VFlex(id, SId)
-    case Solved(value, _) => VUnfold(id, SId, () => value)
+    case Solved(value, _) => VUnfold(UMeta(id), SId, () => value)
 
   inline def vsplice(v: Val1): Val0 = v match
     case VQuote(v) => v
@@ -77,6 +84,7 @@ object Evaluation:
   def eval0(t: Tm0)(implicit env: Env): Val0 =
     t match
       case Var0(ix)          => vvar0(ix)
+      case Global0(x)        => VGlobal0(x)
       case Prim0(x)          => VPrim0(x)
       case Let0(x, ty, v, b) => VLet0(x, eval1(ty), eval0(v), Clos(b))
       case Lam0(x, ty, b)    => VLam0(x, eval1(ty), Clos(b))
@@ -87,6 +95,7 @@ object Evaluation:
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
       case Var1(ix)             => vvar1(ix)
+      case Global1(x)           => vglobal1(x)
       case Prim1(x)             => VPrim1(x)
       case Let1(_, _, v, b)     => eval1(b)(E1(env, eval1(v)))
       case U0(cv)               => VU0(eval1(cv))
@@ -114,7 +123,7 @@ object Evaluation:
     case top @ VFlex(id, sp) =>
       getMeta(id) match
         case Unsolved(_)  => top
-        case Solved(v, _) => VUnfold(id, sp, () => vspine(v, sp))
+        case Solved(v, _) => VUnfold(UMeta(id), sp, () => vspine(v, sp))
     case v => v
 
   @tailrec
@@ -140,9 +149,8 @@ object Evaluation:
       getMeta(id) match
         case Unsolved(_)  => top
         case Solved(v, _) => forceMetas1(vspine(v, sp))
-    case VUnfold(_, _, v) => forceMetas1(v())
-    // TODO: leave globals unforced
-    case v => v
+    case VUnfold(UMeta(_), _, v) => forceMetas1(v())
+    case v                       => v
 
   @tailrec
   def forceMetas0(v: Val0): Val0 = v match
@@ -187,18 +195,19 @@ object Evaluation:
         hd match
           case HVar(lvl) => goSp(Var1(lvl.toIx), sp)
           case HPrim(x)  => goSp(Prim1(x), sp)
-      case VFlex(id, sp)      => goSp(Meta(id), sp)
-      case VUnfold(id, sp, _) => goSp(Meta(id), sp)
-      case VPi(x, i, ty, b)   => Pi(x, i, go1(ty), goClos(b))
-      case VLam1(x, i, ty, b) => Lam1(x, i, go1(ty), goClos(b))
-      case VU0(cv)            => U0(go1(cv))
-      case VU1                => U1
-      case VFun(pty, cv, rty) => Fun(go1(pty), go1(cv), go1(rty))
-      case VCV1               => CV1
-      case VComp              => Comp
-      case VVal               => Val
-      case VLift(cv, ty)      => Lift(go1(cv), go1(ty))
-      case VQuote(tm)         => Quote(go0(tm))
+      case VFlex(id, sp)              => goSp(Meta(id), sp)
+      case VUnfold(UMeta(id), sp, _)  => goSp(Meta(id), sp)
+      case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
+      case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
+      case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
+      case VU0(cv)                    => U0(go1(cv))
+      case VU1                        => U1
+      case VFun(pty, cv, rty)         => Fun(go1(pty), go1(cv), go1(rty))
+      case VCV1                       => CV1
+      case VComp                      => Comp
+      case VVal                       => Val
+      case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
+      case VQuote(tm)                 => Quote(go0(tm))
       case VMetaPi(m, t, b) =>
         MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
       case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))
@@ -217,6 +226,7 @@ object Evaluation:
         q match
           case LiftVars(y) if x < y => Splice(Var1(x.toIx))
           case _                    => Var0(x.toIx)
+      case VGlobal0(x)        => Global0(x)
       case VPrim0(x)          => Prim0(x)
       case VLet0(x, ty, v, b) => Let0(x, go1(ty), go0(v), goClos(b))
       case VLam0(x, ty, b)    => Lam0(x, go1(ty), goClos(b))

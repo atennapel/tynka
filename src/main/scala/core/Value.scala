@@ -59,6 +59,7 @@ object Value:
 
   enum Val0:
     case VVar0(lvl: Lvl)
+    case VGlobal0(name: Name)
     case VPrim0(name: Name)
     case VLet0(name: Name, ty: VTy, value: Val0, body: Clos[S.Tm0])
     case VLam0(name: Bind, ty: VTy, body: Clos[S.Tm0])
@@ -71,10 +72,15 @@ object Value:
     case HPrim(name: Name)
   export Head.*
 
+  enum UHead:
+    case UMeta(id: MetaId)
+    case UGlobal(name: Name)
+  export UHead.*
+
   enum Val1:
     case VRigid(head: Head, spine: Spine)
     case VFlex(id: MetaId, spine: Spine)
-    case VUnfold(id: MetaId, spine: Spine, value: () => Val1)
+    case VUnfold(head: UHead, spine: Spine, value: () => Val1)
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos[S.Ty])
     case VLam1(name: Bind, icit: Icit, ty: VTy, body: Clos[S.Tm1])

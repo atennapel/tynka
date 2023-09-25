@@ -3,17 +3,16 @@ package core
 import common.Common.*
 import common.Debug.*
 import surface.Syntax as S
-import core.Syntax.*
-import core.Value.*
-import core.Evaluation.*
-import core.Unification.{UnifyError, unify1 as unify1_}
-import core.Metas.*
+import Syntax.*
+import Value.*
+import Evaluation.*
+import Unification.{UnifyError, unify1 as unify1_}
+import Metas.*
+import Globals.*
 import Ctx.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import surface.Syntax.ArgInfo
-import surface.Syntax.Tm
 
 object Elaboration:
   private enum Infer:
@@ -258,7 +257,7 @@ object Elaboration:
             etm
           case Infer1(etm, vty) => coeQuote(etm, vty, ty, cv)
 
-  private def icitMatch(i: ArgInfo, x: Bind, i2: Icit): Boolean = i match
+  private def icitMatch(i: S.ArgInfo, x: Bind, i2: Icit): Boolean = i match
     case S.ArgNamed(y) =>
       x match
         case DontBind  => false
@@ -463,9 +462,15 @@ object Elaboration:
 
       case S.Var(x) =>
         ctx.lookup(x) match
-          case None                   => error(s"undefined variable $x")
           case Some(Name0(x, ty, cv)) => Infer0(Var0(x.toIx(ctx.lvl)), ty, cv)
           case Some(Name1(x, ty))     => Infer1(Var1(x.toIx(ctx.lvl)), ty)
+          case None =>
+            getGlobal(x) match
+              case None => error(s"undefined variable $x")
+              case Some(GlobalEntry0(_, _, _, _, _, ty, cv)) =>
+                Infer0(Global0(x), ty, cv)
+              case Some(GlobalEntry1(_, _, _, _, ty)) =>
+                Infer1(Global1(x), ty)
 
       case S.Let(x, false, mty, v, b) =>
         val cv2 = freshCV()

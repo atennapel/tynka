@@ -230,6 +230,7 @@ object Unification:
           case None         => throw UnifyError(s"out of scope $x")
           case Some(PS1(_)) => impossible()
           case Some(PS0(v)) => quote0(v, UnfoldNone)(psub.dom)
+      case VGlobal0(x)        => Global0(x)
       case VPrim0(x)          => Prim0(x)
       case VLet0(x, ty, v, b) => Let0(x, go1(ty), go0(v), goClos(b))
       case VLam0(x, ty, b)    => Lam0(x, go1(ty), goClos(b))
@@ -261,17 +262,18 @@ object Unification:
       case VFlex(m, sp) =>
         if psub.occ.contains(m) then throw UnifyError(s"occurs error ?$m")
         else pruneVFlex(m, sp)
-      case VUnfold(m, sp, _)  => goSp(Meta(m), sp)
-      case VPi(x, i, ty, b)   => Pi(x, i, go1(ty), goClos(b))
-      case VLam1(x, i, ty, b) => Lam1(x, i, go1(ty), goClos(b))
-      case VU0(cv)            => U0(go1(cv))
-      case VU1                => U1
-      case VFun(pty, cv, rty) => Fun(go1(pty), go1(cv), go1(rty))
-      case VCV1               => CV1
-      case VComp              => Comp
-      case VVal               => Val
-      case VLift(cv, ty)      => Lift(go1(cv), go1(ty))
-      case VQuote(tm)         => Quote(go0(tm))
+      case VUnfold(UMeta(m), sp, _)   => goSp(Meta(m), sp)
+      case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
+      case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
+      case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
+      case VU0(cv)                    => U0(go1(cv))
+      case VU1                        => U1
+      case VFun(pty, cv, rty)         => Fun(go1(pty), go1(cv), go1(rty))
+      case VCV1                       => CV1
+      case VComp                      => Comp
+      case VVal                       => Val
+      case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
+      case VQuote(tm)                 => Quote(go0(tm))
       case VMetaPi(m, t, b) =>
         MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
       case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))
