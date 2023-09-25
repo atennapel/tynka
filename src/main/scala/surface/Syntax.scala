@@ -3,6 +3,26 @@ package surface
 import common.Common.*
 
 object Syntax:
+  final case class Defs(defs: List[Def]):
+    override def toString: String = defs.mkString("\n")
+    def toList: List[Def] = defs
+
+  enum Def:
+    case DDef(
+        pos: PosInfo,
+        name: Name,
+        meta: Boolean,
+        ty: Option[Ty],
+        value: Tm
+    )
+
+    override def toString: String = this match
+      case DDef(_, x, m, Some(t), v) =>
+        s"def $x : $t ${if m then "" else ":"}= $v"
+      case DDef(_, x, m, None, v) =>
+        s"def $x ${if m then "" else ":"}= $v"
+  export Def.*
+
   enum ArgInfo:
     case ArgNamed(name: Name)
     case ArgIcit(icit: Icit)

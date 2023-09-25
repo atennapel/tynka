@@ -379,4 +379,24 @@ object Parser:
 
     private def ops(ss: String*): List[Ops[Tm, Tm]] = ss.flatMap(opLevel).toList
 
+    // definitions
+    lazy val defs: Parsley[Defs] = many(defP).map(Defs.apply)
+
+    private lazy val defP: Parsley[Def] =
+      (pos <~> "def" *> identOrOp <~> many(
+        defParam
+      ) <~> option(
+        ":" *> tm
+      ) <~> (":=" #> false <|> "=" #> true) <~> tm)
+        .map { case (((((pos, x), ps), ty), m), v) =>
+          DDef(
+            pos,
+            x,
+            m,
+            ty.map(typeFromParams(m, ps, _)),
+            lamFromDefParams(ps, v, ty.isEmpty)
+          )
+        }
+
   lazy val parser: Parsley[Tm] = LangLexer.fully(TmParser.tm)
+  lazy val defsParser: Parsley[Defs] = LangLexer.fully(TmParser.defs)

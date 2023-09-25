@@ -17,6 +17,8 @@ java examples/IOExample
 TODO:
 - [x] Unification
 - [x] Elaboration
+- [x] Definitions
 - [ ] Pretty
-- [ ] Definitions
+- [ ] Datatypes
+- [ ] Add `fix`
 - [ ] Primitives

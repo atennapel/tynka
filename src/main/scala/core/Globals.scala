@@ -7,15 +7,16 @@ import Value.*
 import scala.collection.mutable
 
 object Globals:
-  private val map: mutable.Map[Name, GlobalEntry] = mutable.Map.empty
+  private val globals: mutable.ArrayBuffer[GlobalEntry] =
+    mutable.ArrayBuffer.empty
 
   enum GlobalEntry:
     case GlobalEntry0(
         _name: Name,
         tm: Tm0,
         ty: Ty,
-        value: Val0,
         cv: CV,
+        value: Val0,
         vty: VTy,
         vcv: VCV
     )
@@ -31,9 +32,10 @@ object Globals:
       case GlobalEntry1(_name, _, _, _, _)       => _name
   export GlobalEntry.*
 
-  def setGlobal(entry: GlobalEntry): Unit = map.put(entry.name, entry)
-  def getGlobal(x: Name): Option[GlobalEntry] = map.get(x)
+  def setGlobal(entry: GlobalEntry): Unit = globals += entry
+  def getGlobal(x: Name): Option[GlobalEntry] =
+    globals.findLast(e => e.name == x)
 
-  def resetGlobals(): Unit = map.clear()
+  def resetGlobals(): Unit = globals.clear()
 
-  def allGlobals: Map[Name, GlobalEntry] = map.toMap
+  def allGlobals: List[GlobalEntry] = globals.toList

@@ -74,7 +74,8 @@ object Evaluation:
   def vappPruning(m: MetaId, p: Pruning)(implicit env: Env): Val1 =
     (env, p) match
       case (EEmpty, Nil)             => vmeta(m)
-      case (E1(env, u), PESkip :: p) => vappPruning(m, p)(env)
+      case (E1(env, _), PESkip :: p) => vappPruning(m, p)(env)
+      case (E0(env, _), PESkip :: p) => vappPruning(m, p)(env)
       case (E1(env, u), PEBind1(i) :: p) =>
         vmetaapp(vappPruning(m, p)(env), Right(u))
       case (E0(env, u), PEBind0 :: p) =>

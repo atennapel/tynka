@@ -13,6 +13,7 @@ import Ctx.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import surface.Syntax.Def
 
 object Elaboration:
   private enum Infer:
@@ -326,7 +327,7 @@ object Elaboration:
             val rt = freshMeta(VU0(vcv))
             val vrt = ctx.eval1(rt)
             val vty = ctx.eval1(ety)
-            val eb = check0(b, vty, vcv)(ctx.bind0(x, ety, vty, Val, VVal))
+            val eb = check0(b, vrt, vcv)(ctx.bind0(x, ety, vty, Val, VVal))
             (Lam0(x, ety, eb), VFun(vty, vcv, vrt), VComp)
 
       case tm =>
@@ -565,11 +566,61 @@ object Elaboration:
       case S.Hole(_) => error("cannot infer hole")
 
   // elaboration
+  def elaborate(d: S.Def): Unit = d match
+    case S.DDef(pos, x, m, mty, v) =>
+      implicit val ctx: Ctx = Ctx.empty(pos)
+      if getGlobal(x).isDefined then error(s"duplicated definition $x")
+      if m then
+        val (ev, ty, vv, vty) = mty match
+          case None =>
+            val (ev, vty) = infer1(v)
+            (ev, ctx.quote1(vty), ctx.eval1(ev), vty)
+          case Some(sty) =>
+            val ety = check1(sty, VU1)
+            val vty = ctx.eval1(ety)
+            val ev = check1(v, vty)
+            (ev, ety, ctx.eval1(ev), vty)
+        setGlobal(GlobalEntry1(x, ev, ty, vv, vty))
+      else
+        val (ev, ty, cv, vv, vty, vcv) = mty match
+          case None =>
+            val (ev, vty, vcv) = infer0(v)
+            (
+              ev,
+              ctx.quote1(vty),
+              ctx.quote1(vcv),
+              ctx.eval0(ev),
+              vty,
+              vcv
+            )
+          case Some(sty) =>
+            val cv = freshCV()
+            val vcv = ctx.eval1(cv)
+            val ety = check1(sty, VU0(vcv))
+            val vty = ctx.eval1(ety)
+            val ev = check0(v, vty, vcv)
+            (
+              ev,
+              ety,
+              cv,
+              ctx.eval0(ev),
+              vty,
+              vcv
+            )
+        setGlobal(GlobalEntry0(x, ev, ty, cv, vv, vty, vcv))
+
+  def elaborate(d: S.Defs): Unit = d.toList.foreach(elaborate)
+
   def elaborate(tm: S.Tm): (Either[Tm0, Tm1], Ty) =
     implicit val ctx: Ctx = Ctx.empty((0, 0))
     infer(tm) match
       case Infer0(etm, ty, _) => (Left(etm), ctx.quote1(ty))
       case Infer1(etm, ty)    => (Right(etm), ctx.quote1(ty))
+
+  def elaborate1(tm: S.Tm): (Tm1, Ty) =
+    implicit val ctx: Ctx = Ctx.empty((0, 0))
+    val (etm, ty) = infer1(tm)
+    (etm, ctx.quote1(ty, UnfoldMetas))
 
   def elaborate0(tm: S.Tm): (Tm0, Ty) =
     implicit val ctx: Ctx = Ctx.empty((0, 0))

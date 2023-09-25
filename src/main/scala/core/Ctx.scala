@@ -3,7 +3,14 @@ package core
 import common.Common.*
 import Syntax.*
 import Value.*
-import Evaluation.{QuoteOption, UnfoldNone, quote1 as quote1_, eval1 as eval1_}
+import Evaluation.{
+  QuoteOption,
+  UnfoldNone,
+  quote1 as quote1_,
+  eval1 as eval1_,
+  quote0 as quote0_,
+  eval0 as eval0_
+}
 
 import scala.annotation.tailrec
 
@@ -75,10 +82,13 @@ final case class Ctx(
       pos
     )
 
-  def quote1(v: VTy, q: QuoteOption = UnfoldNone): Tm1 = quote1_(v, q)(lvl)
+  def quote1(v: Val1, q: QuoteOption = UnfoldNone): Tm1 = quote1_(v, q)(lvl)
+  def quote0(v: Val0, q: QuoteOption = UnfoldNone): Tm0 = quote0_(v, q)(lvl)
   def eval1(t: Tm1): Val1 = eval1_(t)(env)
+  def eval0(t: Tm0): Val0 = eval0_(t)(env)
 
-  def pretty(v: VTy): String = quote1_(v, UnfoldNone)(lvl).toString
+  def pretty(v: Val1): String = quote1_(v, UnfoldNone)(lvl).toString // TODO
+  def pretty(v: Val0): String = quote0_(v, UnfoldNone)(lvl).toString // TODO
 
 object Ctx:
   def empty(pos: PosInfo) = Ctx(lvl0, EEmpty, LEmpty, Nil, Nil, Map.empty, pos)

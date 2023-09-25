@@ -1,15 +1,16 @@
-import surface.Parser.parser
+import surface.Parser.defsParser
 import common.Common.*
 import common.Debug.*
-import core.Elaboration.{elaborate0, ElaborateError}
+import core.Elaboration.{elaborate, ElaborateError}
 import core.Value.*
 import core.Evaluation.*
+import core.Metas.getMetas
+import core.Ctx
+import core.Globals.*
 
 import java.io.File
 import scala.io.Source
 import parsley.io.given
-import core.Metas.getMetas
-import core.Ctx
 
 object Main:
   @main def run(filename: String): Unit =
@@ -19,10 +20,12 @@ object Main:
 
       val etimeStart = System.nanoTime()
       val text = Source.fromFile(filename).mkString
-      val stm = parser.parse(text).toTry.get
-      val (tm, ty) = elaborate0(stm)
+      val sdefs = defsParser.parse(text).toTry.get
+      elaborate(sdefs)
       val etime = System.nanoTime() - etimeStart
       println(s"elaboration time: ${etime / 1000000}ms (${etime}ns)")
+
+      println()
 
       getMetas().foreach((m, t, v) =>
         v match
@@ -30,9 +33,14 @@ object Main:
           case Some(v) => println(s"?$m : ${ctx.pretty(t)} = ${ctx.pretty(v)}")
       )
 
-      println(tm)
-      println(ty)
-      println(stage(tm))
+      println()
+
+      allGlobals.foreach {
+        case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
+          println(s"$x : ${ctx.quote1(vty, UnfoldMetas)} := ${stage(tm)}")
+        case GlobalEntry1(x, tm, ty, vv, vty) =>
+          println(s"$x : ${ctx.quote1(vty, UnfoldMetas)} = $tm")
+      }
     catch
       case err: ElaborateError =>
         println(err.getMessage)
