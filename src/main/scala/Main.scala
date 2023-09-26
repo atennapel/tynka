@@ -29,17 +29,18 @@ object Main:
 
       getMetas().foreach((m, t, v) =>
         v match
-          case None    => println(s"?$m : ${ctx.pretty(t)}")
-          case Some(v) => println(s"?$m : ${ctx.pretty(t)} = ${ctx.pretty(v)}")
+          case None => println(s"?$m : ${ctx.pretty1(t)}")
+          case Some(v) =>
+            println(s"?$m : ${ctx.pretty1(t)} = ${ctx.pretty1(v)}")
       )
 
       println()
 
       allGlobals.foreach {
         case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
-          println(s"$x : ${ctx.quote1(vty, UnfoldMetas)} := ${stage(tm)}")
+          println(s"$x : ${ctx.pretty1(vty)} := ${ctx.pretty0(stage(tm))}")
         case GlobalEntry1(x, tm, ty, vv, vty) =>
-          println(s"$x : ${ctx.quote1(vty, UnfoldMetas)} = $tm")
+          println(s"$x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}")
       }
     catch
       case err: ElaborateError =>

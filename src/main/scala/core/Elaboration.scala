@@ -30,12 +30,12 @@ object Elaboration:
 
   // unification
   private def unify1(a: VTy, b: VTy)(implicit ctx: Ctx): Unit =
-    debug(s"unify1 ${ctx.pretty(a)} ~ ${ctx.pretty(b)}")
+    debug(s"unify1 ${ctx.pretty1(a)} ~ ${ctx.pretty1(b)}")
     try unify1_(a, b)(ctx.lvl)
     catch
       case err: UnifyError =>
         error(
-          s"failed to unify ${ctx.pretty(a)} ~ ${ctx.pretty(b)}: ${err.msg}"
+          s"failed to unify ${ctx.pretty1(a)} ~ ${ctx.pretty1(b)}: ${err.msg}"
         )
 
   // metas
@@ -52,7 +52,7 @@ object Elaboration:
     val qa = closeType(ctx.locals, ctx.binds, ctx.quote1(ty, UnfoldNone))
     val vqa = eval1(qa)(EEmpty)
     val m = newMeta(vqa)
-    debug(s"newMeta ?$m : ${ctx.pretty(ty)}")
+    debug(s"newMeta ?$m : ${ctx.pretty1(ty)}")
     AppPruning(m, ctx.pruning)
 
   private inline def freshCV()(implicit ctx: Ctx): CV = freshMeta(VCV1)
@@ -226,7 +226,7 @@ object Elaboration:
 
   // checking
   private def check0(tm: S.Tm, ty: VTy, cv: VCV)(implicit ctx: Ctx): Tm0 =
-    debug(s"check0 $tm : ${ctx.pretty(ty)} : ${ctx.pretty(cv)}")
+    debug(s"check0 $tm : ${ctx.pretty1(ty)} : ${ctx.pretty1(cv)}")
     tm match
       case S.Pos(pos, tm) => check0(tm, ty, cv)(ctx.enter(pos))
 
@@ -271,7 +271,7 @@ object Elaboration:
     case S.ArgIcit(i) => i == i2
 
   private def check1(tm: S.Tm, ty: VTy)(implicit ctx: Ctx): Tm1 =
-    debug(s"check1 $tm : ${ctx.pretty(ty)}")
+    debug(s"check1 $tm : ${ctx.pretty1(ty)}")
     (tm, forceAll1(ty)) match
       case (S.Pos(pos, tm), _) => check1(tm, ty)(ctx.enter(pos))
 

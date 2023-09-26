@@ -19,7 +19,7 @@ TODO:
 - [x] Elaboration
 - [x] Definitions
 - [x] Recursive definitions
-- [ ] Pretty
+- [x] Pretty
 - [ ] Datatypes
 - [ ] Primitives
 - [ ] Recursive meta definitions (?)

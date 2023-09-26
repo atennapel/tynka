@@ -36,6 +36,7 @@ object Common:
       if !isOperator then x else s"($x)"
     def isOperator: Boolean = !x.head.isLetter && x.head != '_'
     def expose: String = x
+    def toBind: Bind = DoBind(this)
 
   enum Bind:
     case DontBind

@@ -6,11 +6,13 @@ import Value.*
 import Evaluation.{
   QuoteOption,
   UnfoldNone,
+  UnfoldMetas,
   quote1 as quote1_,
   eval1 as eval1_,
   quote0 as quote0_,
   eval0 as eval0_
 }
+import Pretty.{pretty0 as pretty0_, pretty1 as pretty1_}
 
 import scala.annotation.tailrec
 
@@ -87,8 +89,14 @@ final case class Ctx(
   def eval1(t: Tm1): Val1 = eval1_(t)(env)
   def eval0(t: Tm0): Val0 = eval0_(t)(env)
 
-  def pretty(v: Val1): String = quote1_(v, UnfoldNone)(lvl).toString // TODO
-  def pretty(v: Val0): String = quote0_(v, UnfoldNone)(lvl).toString // TODO
+  def pretty1(v: Val1, q: QuoteOption = UnfoldMetas): String =
+    pretty1_(quote1_(v, q)(lvl))(binds)
+  def pretty0(v: Val0, q: QuoteOption = UnfoldMetas): String =
+    pretty0_(quote0_(v, q)(lvl))(binds)
+  def pretty1(v: Tm1): String =
+    pretty1_(v)(binds)
+  def pretty0(v: Tm0): String =
+    pretty0_(v)(binds)
 
 object Ctx:
   def empty(pos: PosInfo) = Ctx(lvl0, EEmpty, LEmpty, Nil, Nil, Map.empty, pos)
