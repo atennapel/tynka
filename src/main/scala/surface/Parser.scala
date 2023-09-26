@@ -214,7 +214,7 @@ object Parser:
     )
 
     private lazy val matchP: Parsley[Tm] = positioned(
-      ("match" *> tm <~> many(
+      ("match" *> option(tm) <~> many(
         attempt(
           pos <~>
             "|" *> identOrOp.flatMap(x =>
@@ -237,7 +237,7 @@ object Parser:
           .map { case ((c, (pt, t)), (pf, f)) =>
             val x = Name("b")
             Match(
-              Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x)),
+              Some(Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x))),
               List(
                 (pt, Name("True"), Nil, t),
                 (pf, Name("False"), Nil, f)

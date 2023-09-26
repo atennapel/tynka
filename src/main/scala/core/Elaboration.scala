@@ -193,11 +193,19 @@ object Elaboration:
       case _ =>
         unify1(acv, VComp)
         val a2 = ctx.eval1(freshMeta(VU0(VVal)))
-        val bcv2 = freshCV()
-        val vbcv2 = ctx.eval1(bcv2)
+        val vbcv2 = ctx.eval1(freshCV())
         val b2 = ctx.eval1(freshMeta(VU0(vbcv2)))
         unify1(a, VFun(a2, vbcv2, b2))
         (a2, vbcv2, b2)
+
+  private def ensureLift(t: VTy)(implicit ctx: Ctx): (VCV, VTy) =
+    forceAll1(t) match
+      case VLift(cv, ty) => (cv, ty)
+      case _ =>
+        val cv = ctx.eval1(freshCV())
+        val ty = ctx.eval1(freshMeta(VU0(cv)))
+        unify1(t, VLift(cv, ty))
+        (cv, ty)
 
   private def apply1(a: VTy, i: Icit, t: Tm1, u: S.Tm)(implicit
       ctx: Ctx
@@ -226,14 +234,18 @@ object Elaboration:
 
   // checking
   private def checkMatch(
-      scrut: S.Tm,
+      scrut: Either[(Tm0, VTy), S.Tm],
       cs: List[(PosInfo, Name, List[Bind], S.Tm)],
       other: Option[(PosInfo, S.Tm)],
       vrty: VTy,
       vrcv: VTy
   )(implicit ctx: Ctx): Tm0 =
-    val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
-    val escrut = check0(scrut, vscrutty, VVal)
+    val (escrut, vscrutty) = scrut match
+      case Left(p) => p
+      case Right(scrut) =>
+        val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
+        val escrut = check0(scrut, vscrutty, VVal)
+        (escrut, vscrutty)
     forceAll1(vscrutty) match
       case VData(dx, dcs) =>
         val used = mutable.Set[Name]()
@@ -250,19 +262,23 @@ object Elaboration:
             .get
             ._2
             .map(_._2)
-            .map(t => eval1(t)(E1(dcs.env, vscrutty)))
+            .map { t =>
+              val vt = eval1(t)(E1(dcs.env, vscrutty))
+              (vt, ctx1.quote1(vt))
+            }
           if ps.size != tas.size then
             error(
               s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
             )
-          val (fnty, ecv) = tas
-            .foldRight((vrty, vrcv)) { case (t, (rt, rcv)) =>
-              (VFun(t, rcv, rt), VComp)
-            }
-          val lam =
-            ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
-          val eb = check0(lam, fnty, ecv)
-          (cx, eb)
+          val tps = ps.zip(tas)
+          val pctx = tps.foldLeft(ctx1) { case (ctx, (x, (vt, qt))) =>
+            ctx.bind0(x, qt, vt, Val, VVal)
+          }
+          val eb = check0(b, vrty, vrcv)(pctx)
+          val lams = tps.foldRight(eb) { case ((x, (_, qt)), b) =>
+            Lam0(x, qt, b)
+          }
+          (cx, lams)
         }
         val left = cons -- used
         if other.isEmpty && left.nonEmpty then
@@ -281,7 +297,8 @@ object Elaboration:
         )
 
   private def check0(tm: S.Tm, ty: VTy, cv: VCV)(implicit ctx: Ctx): Tm0 =
-    debug(s"check0 $tm : ${ctx.pretty1(ty)} : ${ctx.pretty1(cv)}")
+    if !tm.isPos then
+      debug(s"check0 $tm : ${ctx.pretty1(ty)} : ${ctx.pretty1(cv)}")
     tm match
       case S.Pos(pos, tm) => check0(tm, ty, cv)(ctx.enter(pos))
 
@@ -324,7 +341,16 @@ object Elaboration:
                 Con(x, eargs)
           case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
 
-      case S.Match(scrut, cs, other) => checkMatch(scrut, cs, other, ty, cv)
+      case S.Match(Some(scrut), cs, other) =>
+        checkMatch(Right(scrut), cs, other, ty, cv)
+      case S.Match(None, cs, other) =>
+        val (t1, fcv, t2) = ensureFun(ty, cv)
+        val qt1 = ctx.quote1(t1)
+        val x = DoBind(Name("x"))
+        val etm = checkMatch(Left((Var0(ix0), t1)), cs, other, t2, fcv)(
+          ctx.insert0(x, qt1, Val)
+        )
+        Lam0(x, qt1, etm)
 
       case S.Hole(_) => splice(freshMeta(VLift(cv, ty)))
 
@@ -348,7 +374,7 @@ object Elaboration:
     case S.ArgIcit(i) => i == i2
 
   private def check1(tm: S.Tm, ty: VTy)(implicit ctx: Ctx): Tm1 =
-    debug(s"check1 $tm : ${ctx.pretty1(ty)}")
+    if !tm.isPos then debug(s"check1 $tm : ${ctx.pretty1(ty)}")
     (tm, forceAll1(ty)) match
       case (S.Pos(pos, tm), _) => check1(tm, ty)(ctx.enter(pos))
 
@@ -358,7 +384,20 @@ object Elaboration:
         Lam1(x, i2, qt1, check1(b, t2(VVar1(ctx.lvl)))(ctx.bind1(x, qt1, t1)))
       case (tm, VPi(x, Impl, t1, t2)) =>
         val qt1 = ctx.quote1(t1)
-        Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert(x, qt1)))
+        Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
+
+      case (S.Match(None, cs, o), VPi(x, Expl, t1, t2)) =>
+        val qt1 = ctx.quote1(t1)
+        val y = x match
+          case DontBind => DoBind(Name("x"))
+          case x        => x
+        val nctx = ctx.insert1(y, qt1)
+        val (vscrutcv, vscrutty) = ensureLift(t1)
+        val (vrcv, vrty) = ensureLift(t2(VVar1(ctx.lvl)))(nctx)
+        unify1(vscrutcv, VVal)
+        val escrut = Left((Splice(Var1(ix0)), vscrutty))
+        val ematch = checkMatch(escrut, cs, o, vrty, vrcv)(nctx)
+        Lam1(y, Expl, qt1, Quote(ematch))
 
       case (S.Pi(DontBind, Expl, t1, t2), VU0(cv)) =>
         unify1(cv, VComp)
@@ -395,7 +434,7 @@ object Elaboration:
 
   // inference
   private def infer0(tm: S.Tm)(implicit ctx: Ctx): (Tm0, VTy, VCV) =
-    debug(s"infer0 $tm")
+    if !tm.isPos then debug(s"infer0 $tm")
     tm match
       case S.Pos(pos, tm) => infer0(tm)(ctx.enter(pos))
 
@@ -427,7 +466,7 @@ object Elaboration:
                 (etm2, vty, vcv)
 
   private def infer1(tm: S.Tm)(implicit ctx: Ctx): (Tm1, VTy) =
-    debug(s"infer1 $tm")
+    if !tm.isPos then debug(s"infer1 $tm")
     tm match
       case S.Pos(pos, tm) => infer1(tm)(ctx.enter(pos))
 
@@ -448,7 +487,7 @@ object Elaboration:
           case Infer1(tm, ty)     => (tm, ty)
 
   private def infer(tm: S.Tm)(implicit ctx: Ctx): Infer =
-    debug(s"infer $tm")
+    if !tm.isPos then debug(s"infer $tm")
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
 
@@ -578,11 +617,18 @@ object Elaboration:
         }
         Infer1(Data(x, ecs), VU0(VVal))
 
-      case S.Match(scrut, cs, other) =>
+      case S.Match(Some(scrut), cs, other) =>
         val cv = ctx.eval1(freshCV())
         val ty = ctx.eval1(freshMeta(VU0(cv)))
-        val etm = checkMatch(scrut, cs, other, ty, cv)
+        val etm = checkMatch(Right(scrut), cs, other, ty, cv)
         Infer0(etm, ty, cv)
+      case m @ S.Match(None, cs, other) =>
+        val cv = ctx.eval1(freshCV())
+        val t1 = ctx.eval1(freshMeta(VU0(VVal)))
+        val t2 = ctx.eval1(freshMeta(VU0(cv)))
+        val fun = VFun(t1, cv, t2)
+        val etm = check0(m, fun, VComp)
+        Infer0(etm, fun, VComp)
 
   // elaboration
   def elaborate(d: S.Def): Unit = d match

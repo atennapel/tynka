@@ -21,11 +21,11 @@ TODO:
 - [x] Primitives
 - [x] Recursive definitions
 - [x] Pretty
-- [ ] Datatypes
+- [x] Datatypes
   - [x] Type constructor
   - [x] Value constructor
   - [x] Case split
-  - [ ] Match without scrutinee
+  - [x] Match without scrutinee
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] Pattern matching

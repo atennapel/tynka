@@ -17,8 +17,11 @@ import Pretty.{pretty0 as pretty0_, pretty1 as pretty1_}
 import scala.annotation.tailrec
 
 enum NameInfo:
-  case Name0(lvl: Lvl, ty: VTy, cv: VCV)
-  case Name1(lvl: Lvl, ty: VTy)
+  case Name0(_lvl: Lvl, ty: VTy, cv: VCV)
+  case Name1(_lvl: Lvl, ty: VTy)
+  def lvl: Lvl = this match
+    case Name0(_lvl, ty, cv) => _lvl
+    case Name1(_lvl, ty)     => _lvl
 export NameInfo.*
 private type NameMap = Map[Name, NameInfo]
 
@@ -51,7 +54,7 @@ final case class Ctx(
       pos
     )
 
-  def insert(x: Bind, ty: Ty): Ctx =
+  def insert1(x: Bind, ty: Ty): Ctx =
     Ctx(
       lvl + 1,
       E1(env, VVar1(lvl)),
@@ -81,6 +84,17 @@ final case class Ctx(
       PEBind0 :: pruning,
       x :: binds,
       addName(x, Name0(lvl, vty, vcv)),
+      pos
+    )
+
+  def insert0(x: Bind, ty: Ty, cv: CV): Ctx =
+    Ctx(
+      lvl + 1,
+      E0(env, VVar0(lvl)),
+      LBind0(locals, ty, cv),
+      PEBind0 :: pruning,
+      x :: binds,
+      names,
       pos
     )
 

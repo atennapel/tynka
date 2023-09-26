@@ -166,12 +166,20 @@ object Evaluation:
         case _         => top
     case v => v
 
+  @tailrec
+  def forceStage0(v: Val0): Val0 = v match
+    case top @ VSplice(v) =>
+      forceAll1(v) match
+        case VQuote(v) => forceStage0(v)
+        case _         => top
+    case v => v
+
   // quoting
   enum QuoteOption:
     case UnfoldAll
     case UnfoldMetas
     case UnfoldNone
-    case LiftVars(lvl: Lvl)
+    case UnfoldStage
   export QuoteOption.*
 
   private def quote1(h: Tm1, sp: Spine, q: QuoteOption)(implicit
@@ -204,7 +212,7 @@ object Evaluation:
       case UnfoldAll   => forceAll1(v)
       case UnfoldMetas => forceMetas1(v)
       case UnfoldNone  => force1(v)
-      case LiftVars(_) => force1(v)
+      case UnfoldStage => forceMetas1(v)
     force(v) match
       case VRigid(hd, sp) =>
         hd match
@@ -236,12 +244,9 @@ object Evaluation:
       case UnfoldAll   => forceAll0(v)
       case UnfoldMetas => forceMetas0(v)
       case UnfoldNone  => v
-      case LiftVars(_) => v
+      case UnfoldStage => forceStage0(v)
     force(v) match
-      case VVar0(x) =>
-        q match
-          case LiftVars(y) if x < y => Splice(Var1(x.toIx))
-          case _                    => Var0(x.toIx)
+      case VVar0(x)             => Var0(x.toIx)
       case VGlobal0(x)          => Global0(x)
       case VPrim0(x)            => Prim0(x)
       case VLet0(x, ty, v, b)   => Let0(x, go1(ty), go0(v), goClos(b))
@@ -255,4 +260,4 @@ object Evaluation:
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
     quote1(eval1(tm)(EEmpty), q)(lvl0)
-  def stage(tm: Tm0): Tm0 = quote0(eval0(tm)(EEmpty), UnfoldAll)(lvl0)
+  def stage(tm: Tm0): Tm0 = quote0(eval0(tm)(EEmpty), UnfoldStage)(lvl0)
