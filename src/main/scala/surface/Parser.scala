@@ -29,19 +29,19 @@ object Parser:
         "rec",
         "data",
         "con",
-        "match",
+        // "match",
         "Meta",
         "Ty",
         // "if",
-        "then",
-        "else",
-        "foreign",
-        "foreignIO",
-        "mutable",
-        "do",
-        "opaque",
-        "unfold",
-        "auto"
+        // "then",
+        // "else",
+        // "foreign",
+        // "foreignIO",
+        // "mutable",
+        "do"
+        // "opaque",
+        // "unfold",
+        // "auto"
       ),
       operators = Set(
         "=",
@@ -50,10 +50,10 @@ object Parser:
         ";",
         "\\",
         ".",
-        ",",
+        // ",",
         "->",
         "<-",
-        "**",
+        // "**",
         "_",
         "^",
         "`",
@@ -141,7 +141,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> doP <|> dataP <|>
+      ) <|> let <|> lam <|> doP <|> dataP <|> conP <|>
         precedence[Tm](app)(
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
         )
@@ -205,6 +205,12 @@ object Parser:
           cs.map { case ((pos, x), as) => DataCon(pos, x, as) }
         )
       )
+    )
+
+    private lazy val conP: Parsley[Tm] = positioned(
+      ("con" *> identOrOp <~> many(projAtom)).map { case (c, args) =>
+        Con(c, args)
+      }
     )
 
     private enum DoEntry:

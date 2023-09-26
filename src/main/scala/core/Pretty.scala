@@ -108,6 +108,10 @@ object Pretty:
     case Lam0(_, _, _) => prettyLam0(tm)
     case App0(_, _)    => prettyApp0(tm)
 
+    case Con(x, Nil) => s"con $x"
+    case Con(x, args) =>
+      s"con $x ${args.map(a => prettyParen0(a)).mkString(" ")}"
+
     case Splice(t) => s"$$${prettyParen1(t)}"
 
     case Wk10(tm) => pretty0(tm)(ns.tail)

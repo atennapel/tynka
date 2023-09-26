@@ -251,6 +251,24 @@ object Elaboration:
         val eb = check0(b, ty, cv)(nctx)
         if rec then LetRec(x, ety, ev, eb) else Let0(x, ety, ev, eb)
 
+      case S.Con(x, args) =>
+        unify1(cv, VVal)
+        forceAll1(ty) match
+          case VData(_, cs) =>
+            cs.tm.find(c => c.name == x) match
+              case None =>
+                error(s"constructor $x not found in ${ctx.pretty1(ty)}")
+              case Some(DataCon(_, args2)) =>
+                if args.size != args2.size then
+                  error(
+                    s"invalid amount of arguments for constructor, expected ${args2.size} but got ${args.size}"
+                  )
+                val eargs = args.zip(args2).map { case (arg, (_, t)) =>
+                  check0(arg, eval1(t)(E1(cs.env, ty)), VVal)
+                }
+                Con(x, eargs)
+          case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
+
       case S.Hole(_) => splice(freshMeta(VLift(cv, ty)))
 
       case S.Splice(t) => splice(check1(t, VLift(cv, ty)))
@@ -261,7 +279,9 @@ object Elaboration:
             unify1(vcv, cv)
             unify1(vty, ty)
             etm
-          case Infer1(etm, vty) => coeQuote(etm, vty, ty, cv)
+          case Infer1(etm, vty) =>
+            val (etm2, vty2) = insert((etm, vty))
+            coeQuote(etm2, vty2, ty, cv)
 
   private def icitMatch(i: S.ArgInfo, x: Bind, i2: Icit): Boolean = i match
     case S.ArgNamed(y) =>
@@ -578,7 +598,8 @@ object Elaboration:
       case S.Comp   => Infer1(Comp, VCV1)
       case S.Val    => Infer1(Val, VCV1)
 
-      case S.Hole(_) => error("cannot infer hole")
+      case S.Hole(_)   => error("cannot infer hole")
+      case S.Con(_, _) => error("cannot infer con")
 
       case S.Data(x, cs) =>
         val conNames = cs.map(c => c.name)

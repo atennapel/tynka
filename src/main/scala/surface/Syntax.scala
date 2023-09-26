@@ -61,6 +61,7 @@ object Syntax:
     case App(fn: Tm, arg: Tm, info: ArgInfo)
 
     case Data(name: Bind, cons: List[DataCon])
+    case Con(name: Name, args: List[Tm])
 
     case Lift(ty: Ty)
     case Quote(tm: Tm)
@@ -97,6 +98,8 @@ object Syntax:
       case App(fn, arg, ArgNamed(x))   => s"($fn ${Impl.wrap(s"$x = $arg")})"
       case Data(x, Nil)                => s"(data $x.)"
       case Data(x, cs)   => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
+      case Con(x, Nil)   => s"(con $x)"
+      case Con(x, as)    => s"(con $x ${as.mkString(" ")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"
       case Splice(tm)    => s"$$$tm"

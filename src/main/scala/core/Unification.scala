@@ -236,6 +236,7 @@ object Unification:
       case VLetRec(x, ty, v, b) => LetRec(x, go1(ty), goClos(v), goClos(b))
       case VLam0(x, ty, b)      => Lam0(x, go1(ty), goClos(b))
       case VApp0(f, a)          => App0(go0(f), go0(a))
+      case VCon(x, args)        => Con(x, args.map(a => go0(a)))
       case VSplice(v)           => Splice(go1(v))
 
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
@@ -326,6 +327,8 @@ object Unification:
       case (VSplice(v1), VSplice(v2))         => unify1(v1, v2)
       case (VLam0(_, _, b1), VLam0(_, _, b2)) => goClos(b1, b2)
       case (VApp0(f1, a1), VApp0(f2, a2))     => unify0(f1, f2); unify0(a1, a2)
+      case (VCon(x1, as1), VCon(x2, as2)) if x1 == x2 && as1.size == as2.size =>
+        as1.zip(as2).foreach(unify0)
       case _ =>
         throw UnifyError(
           s"cannot unify ${quote0(a, UnfoldNone)} ~ ${quote0(b, UnfoldNone)}"

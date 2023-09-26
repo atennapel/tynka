@@ -11,6 +11,7 @@ object Syntax:
     case LetRec(name: Name, ty: Ty, value: Tm0, body: Tm0)
     case Lam0(name: Bind, ty: Ty, body: Tm0)
     case App0(fn: Tm0, arg: Tm0)
+    case Con(name: Name, args: List[Tm0])
     case Splice(tm: Tm1)
     case Wk10(tm: Tm0)
 
@@ -22,6 +23,8 @@ object Syntax:
       case LetRec(x, ty, v, b) => s"(let rec $x : $ty := $v; $b)"
       case Lam0(x, ty, b)      => s"(\\($x : $ty). $b)"
       case App0(fn, arg)       => s"($fn $arg)"
+      case Con(x, Nil)         => s"(con $x)"
+      case Con(x, as)          => s"(con $x ${as.mkString(" ")})"
       case Splice(tm)          => s"$$$tm"
       case Wk10(tm)            => s"$tm"
   export Tm0.*

@@ -91,6 +91,7 @@ object Evaluation:
       case LetRec(x, ty, v, b) => VLetRec(x, eval1(ty), Clos(v), Clos(b))
       case Lam0(x, ty, b)      => VLam0(x, eval1(ty), Clos(b))
       case App0(f, a)          => VApp0(eval0(f), eval0(a))
+      case Con(x, args)        => VCon(x, args.map(eval0))
       case Splice(t)           => vsplice(eval1(t))
       case Wk10(t)             => eval0(t)(env.wk1)
 
@@ -245,6 +246,7 @@ object Evaluation:
       case VLetRec(x, ty, v, b) => LetRec(x, go1(ty), goClos(v), goClos(b))
       case VLam0(x, ty, b)      => Lam0(x, go1(ty), goClos(b))
       case VApp0(f, a)          => App0(go0(f), go0(a))
+      case VCon(x, args)        => Con(x, args.map(a => go0(a)))
       case VSplice(tm)          => Splice(go1(tm))
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =

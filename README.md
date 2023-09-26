@@ -22,7 +22,7 @@ TODO:
 - [x] Pretty
 - [ ] Datatypes
   - [x] Type constructor
-  - [ ] Value constructor
+  - [x] Value constructor
   - [ ] Pattern matching
 - [ ] Primitives
 - [ ] Recursive meta definitions (?)
