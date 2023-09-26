@@ -29,6 +29,15 @@ object Syntax:
     case ArgIcit(icit: Icit)
   export ArgInfo.*
 
+  final case class DataCon(pos: PosInfo, name: Name, args: List[(Bind, Ty)]):
+    override def toString: String = this match
+      case DataCon(_, x, Nil) => s"$x"
+      case DataCon(_, x, as) =>
+        def goArg(a: (Bind, Ty)): String = a._1 match
+          case DontBind  => s"${a._2}"
+          case DoBind(x) => s"($x : ${a._2})"
+        s"$x ${as.map(goArg).mkString(" ")}"
+
   type Ty = Tm
   enum Tm:
     case Var(name: Name)
@@ -50,6 +59,8 @@ object Syntax:
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
+
+    case Data(name: Bind, cons: List[DataCon])
 
     case Lift(ty: Ty)
     case Quote(tm: Tm)
@@ -84,10 +95,12 @@ object Syntax:
       case App(fn, arg, ArgIcit(Expl)) => s"($fn $arg)"
       case App(fn, arg, ArgIcit(Impl)) => s"($fn ${Impl.wrap(arg)})"
       case App(fn, arg, ArgNamed(x))   => s"($fn ${Impl.wrap(s"$x = $arg")})"
-      case Lift(ty)                    => s"^$ty"
-      case Quote(tm)                   => s"`$tm"
-      case Splice(tm)                  => s"$$$tm"
-      case Hole(None)                  => s"_"
-      case Hole(Some(x))               => s"_$x"
-      case Pos(_, tm)                  => s"$tm"
+      case Data(x, Nil)                => s"(data $x.)"
+      case Data(x, cs)   => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
+      case Lift(ty)      => s"^$ty"
+      case Quote(tm)     => s"`$tm"
+      case Splice(tm)    => s"$$$tm"
+      case Hole(None)    => s"_"
+      case Hole(Some(x)) => s"_$x"
+      case Pos(_, tm)    => s"$tm"
   export Tm.*

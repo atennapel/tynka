@@ -105,6 +105,7 @@ object Evaluation:
       case Pi(x, i, ty, b)      => VPi(x, i, eval1(ty), Clos(b))
       case Lam1(x, i, ty, b)    => VLam1(x, i, eval1(ty), Clos(b))
       case App1(f, a, i)        => vapp1(eval1(f), eval1(a), i)
+      case Data(x, cs)          => VData(x, Clos(cs))
       case Fun(p, cv, r)        => VFun(eval1(p), eval1(cv), eval1(r))
       case CV1                  => VCV1
       case Comp                 => VComp
@@ -187,6 +188,15 @@ object Evaluation:
     inline def goSp(h: Tm1, sp: Spine): Tm1 = quote1(h, sp, q)
     inline def goClos(c: Clos[Tm1]): Tm1 = quote1(c(VVar1(lvl)), q)(lvl + 1)
     inline def goClos0(c: Clos[Tm1]): Tm1 = quote1(c(VVar0(lvl)), q)(lvl + 1)
+    inline def goCons(c: Clos[List[DataCon]]): List[DataCon] =
+      c.tm.map(con =>
+        DataCon(
+          con.name,
+          con.args.map((y, t) =>
+            (y, quote1(eval1(t)(E1(c.env, VVar1(lvl))), q)(lvl + 1))
+          )
+        )
+      )
     inline def force(v: Val1): Val1 = q match
       case UnfoldAll   => forceAll1(v)
       case UnfoldMetas => forceMetas1(v)
@@ -202,6 +212,7 @@ object Evaluation:
       case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
       case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
+      case VData(x, cs)               => Data(x, goCons(cs))
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
       case VFun(pty, cv, rty)         => Fun(go1(pty), go1(cv), go1(rty))

@@ -29,6 +29,15 @@ object Syntax:
   type Ty = Tm1
   type CV = Ty
 
+  final case class DataCon(name: Name, args: List[(Bind, Ty)]):
+    override def toString: String = this match
+      case DataCon(x, Nil) => s"$x"
+      case DataCon(x, as) =>
+        def goArg(a: (Bind, Ty)): String = a._1 match
+          case DontBind  => s"${a._2}"
+          case DoBind(x) => s"($x : ${a._2})"
+        s"$x ${as.map(goArg).mkString(" ")}"
+
   enum Tm1:
     case Var1(ix: Ix)
     case Global1(name: Name)
@@ -48,6 +57,8 @@ object Syntax:
     case Val
     case Lift(cv: CV, ty: Ty)
 
+    case Data(name: Bind, cons: List[DataCon])
+
     case Quote(tm: Tm0)
 
     case Wk01(tm: Tm1)
@@ -60,22 +71,24 @@ object Syntax:
     case AppPruning(id: MetaId, pruning: Pruning)
 
     override def toString: String = this match
-      case Var1(ix)             => s"'$ix"
-      case Global1(x)           => s"$x"
-      case Prim1(x)             => s"$x"
-      case Let1(x, ty, v, b)    => s"(let $x : $ty = $v; $b)"
-      case U0(cv)               => s"(Ty $cv)"
-      case U1                   => "Meta"
-      case Pi(x, i, ty, b)      => s"(${i.wrap(s"$x : $ty")} -> $b)"
-      case Lam1(x, i, ty, b)    => s"(\\${i.wrap(s"$x : $ty")}. $b)"
-      case App1(fn, arg, Expl)  => s"($fn $arg)"
-      case App1(fn, arg, i)     => s"($fn ${i.wrap(arg)})"
-      case Fun(pty, _, rty)     => s"($pty -> $rty)"
-      case CV1                  => "CV"
-      case Comp                 => "Comp"
-      case Val                  => "Val"
-      case Lift(_, ty)          => s"^$ty"
-      case Quote(tm)            => s"`$tm"
+      case Var1(ix)            => s"'$ix"
+      case Global1(x)          => s"$x"
+      case Prim1(x)            => s"$x"
+      case Let1(x, ty, v, b)   => s"(let $x : $ty = $v; $b)"
+      case U0(cv)              => s"(Ty $cv)"
+      case U1                  => "Meta"
+      case Pi(x, i, ty, b)     => s"(${i.wrap(s"$x : $ty")} -> $b)"
+      case Lam1(x, i, ty, b)   => s"(\\${i.wrap(s"$x : $ty")}. $b)"
+      case App1(fn, arg, Expl) => s"($fn $arg)"
+      case App1(fn, arg, i)    => s"($fn ${i.wrap(arg)})"
+      case Fun(pty, _, rty)    => s"($pty -> $rty)"
+      case Data(x, Nil)        => s"(data $x.)"
+      case Data(x, cs) => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
+      case CV1         => "CV"
+      case Comp        => "Comp"
+      case Val         => "Val"
+      case Lift(_, ty) => s"^$ty"
+      case Quote(tm)   => s"`$tm"
       case AppPruning(id, _)    => s"(?$id ...)"
       case Wk01(tm)             => s"$tm"
       case Wk11(tm)             => s"$tm"

@@ -99,6 +99,8 @@ object Value:
     case VMetaPi(meta: Boolean, ty: VTy, body: Clos[S.Ty])
     case VMetaLam(meta: Boolean, body: Clos[S.Tm1])
 
+    case VData(name: Bind, cs: Clos[List[S.DataCon]])
+
     case VU0(cv: VCV)
     case VU1
 

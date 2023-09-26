@@ -253,6 +253,15 @@ object Unification:
     inline def goSp(h: Tm1, sp: Spine) = psubstSp(h, sp)
     inline def goClos(c: Clos[Tm1]) = psubst1(c(VVar1(psub.cod)))(psub.lift1)
     inline def goClos0(c: Clos[Tm1]) = psubst1(c(VVar0(psub.cod)))(psub.lift1)
+    inline def goCons(c: Clos[List[DataCon]]): List[DataCon] =
+      c.tm.map(con =>
+        DataCon(
+          con.name,
+          con.args.map((y, t) =>
+            (y, psubst1(eval1(t)(E1(c.env, VVar1(psub.cod))))(psub.lift1))
+          )
+        )
+      )
     forceMetas1(v) match
       case VRigid(HPrim(x), sp) => goSp(Prim1(x), sp)
       case VRigid(HVar(x), sp) =>
@@ -267,6 +276,7 @@ object Unification:
       case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
       case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
+      case VData(x, cs)               => Data(x, goCons(cs))
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
       case VFun(pty, cv, rty)         => Fun(go1(pty), go1(cv), go1(rty))
@@ -387,6 +397,28 @@ object Unification:
     inline def goClos0(a: Clos[Tm1], b: Clos[Tm1]) =
       val v = VVar0(lvl)
       unify1(a(v), b(v))(lvl + 1)
+    inline def goCons(
+        topA: Val1,
+        a: Clos[List[DataCon]],
+        topB: Val1,
+        b: Clos[List[DataCon]]
+    ) =
+      def err() = throw UnifyError(
+        s"cannot unify ${quote1(topA, UnfoldNone)} ~ ${quote1(topB, UnfoldNone)}"
+      )
+      a.tm.zip(b.tm).foreach {
+        case (DataCon(x1, as1), DataCon(x2, as2))
+            if x1 == x2 && as1.size == as2.size =>
+          as1.zip(as2).foreach {
+            case ((y1, t1), (y2, t2)) if y1 == y2 =>
+              unify1(
+                eval1(t1)(E1(a.env, VVar1(lvl))),
+                eval1(t2)(E1(b.env, VVar1(lvl)))
+              )(lvl + 1)
+            case _ => err()
+          }
+        case _ => err()
+      }
     debug(s"unify1 ${quote1(a, UnfoldMetas)} ~ ${quote1(b, UnfoldMetas)}")
     (forceMetas1(a), forceMetas1(b)) match
       case (top1 @ VUnfold(h1, sp1, v1), top2 @ VUnfold(h2, sp2, v2)) =>
@@ -410,6 +442,9 @@ object Unification:
         unify1(ty1, ty2); goClos0(b1, b2)
       case (VFun(t1, cv1, r1), VFun(t2, cv2, r2)) =>
         unify1(t1, t2); unify1(cv1, cv2); unify1(r1, r2)
+      case (d1 @ VData(_, cs1), d2 @ VData(_, cs2))
+          if cs1.tm.size == cs2.tm.size =>
+        goCons(d1, cs1, d2, cs2)
       case (VCV1, VCV1)         => ()
       case (VComp, VComp)       => ()
       case (VVal, VVal)         => ()

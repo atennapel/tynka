@@ -138,6 +138,17 @@ object Pretty:
     case App1(_, _, _)    => prettyApp1(tm)
     case MetaApp(_, _)    => prettyApp1(tm)
 
+    case Data(x, Nil) => s"data $x."
+    case Data(x, cs) =>
+      def goCon(c: DataCon): String = c match
+        case DataCon(y, Nil) => s"$y"
+        case DataCon(y, as) =>
+          def goArg(a: (Bind, Ty)): String = a._1 match
+            case DontBind   => s"${prettyParen1(a._2)(x :: ns)}"
+            case DoBind(xa) => s"($xa : ${pretty1(a._2)(x :: ns)})"
+          s"$y ${as.map(goArg).mkString(" ")}"
+      s"data $x. ${cs.map(goCon).mkString(" | ")}"
+
     case Lift(_, t) => s"^${prettyParen1(t)}"
     case Quote(t)   => s"`${prettyParen0(t)}"
 

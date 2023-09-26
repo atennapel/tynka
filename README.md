@@ -21,5 +21,8 @@ TODO:
 - [x] Recursive definitions
 - [x] Pretty
 - [ ] Datatypes
+  - [x] Type constructor
+  - [ ] Value constructor
+  - [ ] Pattern matching
 - [ ] Primitives
 - [ ] Recursive meta definitions (?)

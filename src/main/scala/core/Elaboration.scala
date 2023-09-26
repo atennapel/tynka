@@ -580,6 +580,18 @@ object Elaboration:
 
       case S.Hole(_) => error("cannot infer hole")
 
+      case S.Data(x, cs) =>
+        val conNames = cs.map(c => c.name)
+        if conNames.size != conNames.distinct.size then
+          error("duplicate constructor names")
+        val newctx = ctx.bind1(x, U0(Val), VU0(VVal))
+        val ecs = cs.map { case S.DataCon(pos, cx, args) =>
+          implicit val newctx2 = newctx.enter(pos)
+          val eargs = args.map((ax, sty) => (ax, check1(sty, VU0(VVal))))
+          DataCon(cx, eargs)
+        }
+        Infer1(Data(x, ecs), VU0(VVal))
+
   // elaboration
   def elaborate(d: S.Def): Unit = d match
     case S.DDef(pos, x, rec, m, mty, v) =>
