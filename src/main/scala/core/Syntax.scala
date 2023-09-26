@@ -12,6 +12,11 @@ object Syntax:
     case Lam0(name: Bind, ty: Ty, body: Tm0)
     case App0(fn: Tm0, arg: Tm0)
     case Con(name: Name, args: List[Tm0])
+    case Match(
+        scrut: Tm0,
+        cs: List[(Name, Tm0)],
+        other: Option[Tm0]
+    )
     case Splice(tm: Tm1)
     case Wk10(tm: Tm0)
 
@@ -25,8 +30,14 @@ object Syntax:
       case App0(fn, arg)       => s"($fn $arg)"
       case Con(x, Nil)         => s"(con $x)"
       case Con(x, as)          => s"(con $x ${as.mkString(" ")})"
-      case Splice(tm)          => s"$$$tm"
-      case Wk10(tm)            => s"$tm"
+      case Match(scrut, cs, other) =>
+        s"(match $scrut${if cs.isEmpty then "" else " "}${cs
+            .map((c, b) => s"| $c. $b")
+            .mkString(" ")}${if other.isDefined then " " else ""}${other
+            .map((t) => s"| _. $t")
+            .getOrElse("")})"
+      case Splice(tm) => s"$$$tm"
+      case Wk10(tm)   => s"$tm"
   export Tm0.*
 
   type Ty = Tm1

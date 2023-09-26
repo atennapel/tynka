@@ -92,8 +92,10 @@ object Evaluation:
       case Lam0(x, ty, b)      => VLam0(x, eval1(ty), Clos(b))
       case App0(f, a)          => VApp0(eval0(f), eval0(a))
       case Con(x, args)        => VCon(x, args.map(eval0))
-      case Splice(t)           => vsplice(eval1(t))
-      case Wk10(t)             => eval0(t)(env.wk1)
+      case Match(scrut, cs, other) =>
+        VMatch(eval0(scrut), cs.map((c, t) => (c, eval0(t))), other.map(eval0))
+      case Splice(t) => vsplice(eval1(t))
+      case Wk10(t)   => eval0(t)(env.wk1)
 
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
@@ -247,7 +249,9 @@ object Evaluation:
       case VLam0(x, ty, b)      => Lam0(x, go1(ty), goClos(b))
       case VApp0(f, a)          => App0(go0(f), go0(a))
       case VCon(x, args)        => Con(x, args.map(a => go0(a)))
-      case VSplice(tm)          => Splice(go1(tm))
+      case VMatch(scrut, cs, other) =>
+        Match(go0(scrut), cs.map((c, t) => (c, go0(t))), other.map(o => go0(o)))
+      case VSplice(tm) => Splice(go1(tm))
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
     quote1(eval1(tm)(EEmpty), q)(lvl0)

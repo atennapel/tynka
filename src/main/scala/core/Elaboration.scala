@@ -225,6 +225,61 @@ object Elaboration:
     splice(coe(t, a1, VLift(cv, a2)))
 
   // checking
+  private def checkMatch(
+      scrut: S.Tm,
+      cs: List[(PosInfo, Name, List[Bind], S.Tm)],
+      other: Option[(PosInfo, S.Tm)],
+      vrty: VTy,
+      vrcv: VTy
+  )(implicit ctx: Ctx): Tm0 =
+    val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
+    val escrut = check0(scrut, vscrutty, VVal)
+    forceAll1(vscrutty) match
+      case VData(dx, dcs) =>
+        val used = mutable.Set[Name]()
+        val cons = dcs.tm.map(_.name).toSet
+        val ecs = cs.map { case (pos, cx, ps, b) =>
+          implicit val ctx1: Ctx = ctx.enter(pos)
+          if !cons.contains(cx) then
+            error(s"$cx is not a constructor of type $dx")
+          if used.contains(cx) then
+            error(s"constructor appears twice in match $cx")
+          used += cx
+          val tas = dcs.tm
+            .find(c => c.name == cx)
+            .get
+            ._2
+            .map(_._2)
+            .map(t => eval1(t)(E1(dcs.env, vscrutty)))
+          if ps.size != tas.size then
+            error(
+              s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
+            )
+          val (fnty, ecv) = tas
+            .foldRight((vrty, vrcv)) { case (t, (rt, rcv)) =>
+              (VFun(t, rcv, rt), VComp)
+            }
+          val lam =
+            ps.foldRight(b)((p, b) => S.Lam(p, S.ArgIcit(Expl), None, b))
+          val eb = check0(lam, fnty, ecv)
+          (cx, eb)
+        }
+        val left = cons -- used
+        if other.isEmpty && left.nonEmpty then
+          error(
+            s"non-exhaustive match, constructors left: ${left.mkString(" ")}"
+          )
+        val eother = other.map { (pos, b) =>
+          implicit val ctxOther: Ctx = ctx.enter(pos)
+          if left.isEmpty then error(s"other case does not match anything")
+          check0(b, vrty, vrcv)
+        }
+        Match(escrut, ecs, eother)
+      case _ =>
+        error(
+          s"expected a datatype in match but got ${ctx.pretty1(vscrutty)}"
+        )
+
   private def check0(tm: S.Tm, ty: VTy, cv: VCV)(implicit ctx: Ctx): Tm0 =
     debug(s"check0 $tm : ${ctx.pretty1(ty)} : ${ctx.pretty1(cv)}")
     tm match
@@ -268,6 +323,8 @@ object Elaboration:
                 }
                 Con(x, eargs)
           case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
+
+      case S.Match(scrut, cs, other) => checkMatch(scrut, cs, other, ty, cv)
 
       case S.Hole(_) => splice(freshMeta(VLift(cv, ty)))
 
@@ -395,98 +452,6 @@ object Elaboration:
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
 
-      case S.Var(Name("Bool")) => Infer1(Prim1(Name("Bool")), VU0(VVal))
-      case S.Var(Name("True")) =>
-        Infer0(Prim0(Name("True")), VPrim1(Name("Bool")), VVal)
-      case S.Var(Name("False")) =>
-        Infer0(Prim0(Name("False")), VPrim1(Name("Bool")), VVal)
-      case S.Var(Name("caseBool")) =>
-        // {cv} {A : Ty cv} -> Bool -> A -> A -> A
-        val cv = Name("cv")
-        val a = Name("A")
-        val va = S.Var(a)
-        val sty = S.Pi(
-          DoBind(cv),
-          Impl,
-          S.Hole(None),
-          S.Pi(
-            DoBind(a),
-            Impl,
-            S.U0(S.Var(cv)),
-            S.Pi(
-              DontBind,
-              Expl,
-              S.Var(Name("Bool")),
-              S.Pi(
-                DontBind,
-                Expl,
-                va,
-                S.Pi(DontBind, Expl, va, va)
-              )
-            )
-          )
-        )
-        val ety = check1(sty, VU1)
-        Infer1(Prim1(Name("caseBool")), ctx.eval1(ety))
-
-      case S.Var(Name("Nat")) => Infer1(Prim1(Name("Nat")), VU0(VVal))
-      case S.Var(Name("Z")) =>
-        Infer0(Prim0(Name("Z")), VPrim1(Name("Nat")), VVal)
-      case S.Var(Name("S")) =>
-        // ^Nat -> ^Nat
-        // \n. `(S $n)
-        val nat = Name("Nat")
-        val lnat = VLift(VVal, VPrim1(nat))
-        val qnat = Lift(Val, Prim1(nat))
-        Infer1(
-          Lam1(
-            DoBind(Name("n")),
-            Expl,
-            qnat,
-            Quote(App0(Prim0(Name("S")), Splice(Var1(ix0))))
-          ),
-          VPi(DontBind, Expl, lnat, Clos(EEmpty, qnat))
-        )
-      case S.Var(Name("caseNat")) =>
-        // {cv} {A : Ty cv} -> Nat -> A -> (Nat -> A) -> A
-        val cv = Name("cv")
-        val a = Name("A")
-        val nat = Name("Nat")
-        val va = S.Var(a)
-        val sty = S.Pi(
-          DoBind(cv),
-          Impl,
-          S.Hole(None),
-          S.Pi(
-            DoBind(a),
-            Impl,
-            S.U0(S.Var(cv)),
-            S.Pi(
-              DontBind,
-              Expl,
-              S.Var(nat),
-              S.Pi(
-                DontBind,
-                Expl,
-                va,
-                S.Pi(
-                  DontBind,
-                  Expl,
-                  S.Pi(
-                    DontBind,
-                    Expl,
-                    S.Var(nat),
-                    va
-                  ),
-                  va
-                )
-              )
-            )
-          )
-        )
-        val ety = check1(sty, VU1)
-        Infer1(Prim1(Name("caseNat")), ctx.eval1(ety))
-
       case S.Var(x) =>
         ctx.lookup(x) match
           case Some(Name0(x, ty, cv)) => Infer0(Var0(x.toIx(ctx.lvl)), ty, cv)
@@ -612,6 +577,12 @@ object Elaboration:
           DataCon(cx, eargs)
         }
         Infer1(Data(x, ecs), VU0(VVal))
+
+      case S.Match(scrut, cs, other) =>
+        val cv = ctx.eval1(freshCV())
+        val ty = ctx.eval1(freshMeta(VU0(cv)))
+        val etm = checkMatch(scrut, cs, other, ty, cv)
+        Infer0(etm, ty, cv)
 
   // elaboration
   def elaborate(d: S.Def): Unit = d match

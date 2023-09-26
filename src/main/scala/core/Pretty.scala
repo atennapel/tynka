@@ -112,6 +112,13 @@ object Pretty:
     case Con(x, args) =>
       s"con $x ${args.map(a => prettyParen0(a)).mkString(" ")}"
 
+    case Match(scrut, cs, other) =>
+      s"match ${prettyParen0(scrut, true)}${if cs.isEmpty then "" else " "}${cs
+          .map((c, b) => s"| $c. ${pretty0(b)}")
+          .mkString(" ")}${if other.isDefined then " " else ""}${other
+          .map(t => s"| ${pretty0(t)}")
+          .getOrElse("")}"
+
     case Splice(t) => s"$$${prettyParen1(t)}"
 
     case Wk10(tm) => pretty0(tm)(ns.tail)

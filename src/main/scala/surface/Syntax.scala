@@ -62,6 +62,11 @@ object Syntax:
 
     case Data(name: Bind, cons: List[DataCon])
     case Con(name: Name, args: List[Tm])
+    case Match(
+        scrut: Tm,
+        cs: List[(PosInfo, Name, List[Bind], Tm)],
+        other: Option[(PosInfo, Tm)]
+    )
 
     case Lift(ty: Ty)
     case Quote(tm: Tm)
@@ -97,9 +102,15 @@ object Syntax:
       case App(fn, arg, ArgIcit(Impl)) => s"($fn ${Impl.wrap(arg)})"
       case App(fn, arg, ArgNamed(x))   => s"($fn ${Impl.wrap(s"$x = $arg")})"
       case Data(x, Nil)                => s"(data $x.)"
-      case Data(x, cs)   => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
-      case Con(x, Nil)   => s"(con $x)"
-      case Con(x, as)    => s"(con $x ${as.mkString(" ")})"
+      case Data(x, cs) => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
+      case Con(x, Nil) => s"(con $x)"
+      case Con(x, as)  => s"(con $x ${as.mkString(" ")})"
+      case Match(scrut, cs, other) =>
+        s"(match $scrut${if cs.isEmpty then "" else " "}${cs
+            .map((_, c, ps, b) => s"| $c${if ps.isEmpty then "" else " "}${ps.mkString(" ")}. $b")
+            .mkString(" ")}${if other.isDefined then " " else ""}${other
+            .map((_, t) => s"| _. $t")
+            .getOrElse("")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"
       case Splice(tm)    => s"$$$tm"

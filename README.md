@@ -18,11 +18,15 @@ TODO:
 - [x] Unification
 - [x] Elaboration
 - [x] Definitions
+- [x] Primitives
 - [x] Recursive definitions
 - [x] Pretty
 - [ ] Datatypes
   - [x] Type constructor
   - [x] Value constructor
-  - [ ] Pattern matching
-- [ ] Primitives
+  - [x] Case split
+  - [ ] Match without scrutinee
 - [ ] Recursive meta definitions (?)
+- [ ] Meta datatypes
+- [ ] Pattern matching
+- [ ] Postponing

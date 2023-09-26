@@ -237,7 +237,9 @@ object Unification:
       case VLam0(x, ty, b)      => Lam0(x, go1(ty), goClos(b))
       case VApp0(f, a)          => App0(go0(f), go0(a))
       case VCon(x, args)        => Con(x, args.map(a => go0(a)))
-      case VSplice(v)           => Splice(go1(v))
+      case VMatch(scrut, cs, other) =>
+        Match(go0(scrut), cs.map((c, t) => (c, go0(t))), other.map(o => go0(o)))
+      case VSplice(v) => Splice(go1(v))
 
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
@@ -329,6 +331,15 @@ object Unification:
       case (VApp0(f1, a1), VApp0(f2, a2))     => unify0(f1, f2); unify0(a1, a2)
       case (VCon(x1, as1), VCon(x2, as2)) if x1 == x2 && as1.size == as2.size =>
         as1.zip(as2).foreach(unify0)
+      case (VMatch(scrut1, cs1, other1), VMatch(scrut2, cs2, other2))
+          if cs1.size == cs2.size && other1.isDefined == other2.isDefined && cs1
+            .map(_._1)
+            .toSet == cs2.map(_._1).toSet =>
+        unify0(scrut1, scrut2)
+        val m1 = cs1.map((x, t) => (x, t)).toMap
+        val m2 = cs2.map((x, t) => (x, t)).toMap
+        m1.keySet.foreach(k => unify0(m1(k), m2(k)))
+        other1.foreach(o1 => unify0(o1, other2.get))
       case _ =>
         throw UnifyError(
           s"cannot unify ${quote0(a, UnfoldNone)} ~ ${quote0(b, UnfoldNone)}"
@@ -424,14 +435,6 @@ object Unification:
       }
     debug(s"unify1 ${quote1(a, UnfoldMetas)} ~ ${quote1(b, UnfoldMetas)}")
     (forceMetas1(a), forceMetas1(b)) match
-      case (top1 @ VUnfold(h1, sp1, v1), top2 @ VUnfold(h2, sp2, v2)) =>
-        try
-          if h1 != h2 then throw UnifyError("head mismatch")
-          unify1(a, sp1, b, sp2)
-        catch case _: UnifyError => unify1(v1(), v2())
-      case (VUnfold(_, _, v1), v2) => unify1(v1(), v2)
-      case (v1, VUnfold(_, _, v2)) => unify1(v1, v2())
-
       case (VRigid(x, sp1), VRigid(y, sp2)) if x == y => unify1(a, sp1, b, sp2)
 
       case (VLift(cv1, ty1), VLift(cv2, ty2)) =>
@@ -482,6 +485,14 @@ object Unification:
         else flexFlex(id1, sp1, id2, sp2)
       case (VFlex(id, sp), v) => solve(id, sp, v)
       case (v, VFlex(id, sp)) => solve(id, sp, v)
+
+      case (top1 @ VUnfold(h1, sp1, v1), top2 @ VUnfold(h2, sp2, v2)) =>
+        try
+          if h1 != h2 then throw UnifyError("head mismatch")
+          unify1(a, sp1, b, sp2)
+        catch case _: UnifyError => unify1(v1(), v2())
+      case (VUnfold(_, _, v1), v2) => unify1(v1(), v2)
+      case (v1, VUnfold(_, _, v2)) => unify1(v1, v2())
 
       case _ =>
         throw UnifyError(
