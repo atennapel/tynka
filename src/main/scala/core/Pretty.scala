@@ -71,6 +71,7 @@ object Pretty:
       case Global1(_)           => pretty1(tm)
       case Prim1(_)             => pretty1(tm)
       case Meta(_)              => pretty1(tm)
+      case PostponedCheck1(_)   => pretty1(tm)
       case Lift(_, _)           => pretty1(tm)
       case Quote(_)             => pretty1(tm)
       case AppPruning(_, _)     => pretty1(tm)
@@ -166,5 +167,6 @@ object Pretty:
     case Wk01(tm) => pretty1(tm)(ns.tail)
     case Wk11(tm) => pretty1(tm)(ns.tail)
 
-    case Meta(id)          => s"?$id"
-    case AppPruning(id, _) => s"?*$id"
+    case Meta(id)            => s"?$id"
+    case PostponedCheck1(id) => s"?p$id"
+    case AppPruning(id, _)   => s"?*$id"

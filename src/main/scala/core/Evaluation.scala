@@ -40,8 +40,15 @@ object Evaluation:
       case _ => impossible()
 
   inline def vmeta(id: MetaId): Val1 = getMeta(id) match
-    case Unsolved(_)      => VFlex(id, SId)
+    case Unsolved(_, _)   => VFlex(id, SId)
     case Solved(value, _) => VUnfold(UMeta(id), SId, () => value)
+
+  inline def vpostponed(id: PostponedId)(implicit env: Env): Val1 =
+    getPostponed(id) match
+      case PECheck1(ctx, tm, ty, id)     => vappPruning(vmeta(id), ctx.pruning)
+      case PECheckVarU1(ctx, tm, ty, id) => vappPruning(vmeta(id), ctx.pruning)
+      case PECheck1Done(_, Some(tm))     => eval1(tm)
+      case PECheck1Done(_, None)         => impossible()
 
   inline def vsplice(v: Val1): Val0 = v match
     case VQuote(v) => v
@@ -71,15 +78,15 @@ object Evaluation:
     case SApp(sp, a, i)  => vapp1(vspine(v, sp), a, i)
     case SMetaApp(sp, a) => vmetaapp(vspine(v, sp), a)
 
-  def vappPruning(m: MetaId, p: Pruning)(implicit env: Env): Val1 =
+  def vappPruning(v: Val1, p: Pruning)(implicit env: Env): Val1 =
     (env, p) match
-      case (EEmpty, Nil)             => vmeta(m)
-      case (E1(env, _), PESkip :: p) => vappPruning(m, p)(env)
-      case (E0(env, _), PESkip :: p) => vappPruning(m, p)(env)
+      case (EEmpty, Nil)             => v
+      case (E1(env, _), PESkip :: p) => vappPruning(v, p)(env)
+      case (E0(env, _), PESkip :: p) => vappPruning(v, p)(env)
       case (E1(env, u), PEBind1(i) :: p) =>
-        vmetaapp(vappPruning(m, p)(env), Right(u))
+        vmetaapp(vappPruning(v, p)(env), Right(u))
       case (E0(env, u), PEBind0 :: p) =>
-        vmetaapp(vappPruning(m, p)(env), Left(u))
+        vmetaapp(vappPruning(v, p)(env), Left(u))
       case _ => impossible()
 
   def eval0(t: Tm0)(implicit env: Env): Val0 =
@@ -115,7 +122,7 @@ object Evaluation:
       case Val                  => VVal
       case Lift(cv, ty)         => VLift(eval1(cv), eval1(ty))
       case Quote(tm)            => vquote(eval0(tm))
-      case AppPruning(m, p)     => vappPruning(m, p)
+      case AppPruning(m, p)     => vappPruning(vmeta(m), p)
       case Wk01(tm)             => eval1(tm)(env.wk0)
       case Wk11(tm)             => eval1(tm)(env.wk1)
       case Meta(id)             => vmeta(id)
@@ -123,21 +130,22 @@ object Evaluation:
       case MetaLam(m, b)        => VMetaLam(m, Clos(b))
       case MetaApp(f, Right(a)) => vmetaapp(eval1(f), Right(eval1(a)))
       case MetaApp(f, Left(a))  => vmetaapp(eval1(f), Left(eval0(a)))
+      case PostponedCheck1(id)  => vpostponed(id)
 
   // forcing
   def force1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
-        case Unsolved(_)  => top
-        case Solved(v, _) => VUnfold(UMeta(id), sp, () => vspine(v, sp))
+        case Unsolved(_, _) => top
+        case Solved(v, _)   => VUnfold(UMeta(id), sp, () => vspine(v, sp))
     case v => v
 
   @tailrec
   def forceAll1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
-        case Unsolved(_)  => top
-        case Solved(v, _) => forceAll1(vspine(v, sp))
+        case Unsolved(_, _) => top
+        case Solved(v, _)   => forceAll1(vspine(v, sp))
     case VUnfold(_, _, v) => forceAll1(v())
     case v                => v
 
@@ -153,8 +161,8 @@ object Evaluation:
   def forceMetas1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
-        case Unsolved(_)  => top
-        case Solved(v, _) => forceMetas1(vspine(v, sp))
+        case Unsolved(_, _) => top
+        case Solved(v, _)   => forceMetas1(vspine(v, sp))
     case VUnfold(UMeta(_), _, v) => forceMetas1(v())
     case v                       => v
 

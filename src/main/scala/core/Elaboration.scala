@@ -6,7 +6,6 @@ import surface.Syntax as S
 import Syntax.*
 import Value.*
 import Evaluation.*
-import Unification.{UnifyError, unify1 as unify1_}
 import Metas.*
 import Globals.*
 import Ctx.*
@@ -15,7 +14,9 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import surface.Syntax.Def
 
-object Elaboration:
+object Elaboration extends RetryPostponed:
+  private val unification = new Unification(this)
+
   private enum Infer:
     case Infer0(tm: Tm0, ty: VTy, cv: VCV)
     case Infer1(tm: Tm1, ty: VTy)
@@ -31,7 +32,7 @@ object Elaboration:
   // unification
   private def unify1(a: VTy, b: VTy)(implicit ctx: Ctx): Unit =
     debug(s"unify1 ${ctx.pretty1(a)} ~ ${ctx.pretty1(b)}")
-    try unify1_(a, b)(ctx.lvl)
+    try unification.unify1(a, b)(ctx.lvl)
     catch
       case err: UnifyError =>
         error(
@@ -39,21 +40,26 @@ object Elaboration:
         )
 
   // metas
-  private def closeType(ls: Locals, xs: List[Bind], ty: Ty): Ty = (ls, xs) match
-    case (LEmpty, Nil) => ty
-    case (LDef(ls, a, v), DoBind(x) :: xs) =>
-      closeType(ls, xs, Let1(x, a, v, ty))
-    case (LBind0(ls, a, cv), x :: xs) =>
-      closeType(ls, xs, MetaPi(false, a, ty))
-    case (LBind1(ls, a), x :: xs) => closeType(ls, xs, MetaPi(true, a, ty))
-    case _                        => impossible()
+  private def closeTy(ty: Ty)(implicit ctx: Ctx): Ty =
+    def go(ls: Locals, xs: List[Bind], ty: Ty): Ty = (ls, xs) match
+      case (LEmpty, Nil) => ty
+      case (LDef(ls, a, v), DoBind(x) :: xs) =>
+        go(ls, xs, Let1(x, a, v, ty))
+      case (LBind0(ls, a, cv), x :: xs) =>
+        go(ls, xs, MetaPi(false, a, ty))
+      case (LBind1(ls, a), x :: xs) => go(ls, xs, MetaPi(true, a, ty))
+      case _                        => impossible()
+    go(ctx.locals, ctx.binds, ty)
 
-  private def freshMeta(ty: VTy)(implicit ctx: Ctx): Tm1 =
-    val qa = closeType(ctx.locals, ctx.binds, ctx.quote1(ty, UnfoldNone))
+  private def freshMetaId(ty: VTy)(implicit ctx: Ctx): MetaId =
+    val qa = closeTy(ctx.quote1(ty, UnfoldNone))
     val vqa = eval1(qa)(EEmpty)
-    val m = newMeta(vqa)
-    debug(s"newMeta ?$m : ${ctx.pretty1(ty)}")
-    AppPruning(m, ctx.pruning)
+    val m = newMeta(Set.empty, vqa)
+    debug(s"freshMetaId ?$m : ${ctx.pretty1(ty)}")
+    m
+
+  private inline def freshMeta(ty: VTy)(implicit ctx: Ctx): Tm1 =
+    AppPruning(freshMetaId(ty), ctx.pruning)
 
   private inline def freshCV()(implicit ctx: Ctx): CV = freshMeta(VCV1)
 
@@ -125,9 +131,12 @@ object Elaboration:
   // coercion
   private def coe(t: Tm1, a1: VTy, a2: VTy)(implicit ctx: Ctx): Tm1 =
     def go(t: Tm1, a1: VTy, a2: VTy)(implicit ctx: Ctx): Option[Tm1] =
+      debug(
+        s"coe ${ctx.pretty1(t)} from ${ctx.pretty1(a1)} to ${ctx.pretty1(a2)}"
+      )
       (forceAll1(a1), forceAll1(a2)) match
-        case (VFlex(x, sp), a2) => unify1(a1, a2); None
-        case (a1, VFlex(x, sp)) => unify1(a1, a2); None
+        case (VFlex(x, sp), _) => unify1(a1, a2); None
+        case (_, VFlex(x, sp)) => unify1(a1, a2); None
 
         case (VU0(cv), VU1) => Some(Lift(ctx.quote1(cv), t))
 
@@ -155,10 +164,10 @@ object Elaboration:
                 )
               )
 
-        case (VLift(_, VFun(a, cv, b)), a2) =>
+        case (VLift(_, VFun(a, cv, b)), _) =>
           Some(coe(quoteFun(a, t), liftFun(a, b, cv), a2))
-        case (a, VLift(_, VFun(t1, cv, t2))) =>
-          Some(spliceFun(t1, coe(t, a, liftFun(t1, t2, cv))))
+        case (_, VLift(_, VFun(t1, cv, t2))) =>
+          Some(spliceFun(t1, coe(t, a1, liftFun(t1, t2, cv))))
 
         case (pi @ VPi(x, Expl, a, b), VLift(cv, a2)) =>
           unify1(cv, VComp)
@@ -179,7 +188,7 @@ object Elaboration:
           unify1(a, fun)
           go(t, VLift(VComp, fun), pi)
 
-        case (a1, a2) => unify1(a1, a2); None
+        case (_, _) => unify1(a1, a2); None
 
     go(t, a1, a2).getOrElse(t)
 
@@ -231,6 +240,76 @@ object Elaboration:
       ctx: Ctx
   ): Tm0 =
     splice(coe(t, a1, VLift(cv, a2)))
+
+  // postponing
+  private def closeTm(tm: Tm1)(implicit ctx: Ctx): Tm1 =
+    def go(ls: Locals, xs: List[Bind], tm: Tm1): Tm1 = (ls, xs) match
+      case (LEmpty, Nil) => tm
+      case (LDef(ls, a, v), DoBind(x) :: xs) =>
+        go(ls, xs, Let1(x, a, v, tm))
+      case (LBind0(ls, a, cv), x :: xs) =>
+        go(ls, xs, MetaLam(false, tm))
+      case (LBind1(ls, a), x :: xs) => go(ls, xs, MetaLam(true, tm))
+      case _                        => impossible()
+    go(ctx.locals, ctx.binds, tm)
+
+  private def unifyPlaceholder(m: MetaId, tm: Tm1)(implicit ctx: Ctx): Unit =
+    getMeta(m) match
+      case Unsolved(blocking, ty) =>
+        val solution = closeTm(tm)
+        solveMeta(m, eval1(solution)(EEmpty))
+        blocking.foreach(id => retryPostponed(postponedId(id)))
+      case Solved(v, _) =>
+        unify1(ctx.eval1(tm), vappPruning(v, ctx.pruning)(ctx.env))
+
+  override def retryPostponed(id: PostponedId): Unit =
+    getPostponed(id) match
+      case PECheck1(ctx_, tm, ty, m) =>
+        debug(
+          s"retryPostponed ?p$id as ?$m: check1 $tm : ${ctx_.pretty1(ty)}"
+        )
+        forceAll1(ty) match
+          case VFlex(m2, _) => addBlocking(id, m2)
+          case _ =>
+            implicit val ctx: Ctx = ctx_
+            val etm = check1(tm, ty)
+            unifyPlaceholder(m, etm)
+            setPostponed(id, PECheck1Done(ctx, Some(etm)))
+      case PECheckVarU1(ctx_, x, ty, m) =>
+        debug(
+          s"retryPostponed ?p$id as ?$m: check1 $x : ${ctx_.pretty1(ty)}"
+        )
+        implicit val ctx: Ctx = ctx_
+        val Some(Name1(_, vty)) = ctx.lookup(x): @unchecked
+        forceAll1(vty) match
+          case VFlex(m2, _) => addBlocking(id, m2)
+          case _ =>
+            val etm = check1(S.Var(x), ty)
+            unifyPlaceholder(m, etm)
+            setPostponed(id, PECheck1Done(ctx, Some(etm)))
+      case _ => ()
+
+  private def retryAllPostponed(): Unit =
+    @tailrec
+    def go(id: PostponedId): Unit =
+      if id < nextPostponedId then
+        inline def checkAgain(ctx0: Ctx, tm: S.Tm, ty: VTy, m: MetaId): Unit =
+          implicit val ctx: Ctx = ctx0
+          debug(
+            s"retryAllPostponed ?p$id as ?$m: check1 $tm : ${ctx.pretty1(ty)}"
+          )
+          val (etm, vty) = insert(infer1(tm))
+          setPostponed(id, PECheck1Done(ctx, None)) // prevent retry
+          val etm2 = coe(etm, vty, ty)
+          setPostponed(id, PECheck1Done(ctx, Some(etm2)))
+          unifyPlaceholder(m, etm2)
+        getPostponed(id) match
+          case PECheck1(ctx_, tm, ty, m)    => checkAgain(ctx_, tm, ty, m)
+          case PECheckVarU1(ctx_, x, ty, m) => checkAgain(ctx_, S.Var(x), ty, m)
+          case _                            => ()
+        go(id + 1)
+      else ()
+    go(postponedId(0))
 
   // checking
   private def checkMatch(
@@ -373,6 +452,14 @@ object Elaboration:
         case DoBind(x) => x == y
     case S.ArgIcit(i) => i == i2
 
+  private def varHasUnknownType1(x: Name)(implicit ctx: Ctx): Boolean =
+    ctx.lookup(x) match
+      case Some(Name1(_, ty)) =>
+        forceAll1(ty) match
+          case VFlex(_, _) => true
+          case _           => false
+      case _ => false
+
   private def check1(tm: S.Tm, ty: VTy)(implicit ctx: Ctx): Tm1 =
     if !tm.isPos then debug(s"check1 $tm : ${ctx.pretty1(ty)}")
     (tm, forceAll1(ty)) match
@@ -382,6 +469,23 @@ object Elaboration:
         ma.foreach { sty => unify1(ctx.eval1(check1(sty, VU1)), t1) }
         val qt1 = ctx.quote1(t1)
         Lam1(x, i2, qt1, check1(b, t2(VVar1(ctx.lvl)))(ctx.bind1(x, qt1, t1)))
+
+      case (S.Var(x), VPi(_, Impl, _, _)) if varHasUnknownType1(x) =>
+        val Some(Name1(lvl, ty2)) = ctx.lookup(x): @unchecked
+        unify1(ty2, ty)
+        Var1(lvl.toIx(ctx.lvl))
+
+      case (S.Var(x), VU1) if varHasUnknownType1(x) =>
+        val Some(Name1(_, ty2)) = ctx.lookup(x): @unchecked
+        val VFlex(m, _) = forceAll1(ty2): @unchecked
+        val placeholder = freshMetaId(ty)
+        val pid = newPostponed(PECheckVarU1(ctx, x, ty, placeholder))
+        addBlocking(pid, m)
+        debug(
+          s"postpone ?p$pid as ?$placeholder: check1 $tm : ${ctx.pretty1(ty)}"
+        )
+        PostponedCheck1(pid)
+
       case (tm, VPi(x, Impl, t1, t2)) =>
         val qt1 = ctx.quote1(t1)
         Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
@@ -427,6 +531,15 @@ object Elaboration:
       case (tm, VLift(cv, ty))          => quote(check0(tm, ty, cv))
 
       case (S.Hole(_), _) => freshMeta(ty)
+
+      case (tm, VFlex(m, sp)) =>
+        val placeholder = freshMetaId(ty)
+        val pid = newPostponed(PECheck1(ctx, tm, ty, placeholder))
+        addBlocking(pid, m)
+        debug(
+          s"postpone ?p$pid as ?$placeholder: check1 $tm : ${ctx.pretty1(ty)}"
+        )
+        PostponedCheck1(pid)
 
       case (tm, _) =>
         val (etm, vty) = insert(infer1(tm))
@@ -635,7 +748,7 @@ object Elaboration:
     case S.DDef(pos, x, rec, m, mty, v) =>
       implicit val ctx: Ctx = Ctx.empty(pos)
       if getGlobal(x).isDefined then error(s"duplicated definition $x")
-      if m then
+      val entry = if m then
         if rec then error("def rec not allowed in meta definitions")
         val (ev, ty, vv, vty) = mty match
           case None =>
@@ -646,7 +759,7 @@ object Elaboration:
             val vty = ctx.eval1(ety)
             val ev = check1(v, vty)
             (ev, ety, ctx.eval1(ev), vty)
-        setGlobal(GlobalEntry1(x, ev, ty, vv, vty))
+        GlobalEntry1(x, ev, ty, vv, vty)
       else
         val (ev, ty, cv, vty, vcv) = mty match
           case None if !rec =>
@@ -669,22 +782,13 @@ object Elaboration:
               vty,
               vcv
             )
-        setGlobal(GlobalEntry0(x, ev, ty, cv, ctx.eval0(ev), vty, vcv))
+        GlobalEntry0(x, ev, ty, cv, ctx.eval0(ev), vty, vcv)
+      retryAllPostponed()
+      val ums = unsolvedMetas()
+      if ums.nonEmpty then
+        val str =
+          ums.map((id, ty) => s"?$id : ${ctx.pretty1(ty)}").mkString("\n")
+        error(s"there are unsolved metas:\n$str")
+      setGlobal(entry)
 
   def elaborate(d: S.Defs): Unit = d.toList.foreach(elaborate)
-
-  def elaborate(tm: S.Tm): (Either[Tm0, Tm1], Ty) =
-    implicit val ctx: Ctx = Ctx.empty((0, 0))
-    infer(tm) match
-      case Infer0(etm, ty, _) => (Left(etm), ctx.quote1(ty))
-      case Infer1(etm, ty)    => (Right(etm), ctx.quote1(ty))
-
-  def elaborate1(tm: S.Tm): (Tm1, Ty) =
-    implicit val ctx: Ctx = Ctx.empty((0, 0))
-    val (etm, ty) = infer1(tm)
-    (etm, ctx.quote1(ty, UnfoldMetas))
-
-  def elaborate0(tm: S.Tm): (Tm0, Ty) =
-    implicit val ctx: Ctx = Ctx.empty((0, 0))
-    val (etm, ty, _) = infer0(tm)
-    (etm, ctx.quote1(ty, UnfoldMetas))

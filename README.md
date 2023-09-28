@@ -26,7 +26,8 @@ TODO:
   - [x] Value constructor
   - [x] Case split
   - [x] Match without scrutinee
+- [x] Postponing
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] Pattern matching
-- [ ] Postponing
+- [ ] More postponing (?) (con and match)

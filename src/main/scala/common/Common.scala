@@ -86,3 +86,14 @@ object Common:
   extension (id: MetaId)
     @targetName("exposeMetaId")
     inline def expose: Int = id
+
+  // postponed ids
+  opaque type PostponedId = Int
+  inline def postponedId(id: Int): PostponedId = id
+  extension (id: PostponedId)
+    @targetName("exposePostponedId")
+    inline def expose: Int = id
+    @targetName("addPostponedId")
+    inline def +(o: Int): PostponedId = id + o
+    @targetName("ltPostponedId")
+    inline def <(o: PostponedId): Boolean = id < o

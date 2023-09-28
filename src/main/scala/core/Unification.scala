@@ -10,9 +10,12 @@ import common.Debug.debug
 import scala.annotation.tailrec
 import scala.collection.immutable.IntMap
 
-object Unification:
-  case class UnifyError(msg: String) extends Exception(msg)
+case class UnifyError(msg: String) extends Exception(msg)
 
+trait RetryPostponed:
+  def retryPostponed(id: PostponedId): Unit
+
+class Unification(retryPostponed: RetryPostponed):
   // partial substitution
   private enum PSEntry:
     case PS0(value: Val0)
@@ -140,9 +143,10 @@ object Unification:
 
   private def pruneMeta(p: Pruning, m: MetaId)(implicit lvl: Lvl): MetaId =
     debug(s"pruneMeta ?$m $p")
-    val mty = unsolvedMetaType(m)
+    val entry = getMetaUnsolved(m)
+    val mty = entry.ty
     val prunedty = eval1(pruneTy(RevPruning(p), mty))(EEmpty)
-    val m2 = newMeta(prunedty)
+    val m2 = newMeta(entry.blocking, prunedty)
     val solution =
       eval1(lams(mkLvl(p.size), mty, AppPruning(m2, p)))(EEmpty)
     solveMeta(m, solution)
@@ -306,13 +310,15 @@ object Unification:
     debug(
       s"solveWithPSub ?$m ($lvl) := ${quote1(rhs, UnfoldMetas)}"
     )
-    val mty = unsolvedMetaType(m)
+    val entry = getMetaUnsolved(m)
+    val mty = entry.ty
     iv._2.foreach(p => pruneTy(RevPruning(p), mty))
     val rhs2 = psubst1(rhs)(psub.copy(occ = Some(m)))
     debug(s"solution ?$m := $rhs2")
     val rhs2lams = lams(psub.dom, mty, rhs2)
     val sol = eval1(rhs2lams)(EEmpty)
     solveMeta(m, sol)
+    entry.blocking.foreach(id => retryPostponed.retryPostponed(postponedId(id)))
 
   // unification
   def unify0(a: Val0, b: Val0)(implicit lvl: Lvl): Unit =

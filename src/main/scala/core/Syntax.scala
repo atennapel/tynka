@@ -83,6 +83,7 @@ object Syntax:
     case MetaLam(meta: Boolean, body: Tm1)
     case MetaApp(fn: Tm1, arg: Either[Tm0, Tm1])
     case AppPruning(id: MetaId, pruning: Pruning)
+    case PostponedCheck1(id: PostponedId)
 
     override def toString: String = this match
       case Var1(ix)            => s"'$ix"
@@ -111,6 +112,7 @@ object Syntax:
       case MetaLam(m, b)        => s"(\\${if m then "1" else "0"}. $b)"
       case MetaApp(f, Left(a))  => s"($f 0 $a)"
       case MetaApp(f, Right(a)) => s"($f 1 $a)"
+      case PostponedCheck1(id)  => s"?p$id"
   export Tm1.*
 
   inline def quote(t: Tm0): Tm1 = t match
