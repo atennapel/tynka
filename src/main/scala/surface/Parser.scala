@@ -213,22 +213,23 @@ object Parser:
       }
     )
 
-    private lazy val matchP: Parsley[Tm] = positioned(
-      ("match" *> option(tm) <~> many(
-        attempt(
-          pos <~>
-            "|" *> identOrOp.flatMap(x =>
-              if x.expose == "_" then empty else pure(x)
-            ) <~> many(bind) <~> "." *> tm
-        )
-      ) <~> option(pos <~> "|" *> option("_") *> "." *> tm)).map {
-        case ((scrut, cs), other) =>
-          Match(
-            scrut,
-            cs.map { case (((pos, c), ps), b) => (pos, c, ps, b) },
-            other
-          )
+    private lazy val patConP: Parsley[Pat] =
+      (identOrOp <~> some(patAtomP)).map(PCon.apply)
+
+    private lazy val patAtomP: Parsley[Pat] =
+      attempt("(" *> userOp.map(x => PVar(DoBind(x))) <* ")") <|>
+        ("(" *> patP <* ")") <|>
+        bind.map(PVar.apply)
+
+    private lazy val patP: Parsley[Pat] = attempt(patConP) <|> patAtomP
+
+    private lazy val clauseP: Parsley[(PosInfo, Pat, Tm)] =
+      ("|" *> pos <~> patP <~> "." *> tm).map { case ((pos, pat), tm) =>
+        (pos, pat, tm)
       }
+
+    private lazy val matchP: Parsley[Tm] = positioned(
+      ("match" *> option(tm) <~> many(clauseP)).map(Match.apply)
     )
 
     private lazy val ifP: Parsley[Tm] =
@@ -239,10 +240,9 @@ object Parser:
             Match(
               Some(Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x))),
               List(
-                (pt, Name("True"), Nil, t),
-                (pf, Name("False"), Nil, f)
-              ),
-              None
+                (pt, PCon(Name("True"), Nil), t),
+                (pf, PCon(Name("False"), Nil), f)
+              )
             )
           }
       )

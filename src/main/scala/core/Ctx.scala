@@ -39,6 +39,19 @@ final case class Ctx(
       case DontBind  => names
       case DoBind(x) => names + (x -> info)
 
+  def typeOfLvl(x: Lvl): Ty =
+    def go(ls: Locals, i: Int): Ty = ls match
+      case LEmpty                        => impossible()
+      case LDef(locs, ty, _) if i == 0   => ty
+      case LBind0(locs, ty, _) if i == 0 => ty
+      case LBind1(locs, ty) if i == 0    => ty
+      case LDef(ls, _, _)                => go(ls, i - 1)
+      case LBind0(ls, _, _)              => go(ls, i - 1)
+      case LBind1(ls, _)                 => go(ls, i - 1)
+    go(locals, x.toIx(lvl).expose)
+
+  def bindOfLvl(x: Lvl): Bind = binds.reverse(x.expose)
+
   def enter(pos: PosInfo): Ctx = copy(pos = pos)
 
   def lookup(x: Name): Option[NameInfo] = names.get(x)
@@ -73,6 +86,17 @@ final case class Ctx(
       PESkip :: pruning,
       DoBind(x) :: binds,
       names + (x -> Name1(lvl, vty)),
+      pos
+    )
+
+  def defineInsert(x: Name, ty: Ty, v: Tm1, vv: Val1): Ctx =
+    Ctx(
+      lvl + 1,
+      E1(env, vv),
+      LDef(locals, ty, v),
+      PESkip :: pruning,
+      DoBind(x) :: binds,
+      names,
       pos
     )
 

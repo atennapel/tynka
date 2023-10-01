@@ -243,7 +243,7 @@ class Unification(retryPostponed: RetryPostponed):
       case VCon(x, args)        => Con(x, args.map(a => go0(a)))
       case VMatch(scrut, cs, other) =>
         Match(go0(scrut), cs.map((c, t) => (c, go0(t))), other.map(o => go0(o)))
-      case VSplice(v) => Splice(go1(v))
+      case VSplice(v) => splice(go1(v))
 
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
@@ -291,7 +291,7 @@ class Unification(retryPostponed: RetryPostponed):
       case VComp                      => Comp
       case VVal                       => Val
       case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
-      case VQuote(tm)                 => Quote(go0(tm))
+      case VQuote(tm)                 => quote(go0(tm))
       case VMetaPi(m, t, b) =>
         MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
       case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))

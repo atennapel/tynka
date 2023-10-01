@@ -12,7 +12,7 @@ import Ctx.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import surface.Syntax.Def
+import surface.Syntax.Pat
 
 object Elaboration extends RetryPostponed:
   private val unification = new Unification(this)
@@ -311,70 +311,268 @@ object Elaboration extends RetryPostponed:
       else ()
     go(postponedId(0))
 
-  // checking
+  // pattern matching
+  private enum Pat:
+    case PVar(x: Bind)
+    case PCon(cx: Name, args: List[S.Pat])
+  import Pat.*
+  private final case class Clause(
+      pos: PosInfo,
+      vars: Map[Lvl, Pat],
+      body: (List[(Name, VTy, Lvl)], S.Tm)
+  )
+  private final case class VarInfo(
+      ty: VTy,
+      matchedCons: Set[Name],
+      lifted: Boolean
+  ):
+    def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx, lifted)
+  private enum CaseTree:
+    case Test(
+        x: Lvl,
+        con: Name,
+        lams: List[(Bind, Ty)],
+        yes: CaseTree,
+        no: CaseTree
+    )
+    case Run(tm: Tm0)
+    case Exhausted
+  import CaseTree.*
+  private enum Choice:
+    case Yes(clause: Clause)
+    case No(clause: Clause)
+    case Both(clause: Clause)
+  import Choice.*
+
+  private def flattenTree(
+      lvl: Lvl,
+      t: CaseTree
+  ): (List[(Name, (List[(Bind, Ty)], CaseTree))], Option[Tm0]) =
+    t match
+      case Test(x, con, lams, yes, no) =>
+        val (cons, rest) = flattenTree(x, no)
+        ((con, (lams, yes)) :: cons, rest)
+      case Run(tm)   => (Nil, Some(tm))
+      case Exhausted => (Nil, None)
+  private def compileTree(
+      t: CaseTree
+  )(implicit ctx: Ctx, varInfo: Map[Lvl, VarInfo]): Tm0 = t match
+    case Exhausted => impossible()
+    case Run(tm)   => tm
+    case Test(x, con, args, yes, no) =>
+      val (cons, other) = flattenTree(x, t)
+      val cases = cons.map { case (cx, (args, yes)) =>
+        val yctx = args.foldLeft(ctx) { case (ctx, (x, ty)) =>
+          ctx.bind0(x, ty, ctx.eval1(ty), Val, VVal)
+        }
+        val body = compileTree(yes)(yctx, varInfo)
+        val lams = args.foldRight(body) { case ((x, t), b) => Lam0(x, t, b) }
+        (cx, lams)
+      }
+      val v =
+        if varInfo.get(x).map(_.lifted).getOrElse(false) then
+          Splice(Var1(x.toIx(ctx.lvl)))
+        else Var0(x.toIx(ctx.lvl))
+      Match(v, cases, other)
+
+  private def normalizePat(ty: VTy, p: S.Pat)(implicit ctx: Ctx): Pat = p match
+    case S.PCon(cx, args) => PCon(cx, args)
+    case S.PVar(DontBind) => PVar(DontBind)
+    case S.PVar(b @ DoBind(x)) =>
+      forceAll1(ty) match
+        case VData(_, cs) =>
+          if cs.tm.exists(c => c.name == x && c.args.isEmpty) then PCon(x, Nil)
+          else PVar(b)
+        case _ => PVar(b)
+
   private def checkMatch(
       scrut: Either[(Tm0, VTy), S.Tm],
-      cs: List[(PosInfo, Name, List[Bind], S.Tm)],
-      other: Option[(PosInfo, S.Tm)],
+      pats: List[(PosInfo, S.Pat, S.Tm)],
       vrty: VTy,
       vrcv: VTy
   )(implicit ctx: Ctx): Tm0 =
+    debug(s"checkMatch : ${ctx.pretty1(vrty)}")
     val (escrut, vscrutty) = scrut match
       case Left(p) => p
       case Right(scrut) =>
         val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
         val escrut = check0(scrut, vscrutty, VVal)
         (escrut, vscrutty)
-    forceAll1(vscrutty) match
-      case VData(dx, dcs) =>
-        val used = mutable.Set[Name]()
-        val cons = dcs.tm.map(_.name).toSet
-        val ecs = cs.map { case (pos, cx, ps, b) =>
-          implicit val ctx1: Ctx = ctx.enter(pos)
-          if !cons.contains(cx) then
-            error(s"$cx is not a constructor of type $dx")
-          if used.contains(cx) then
-            error(s"constructor appears twice in match $cx")
-          used += cx
-          val tas = dcs.tm
-            .find(c => c.name == cx)
-            .get
-            ._2
-            .map(_._2)
-            .map { t =>
-              val vt = eval1(t)(E1(dcs.env, vscrutty))
-              (vt, ctx1.quote1(vt))
-            }
-          if ps.size != tas.size then
-            error(
-              s"datatype argument size mismatch, expected ${tas.size} but got ${ps.size}"
-            )
-          val tps = ps.zip(tas)
-          val pctx = tps.foldLeft(ctx1) { case (ctx, (x, (vt, qt))) =>
-            ctx.bind0(x, qt, vt, Val, VVal)
-          }
-          val eb = check0(b, vrty, vrcv)(pctx)
-          val lams = tps.foldRight(eb) { case ((x, (_, qt)), b) =>
-            Lam0(x, qt, b)
-          }
-          (cx, lams)
-        }
-        val left = cons -- used
-        if other.isEmpty && left.nonEmpty then
-          error(
-            s"non-exhaustive match, constructors left: ${left.mkString(" ")}"
+
+    if pats.isEmpty then
+      forceAll1(vscrutty) match
+        case VData(_, cs) if cs.tm.isEmpty =>
+          return Match(escrut, Nil, None)
+        case _ =>
+          error(s"empty match with non-void type: ${ctx.pretty1(vscrutty)}")
+
+    val scrutty = ctx.quote1(vscrutty)
+    val qescrut = quote(escrut)
+    val nctx = ctx.defineInsert(
+      Name("x"),
+      Lift(Val, scrutty),
+      qescrut,
+      ctx.eval1(qescrut)
+    )
+    val varInfo = Map(ctx.lvl -> VarInfo(vscrutty, Set.empty, true))
+    val tree = genMatch(
+      pats.map((pos, pat, tm) =>
+        Clause(
+          pos,
+          Map(ctx.lvl -> normalizePat(vscrutty, pat)(ctx.enter(pos))),
+          (Nil, tm)
+        )
+      ),
+      vrty,
+      vrcv
+    )(nctx, varInfo)
+    val ctree = compileTree(tree)(nctx, varInfo)
+    Splice(
+      Let1(Name("scrutinee"), Lift(Val, scrutty), qescrut, quote(ctree))
+    )
+
+  private def simplifyClause(c: Clause)(implicit
+      varInfo: Map[Lvl, VarInfo]
+  ): Clause =
+    c match
+      case Clause(pos, vars, (lets, tm)) =>
+        def go(p: (Lvl, Pat)): Either[(Bind, Lvl), (Lvl, Pat)] = p match
+          case (lvl, PVar(x)) => Left((x, lvl))
+          case (lvl, p)       => Right((lvl, p))
+        val (nlets, rest) = vars.partitionMap(go)
+        Clause(
+          pos,
+          rest.toMap,
+          (
+            lets ++ nlets.collect { case (DoBind(x), lvl) =>
+              (x, varInfo(lvl).ty, lvl)
+            },
+            tm
           )
-        val eother = other.map { (pos, b) =>
-          implicit val ctxOther: Ctx = ctx.enter(pos)
-          if left.isEmpty then error(s"other case does not match anything")
-          check0(b, vrty, vrcv)
-        }
-        Match(escrut, ecs, eother)
-      case _ =>
-        error(
-          s"expected a datatype in match but got ${ctx.pretty1(vscrutty)}"
         )
 
+  private def branchingHeuristic(
+      pats: Map[Lvl, Pat],
+      clauses: List[Clause]
+  ): Lvl =
+    pats.keys.maxBy(v =>
+      clauses.count { case Clause(_, ps, _) => ps.contains(v) }
+    )
+
+  private def checkMatchBody(
+      lets: List[(Name, VTy, Lvl)],
+      body: S.Tm,
+      vrty: VTy,
+      vrcv: VCV
+  )(implicit
+      ctx: Ctx
+  ): Tm0 =
+    debug(
+      s"checkMatchBody ${lets
+          .map((x, t, l) => s"($x : ${ctx.pretty1(t)} = $l)")
+          .mkString(" ")} $body : ${ctx.pretty1(vrty)}"
+    )
+    val (innerctx, ts) = lets.foldLeft((ctx, List.empty[Ty])) {
+      case ((ctx, ts), (x, vty, lvl)) =>
+        val vlty = VLift(VVal, vty)
+        val ty = ctx.quote1(vty)
+        val v = vquote(VVar0(lvl))
+        (ctx.define(x, ctx.quote1(vlty), vlty, ctx.quote1(v), v), ty :: ts)
+    }
+    val ebody = check0(body, vrty, vrcv)(innerctx)
+    splice(lets.zip(ts.reverse).zipWithIndex.foldRight(quote(ebody)) {
+      case ((((x, _, lvl), ty), i), b) =>
+        Let1(x, Lift(Val, ty), Quote(Var0(lvl.toIx(ctx.lvl + i))), b)
+    })
+
+  private def genMatch(
+      clauses0: List[Clause],
+      vrty: VTy,
+      vrcv: VCV
+  )(implicit ctx: Ctx, varInfo: Map[Lvl, VarInfo]): CaseTree =
+    if clauses0.isEmpty then impossible()
+    val clauses = clauses0.map(simplifyClause)
+    val Clause(pos, pats, body) = clauses.head
+    if pats.isEmpty then
+      return Run(checkMatchBody(body._1, body._2, vrty, vrcv)(ctx.enter(pos)))
+    val branchVar = branchingHeuristic(pats, clauses)
+    val info = varInfo(branchVar)
+    val dty = info.ty
+    forceAll1(dty) match
+      case VData(dx, cs) =>
+        val cons = cs.tm.map(_.name).toSet
+        val PCon(cx, args) = pats(branchVar): @unchecked
+        if info.matchedCons.contains(cx) then
+          error(s"already matched on $cx of ${ctx.pretty1(dty)}")
+        val DataCon(_, dts) = cs.tm
+          .find(_.name == cx)
+          .getOrElse(
+            error(s"pattern $cx does not match type ${ctx.pretty1(dty)}")
+          )
+        if dts.size != args.size then error(s"pattern $cx arity mismatch")
+        val ts = dts.map((_, t) => eval1(t)(E1(cs.env, dty)))
+        val nargs = ts.zip(args).map(normalizePat)
+        val vars = (0 until args.size).map(i => ctx.lvl + i).toList
+        val (nctx, lams) =
+          nargs
+            .zip(ts)
+            .zipWithIndex
+            .foldLeft((ctx, List.empty[(Bind, Ty)])) {
+              case ((ctx, lams), ((p, ty), i)) =>
+                val x = p match
+                  case PVar(b @ DoBind(x)) => b
+                  case _                   => DoBind(Name(s"x$i"))
+                val qty = ctx.quote1(ty)
+                (ctx.insert0(x, qty, Val), lams ++ List((x, qty)))
+            }
+        val newVarInfo =
+          vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, ty)) =>
+            vars + (lvl -> VarInfo(ty, Set.empty, false))
+          }
+        val yes = mutable.ArrayBuffer.empty[Clause]
+        val no = mutable.ArrayBuffer.empty[Clause]
+        clauses.foreach { case c @ Clause(pos, pats, body) =>
+          pats.get(branchVar) match {
+            case Some(PCon(cx2, args2)) =>
+              if cx == cx2 then {
+                if args.size != args2.size then
+                  error("invalid constructor arity")
+                val newPats = vars
+                  .zip(ts)
+                  .zip(args2)
+                  .map { case ((lvl, ty), p) =>
+                    lvl -> normalizePat(ty, p)
+                  }
+                yes += Clause(pos, pats - branchVar ++ newPats, body)
+              } else no += c
+            case None =>
+              // TODO: improve duplication, join points or generate functions
+              yes += c
+              no += c
+            case _ => impossible()
+          }
+        }
+        val matchedCons = info.matchedCons + cx
+        val yesResult =
+          if yes.isEmpty then impossible()
+          else genMatch(yes.toList, vrty, vrcv)(nctx, newVarInfo - branchVar)
+        val noResult =
+          if no.isEmpty then
+            val matchedCons = info.matchedCons + cx
+            if matchedCons == cons then Exhausted
+            else
+              error(
+                s"non-exhaustive pattern match, ${(cons -- matchedCons).mkString(", ")} left"
+              )
+          else
+            genMatch(no.toList, vrty, vrcv)(
+              ctx,
+              varInfo + (branchVar -> info.matchOn(cx))
+            )
+        Test(branchVar, cx, lams, yesResult, noResult)
+      case _ => error(s"expected a datatype but got ${ctx.pretty1(dty)}")
+
+  // checking
   private def check0(tm: S.Tm, ty: VTy, cv: VCV)(implicit ctx: Ctx): Tm0 =
     if !tm.isPos then
       debug(s"check0 $tm : ${ctx.pretty1(ty)} : ${ctx.pretty1(cv)}")
@@ -420,13 +618,13 @@ object Elaboration extends RetryPostponed:
                 Con(x, eargs)
           case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
 
-      case S.Match(Some(scrut), cs, other) =>
-        checkMatch(Right(scrut), cs, other, ty, cv)
-      case S.Match(None, cs, other) =>
+      case S.Match(Some(scrut), ps) =>
+        checkMatch(Right(scrut), ps, ty, cv)
+      case S.Match(None, ps) =>
         val (t1, fcv, t2) = ensureFun(ty, cv)
         val qt1 = ctx.quote1(t1)
         val x = DoBind(Name("x"))
-        val etm = checkMatch(Left((Var0(ix0), t1)), cs, other, t2, fcv)(
+        val etm = checkMatch(Left((Var0(ix0), t1)), ps, t2, fcv)(
           ctx.insert0(x, qt1, Val)
         )
         Lam0(x, qt1, etm)
@@ -490,7 +688,7 @@ object Elaboration extends RetryPostponed:
         val qt1 = ctx.quote1(t1)
         Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
 
-      case (S.Match(None, cs, o), VPi(x, Expl, t1, t2)) =>
+      case (S.Match(None, ps), VPi(x, Expl, t1, t2)) =>
         val qt1 = ctx.quote1(t1)
         val y = x match
           case DontBind => DoBind(Name("x"))
@@ -500,8 +698,8 @@ object Elaboration extends RetryPostponed:
         val (vrcv, vrty) = ensureLift(t2(VVar1(ctx.lvl)))(nctx)
         unify1(vscrutcv, VVal)
         val escrut = Left((Splice(Var1(ix0)), vscrutty))
-        val ematch = checkMatch(escrut, cs, o, vrty, vrcv)(nctx)
-        Lam1(y, Expl, qt1, Quote(ematch))
+        val ematch = checkMatch(escrut, ps, vrty, vrcv)(nctx)
+        Lam1(y, Expl, qt1, quote(ematch))
 
       case (S.Pi(DontBind, Expl, t1, t2), VU0(cv)) =>
         unify1(cv, VComp)
@@ -730,12 +928,12 @@ object Elaboration extends RetryPostponed:
         }
         Infer1(Data(x, ecs), VU0(VVal))
 
-      case S.Match(Some(scrut), cs, other) =>
+      case S.Match(Some(scrut), ps) =>
         val cv = ctx.eval1(freshCV())
         val ty = ctx.eval1(freshMeta(VU0(cv)))
-        val etm = checkMatch(Right(scrut), cs, other, ty, cv)
+        val etm = checkMatch(Right(scrut), ps, ty, cv)
         Infer0(etm, ty, cv)
-      case m @ S.Match(None, cs, other) =>
+      case m @ S.Match(None, _) =>
         val cv = ctx.eval1(freshCV())
         val t1 = ctx.eval1(freshMeta(VU0(VVal)))
         val t2 = ctx.eval1(freshMeta(VU0(cv)))

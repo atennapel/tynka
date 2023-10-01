@@ -1,6 +1,7 @@
 package surface
 
 import common.Common.*
+import scala.annotation.tailrec
 
 object Syntax:
   final case class Defs(defs: List[Def]):
@@ -38,6 +39,16 @@ object Syntax:
           case DoBind(x) => s"($x : ${a._2})"
         s"$x ${as.map(goArg).mkString(" ")}"
 
+  enum Pat:
+    case PVar(name: Bind)
+    case PCon(con: Name, args: List[Pat])
+
+    override def toString: String = this match
+      case PVar(x)       => s"$x"
+      case PCon(c, Nil)  => s"$c"
+      case PCon(c, args) => s"($c ${args.mkString(" ")})"
+  export Pat.*
+
   type Ty = Tm
   enum Tm:
     case Var(name: Name)
@@ -64,8 +75,7 @@ object Syntax:
     case Con(name: Name, args: List[Tm])
     case Match(
         scrut: Option[Tm],
-        cs: List[(PosInfo, Name, List[Bind], Tm)],
-        other: Option[(PosInfo, Tm)]
+        pats: List[(PosInfo, Pat, Tm)]
     )
 
     case Lift(ty: Ty)
@@ -105,14 +115,10 @@ object Syntax:
       case Data(x, cs) => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
       case Con(x, Nil) => s"(con $x)"
       case Con(x, as)  => s"(con $x ${as.mkString(" ")})"
-      case Match(scrut, cs, other) =>
+      case Match(scrut, pats) =>
         s"(match${if scrut.isDefined then s" ${scrut.get}" else ""}${
-            if cs.isEmpty then "" else " "
-          }${cs
-            .map((_, c, ps, b) => s"| $c${if ps.isEmpty then "" else " "}${ps.mkString(" ")}. $b")
-            .mkString(" ")}${if other.isDefined then " " else ""}${other
-            .map((_, t) => s"| _. $t")
-            .getOrElse("")})"
+            if pats.isEmpty then "" else " "
+          }${pats.map((_, p, b) => s"| $p. $b").mkString(" ")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"
       case Splice(tm)    => s"$$$tm"

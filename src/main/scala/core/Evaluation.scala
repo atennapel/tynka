@@ -20,11 +20,12 @@ object Evaluation:
 
   // evaluation
   @tailrec
-  def vvar0(ix: Ix)(implicit e: Env): Val0 = e match
-    case E0(_, v) if ix.expose == 0 => v
-    case E0(env, _)                 => vvar0(ix - 1)(env)
-    case E1(env, _)                 => vvar0(ix - 1)(env)
-    case EEmpty                     => impossible()
+  def vvar0(ix: Ix)(implicit e: Env): Val0 =
+    e match
+      case E0(_, v) if ix.expose == 0 => v
+      case E0(env, _)                 => vvar0(ix - 1)(env)
+      case E1(env, _)                 => vvar0(ix - 1)(env)
+      case EEmpty                     => impossible()
 
   @tailrec
   def vvar1(ix: Ix)(implicit e: Env): Val1 = e match
@@ -239,7 +240,7 @@ object Evaluation:
       case VComp                      => Comp
       case VVal                       => Val
       case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
-      case VQuote(tm)                 => Quote(go0(tm))
+      case VQuote(tm)                 => quote(go0(tm))
       case VMetaPi(m, t, b) =>
         MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
       case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))
@@ -264,7 +265,7 @@ object Evaluation:
       case VCon(x, args)        => Con(x, args.map(a => go0(a)))
       case VMatch(scrut, cs, other) =>
         Match(go0(scrut), cs.map((c, t) => (c, go0(t))), other.map(o => go0(o)))
-      case VSplice(tm) => Splice(go1(tm))
+      case VSplice(tm) => splice(go1(tm))
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
     quote1(eval1(tm)(EEmpty), q)(lvl0)

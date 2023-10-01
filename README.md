@@ -7,6 +7,7 @@ References:
 - https://github.com/AndrasKovacs/elaboration-zoo
 - https://github.com/AndrasKovacs/staged/tree/main/demo
 - https://github.com/AndrasKovacs/staged/tree/main/old/mono_staged
+- https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
 
 Try it out:
 ```
@@ -27,7 +28,13 @@ TODO:
   - [x] Case split
   - [x] Match without scrutinee
 - [x] Postponing
+- [ ] Pattern matching
+  - [x] Pattern elaboration
+  - [ ] Operators in patterns
+  - [ ] Multi-match
+  - [ ] Guards
+  - [ ] Or-patterns
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
-- [ ] Pattern matching
 - [ ] More postponing (?) (con and match)
+- [ ] Join points

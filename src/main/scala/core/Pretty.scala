@@ -96,7 +96,7 @@ object Pretty:
     case Var0(ix) =>
       ns(ix.expose) match
         case DontBind => s"_@${ns.size - ix.expose - 1}"
-        case DoBind(x) if ns.take(ix.expose).contains(x) =>
+        case DoBind(x) if ns.take(ix.expose).contains(DoBind(x)) =>
           s"x@${ns.size - ix.expose - 1}"
         case DoBind(x) => s"$x"
     case Global0(x) => s"$x"
@@ -117,7 +117,7 @@ object Pretty:
       s"match ${prettyParen0(scrut, true)}${if cs.isEmpty then "" else " "}${cs
           .map((c, b) => s"| $c. ${pretty0(b)}")
           .mkString(" ")}${if other.isDefined then " " else ""}${other
-          .map(t => s"| ${pretty0(t)}")
+          .map(t => s"| _. ${pretty0(t)}")
           .getOrElse("")}"
 
     case Splice(t) => s"$$${prettyParen1(t)}"
@@ -128,7 +128,7 @@ object Pretty:
     case Var1(ix) =>
       ns(ix.expose) match
         case DontBind => s"_@${ns.size - ix.expose - 1}"
-        case DoBind(x) if ns.take(ix.expose).contains(x) =>
+        case DoBind(x) if ns.take(ix.expose).contains(DoBind(x)) =>
           s"x@${ns.size - ix.expose - 1}"
         case DoBind(x) => s"$x"
     case Global1(x) => s"$x"
