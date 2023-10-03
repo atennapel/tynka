@@ -111,18 +111,24 @@ object Elaboration extends RetryPostponed:
     val qb = quote1(b, UnfoldNone)
     VPi(DontBind, Expl, VLift(VVal, a), Clos(ctx.env, Lift(qbcv, qb)))
 
-  private def quoteFun(a: VTy, t: Tm1)(implicit ctx: Ctx): Tm1 =
+  private def quoteFun(x: Bind, a: VTy, t: Tm1)(implicit ctx: Ctx): Tm1 =
+    val y = x match
+      case DontBind  => Name("x")
+      case DoBind(x) => x
     Lam1(
-      DoBind(Name("a")),
+      DoBind(y),
       Expl,
       Lift(Val, ctx.quote1(a)),
       Quote(App0(Wk10(splice(t)), Splice(Var1(ix0))))
     )
 
-  private def spliceFun(a: VTy, t: Tm1)(implicit ctx: Ctx): Tm1 =
+  private def spliceFun(x: Bind, a: VTy, t: Tm1)(implicit ctx: Ctx): Tm1 =
+    val y = x match
+      case DontBind  => Name("x")
+      case DoBind(x) => x
     Quote(
       Lam0(
-        DoBind(Name("a")),
+        DoBind(y),
         ctx.quote1(a),
         Splice(App1(Wk01(t), Quote(Var0(ix0)), Expl))
       )
@@ -164,10 +170,14 @@ object Elaboration extends RetryPostponed:
                 )
               )
 
+        case (VLift(_, VFun(a, cv, b)), VPi(x, _, _, _)) =>
+          Some(coe(quoteFun(x, a, t), liftFun(a, b, cv), a2))
         case (VLift(_, VFun(a, cv, b)), _) =>
-          Some(coe(quoteFun(a, t), liftFun(a, b, cv), a2))
+          Some(coe(quoteFun(DontBind, a, t), liftFun(a, b, cv), a2))
+        case (VPi(x, _, _, _), VLift(_, VFun(t1, cv, t2))) =>
+          Some(spliceFun(x, t1, coe(t, a1, liftFun(t1, t2, cv))))
         case (_, VLift(_, VFun(t1, cv, t2))) =>
-          Some(spliceFun(t1, coe(t, a1, liftFun(t1, t2, cv))))
+          Some(spliceFun(DontBind, t1, coe(t, a1, liftFun(t1, t2, cv))))
 
         case (pi @ VPi(x, Expl, a, b), VLift(cv, a2)) =>
           unify1(cv, VComp)
@@ -386,40 +396,58 @@ object Elaboration extends RetryPostponed:
         case _ => PVar(b)
 
   private def checkMatch(
-      scrut: Either[(Tm0, VTy), S.Tm],
-      pats: List[(PosInfo, S.Pat, S.Tm)],
+      scrut: Either[List[(Tm0, VTy)], List[S.Tm]],
+      pats: List[(PosInfo, List[S.Pat], S.Tm)],
       vrty: VTy,
       vrcv: VTy
   )(implicit ctx: Ctx): Tm0 =
     debug(s"checkMatch : ${ctx.pretty1(vrty)}")
-    val (escrut, vscrutty) = scrut match
+    val escruts = scrut match
       case Left(p) => p
-      case Right(scrut) =>
-        val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
-        val escrut = check0(scrut, vscrutty, VVal)
-        (escrut, vscrutty)
+      case Right(ss) =>
+        ss.map { scrut =>
+          val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
+          val escrut = check0(scrut, vscrutty, VVal)
+          (escrut, vscrutty)
+        }
 
+    if escruts.isEmpty then impossible()
     if pats.isEmpty then
-      forceAll1(vscrutty) match
-        case VData(_, cs) if cs.tm.isEmpty =>
-          return Match(escrut, Nil, None)
-        case _ =>
-          error(s"empty match with non-void type: ${ctx.pretty1(vscrutty)}")
+      escruts.foreach { (escrut, vscrutty) =>
+        forceAll1(vscrutty) match
+          case VData(_, cs) if cs.tm.isEmpty =>
+          case _ =>
+            error(s"empty match with non-void type: ${ctx.pretty1(vscrutty)}")
+      }
+      // TODO: what about the other scruts
+      return Match(escruts.head._1, Nil, None)
 
-    val scrutty = ctx.quote1(vscrutty)
-    val qescrut = quote(escrut)
-    val nctx = ctx.defineInsert(
-      Name("x"),
-      Lift(Val, scrutty),
-      qescrut,
-      ctx.eval1(qescrut)
-    )
-    val varInfo = Map(ctx.lvl -> VarInfo(vscrutty, Set.empty, true))
+    val (nctx, varInfo, lets) =
+      escruts.zipWithIndex.foldLeft(
+        (ctx, Map.empty[Lvl, VarInfo], List.empty[(Name, Ty, Tm1)])
+      ) { case ((ctx, varInfo, lets), ((escrut, vscrutty), i)) =>
+        val x = Name(s"scrut$i")
+        val scrutty = ctx.quote1(vscrutty)
+        val qescrut = quote(escrut.wkN(i))
+        val lty = Lift(Val, scrutty)
+        val vqescrut = ctx.eval1(qescrut)
+        (
+          ctx.defineInsert(x, lty, qescrut, vqescrut),
+          varInfo + (ctx.lvl -> VarInfo(vscrutty, Set.empty, true)),
+          lets ++ List((x, lty, qescrut))
+        )
+      }
     val tree = genMatch(
-      pats.map((pos, pat, tm) =>
+      pats.map((pos, ps, tm) =>
+        if ps.size != escruts.size then
+          error(s"pattern amount mismatch")(ctx.enter(pos))
+        val norm =
+          escruts.zip(ps).zipWithIndex.map { case (((_, vscrutty), pat), i) =>
+            (ctx.lvl + i, normalizePat(vscrutty, pat)(ctx.enter(pos)))
+          }
         Clause(
           pos,
-          Map(ctx.lvl -> normalizePat(vscrutty, pat)(ctx.enter(pos))),
+          norm.toMap,
           (Nil, tm)
         )
       ),
@@ -427,9 +455,10 @@ object Elaboration extends RetryPostponed:
       vrcv
     )(nctx, varInfo)
     val ctree = compileTree(tree)(nctx, varInfo)
-    Splice(
-      Let1(Name("scrutinee"), Lift(Val, scrutty), qescrut, quote(ctree))
+    val res = splice(
+      lets.foldRight(quote(ctree)) { case ((x, ty, v), b) => Let1(x, ty, v, b) }
     )
+    res
 
   private def simplifyClause(c: Clause)(implicit
       varInfo: Map[Lvl, VarInfo]
@@ -552,18 +581,18 @@ object Elaboration extends RetryPostponed:
             case _ => impossible()
           }
         }
-        val matchedCons = info.matchedCons + cx
         val yesResult =
           if yes.isEmpty then impossible()
           else genMatch(yes.toList, vrty, vrcv)(nctx, newVarInfo - branchVar)
+        val matchedCons = info.matchedCons + cx
         val noResult =
           if no.isEmpty then
-            val matchedCons = info.matchedCons + cx
             if matchedCons == cons then Exhausted
             else
               error(
                 s"non-exhaustive pattern match, ${(cons -- matchedCons).mkString(", ")} left"
               )
+          else if matchedCons == cons then Exhausted
           else
             genMatch(no.toList, vrty, vrcv)(
               ctx,
@@ -618,16 +647,16 @@ object Elaboration extends RetryPostponed:
                 Con(x, eargs)
           case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
 
-      case S.Match(Some(scrut), ps) =>
-        checkMatch(Right(scrut), ps, ty, cv)
-      case S.Match(None, ps) =>
+      case S.Match(Nil, ps) =>
         val (t1, fcv, t2) = ensureFun(ty, cv)
         val qt1 = ctx.quote1(t1)
-        val x = DoBind(Name("x"))
-        val etm = checkMatch(Left((Var0(ix0), t1)), ps, t2, fcv)(
+        val x = DoBind(Name("scrut"))
+        val etm = checkMatch(Left(List((Var0(ix0), t1))), ps, t2, fcv)(
           ctx.insert0(x, qt1, Val)
         )
         Lam0(x, qt1, etm)
+      case S.Match(scruts, ps) =>
+        checkMatch(Right(scruts), ps, ty, cv)
 
       case S.Hole(_) => splice(freshMeta(VLift(cv, ty)))
 
@@ -688,7 +717,7 @@ object Elaboration extends RetryPostponed:
         val qt1 = ctx.quote1(t1)
         Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
 
-      case (S.Match(None, ps), VPi(x, Expl, t1, t2)) =>
+      case (S.Match(Nil, ps), VPi(x, Expl, t1, t2)) =>
         val qt1 = ctx.quote1(t1)
         val y = x match
           case DontBind => DoBind(Name("x"))
@@ -697,7 +726,7 @@ object Elaboration extends RetryPostponed:
         val (vscrutcv, vscrutty) = ensureLift(t1)
         val (vrcv, vrty) = ensureLift(t2(VVar1(ctx.lvl)))(nctx)
         unify1(vscrutcv, VVal)
-        val escrut = Left((Splice(Var1(ix0)), vscrutty))
+        val escrut = Left(List((Splice(Var1(ix0)), vscrutty)))
         val ematch = checkMatch(escrut, ps, vrty, vrcv)(nctx)
         Lam1(y, Expl, qt1, quote(ematch))
 
@@ -928,18 +957,18 @@ object Elaboration extends RetryPostponed:
         }
         Infer1(Data(x, ecs), VU0(VVal))
 
-      case S.Match(Some(scrut), ps) =>
-        val cv = ctx.eval1(freshCV())
-        val ty = ctx.eval1(freshMeta(VU0(cv)))
-        val etm = checkMatch(Right(scrut), ps, ty, cv)
-        Infer0(etm, ty, cv)
-      case m @ S.Match(None, _) =>
+      case m @ S.Match(Nil, _) =>
         val cv = ctx.eval1(freshCV())
         val t1 = ctx.eval1(freshMeta(VU0(VVal)))
         val t2 = ctx.eval1(freshMeta(VU0(cv)))
         val fun = VFun(t1, cv, t2)
         val etm = check0(m, fun, VComp)
         Infer0(etm, fun, VComp)
+      case S.Match(scruts, ps) =>
+        val cv = ctx.eval1(freshCV())
+        val ty = ctx.eval1(freshMeta(VU0(cv)))
+        val etm = checkMatch(Right(scruts), ps, ty, cv)
+        Infer0(etm, ty, cv)
 
   // elaboration
   def elaborate(d: S.Def): Unit = d match

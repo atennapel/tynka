@@ -74,8 +74,8 @@ object Syntax:
     case Data(name: Bind, cons: List[DataCon])
     case Con(name: Name, args: List[Tm])
     case Match(
-        scrut: Option[Tm],
-        pats: List[(PosInfo, Pat, Tm)]
+        scrut: List[Tm],
+        pats: List[(PosInfo, List[Pat], Tm)]
     )
 
     case Lift(ty: Ty)
@@ -116,9 +116,9 @@ object Syntax:
       case Con(x, Nil) => s"(con $x)"
       case Con(x, as)  => s"(con $x ${as.mkString(" ")})"
       case Match(scrut, pats) =>
-        s"(match${if scrut.isDefined then s" ${scrut.get}" else ""}${
+        s"(match${if scrut.isEmpty then "" else " "}${scrut.mkString(", ")}${
             if pats.isEmpty then "" else " "
-          }${pats.map((_, p, b) => s"| $p. $b").mkString(" ")})"
+          }${pats.map((_, ps, b) => s"| ${ps.mkString(", ")}. $b").mkString(" ")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"
       case Splice(tm)    => s"$$$tm"

@@ -50,7 +50,7 @@ object Parser:
         ";",
         "\\",
         ".",
-        // ",",
+        ",",
         "->",
         "<-",
         // "**",
@@ -229,13 +229,14 @@ object Parser:
         )*
       )
 
-    private lazy val clauseP: Parsley[(PosInfo, Pat, Tm)] =
-      ("|" *> pos <~> patP <~> "." *> tm).map { case ((pos, pat), tm) =>
-        (pos, pat, tm)
+    private lazy val clauseP: Parsley[(PosInfo, List[Pat], Tm)] =
+      ("|" *> pos <~> sepBy(patP, ",") <~> "." *> tm).map {
+        case ((pos, pats), tm) =>
+          (pos, pats, tm)
       }
 
     private lazy val matchP: Parsley[Tm] = positioned(
-      ("match" *> option(tm) <~> many(clauseP)).map(Match.apply)
+      ("match" *> sepBy(tm, ",") <~> many(clauseP)).map(Match.apply)
     )
 
     private lazy val ifP: Parsley[Tm] =
@@ -244,10 +245,10 @@ object Parser:
           .map { case ((c, (pt, t)), (pf, f)) =>
             val x = Name("b")
             Match(
-              Some(Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x))),
+              List(Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x))),
               List(
-                (pt, PCon(Name("True"), Nil), t),
-                (pf, PCon(Name("False"), Nil), f)
+                (pt, List(PCon(Name("True"), Nil)), t),
+                (pf, List(PCon(Name("False"), Nil)), f)
               )
             )
           }

@@ -31,9 +31,11 @@ TODO:
 - [ ] Pattern matching
   - [x] Pattern elaboration
   - [x] Operators in patterns
-  - [ ] Multi-match
+  - [x] Multi-match
+  - [ ] As-patterns
   - [ ] Guards
   - [ ] Or-patterns
+  - [ ] Consider fat arrow
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] More postponing (?) (con and match)

@@ -1,6 +1,7 @@
 package core
 
 import common.Common.*
+import scala.annotation.tailrec
 
 object Syntax:
   enum Tm0:
@@ -38,6 +39,11 @@ object Syntax:
             .getOrElse("")})"
       case Splice(tm) => s"$$$tm"
       case Wk10(tm)   => s"$tm"
+
+    def wkN(n: Int) =
+      @tailrec
+      def go(n: Int, t: Tm0): Tm0 = if n == 0 then t else go(n - 1, Wk10(t))
+      go(n, this)
   export Tm0.*
 
   type Ty = Tm1

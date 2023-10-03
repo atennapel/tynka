@@ -97,7 +97,7 @@ object Pretty:
       ns(ix.expose) match
         case DontBind => s"_@${ns.size - ix.expose - 1}"
         case DoBind(x) if ns.take(ix.expose).contains(DoBind(x)) =>
-          s"x@${ns.size - ix.expose - 1}"
+          s"$x@${ns.size - ix.expose - 1}"
         case DoBind(x) => s"$x"
     case Global0(x) => s"$x"
     case Prim0(x)   => s"$x"
@@ -129,7 +129,7 @@ object Pretty:
       ns(ix.expose) match
         case DontBind => s"_@${ns.size - ix.expose - 1}"
         case DoBind(x) if ns.take(ix.expose).contains(DoBind(x)) =>
-          s"x@${ns.size - ix.expose - 1}"
+          s"$x@${ns.size - ix.expose - 1}"
         case DoBind(x) => s"$x"
     case Global1(x) => s"$x"
     case Prim1(x)   => s"$x"
