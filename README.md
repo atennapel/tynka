@@ -30,7 +30,7 @@ TODO:
 - [x] Postponing
 - [ ] Pattern matching
   - [x] Pattern elaboration
-  - [ ] Operators in patterns
+  - [x] Operators in patterns
   - [ ] Multi-match
   - [ ] Guards
   - [ ] Or-patterns

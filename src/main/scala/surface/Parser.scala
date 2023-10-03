@@ -221,7 +221,13 @@ object Parser:
         ("(" *> patP <* ")") <|>
         bind.map(PVar.apply)
 
-    private lazy val patP: Parsley[Pat] = attempt(patConP) <|> patAtomP
+    private lazy val patP: Parsley[Pat] =
+      precedence[Pat](attempt(patConP) <|> patAtomP)(
+        defaultOps(
+          (op, t) => PCon(op, List(t)),
+          (op, l, r) => PCon(op, List(l, r))
+        )*
+      )
 
     private lazy val clauseP: Parsley[(PosInfo, Pat, Tm)] =
       ("|" *> pos <~> patP <~> "." *> tm).map { case ((pos, pat), tm) =>
@@ -348,18 +354,9 @@ object Parser:
 
     private lazy val app: Parsley[Tm] =
       precedence[Tm](appAtom <|> lam)(
-        ops(
-          "`@#?,.",
-          "*/%",
-          "+-",
-          ":",
-          "=!",
-          "<>",
-          "&",
-          "^",
-          "|",
-          "$",
-          "~"
+        defaultOps(
+          (op, t) => App(Var(op), t, ArgIcit(Expl)),
+          (op, l, r) => App(App(Var(op), l, ArgIcit(Expl)), r, ArgIcit(Expl))
         )*
       )
 
@@ -409,33 +406,63 @@ object Parser:
         xs.foldRight(b)(Lam(_, i, ty, _))
       }
 
+    // operators
     private def userOpStart(s: String): Parsley[String] =
       userOp0.filter(_.startsWith(s))
 
-    private def opL(o: String): Parsley[InfixL.Op[Tm]] =
+    private def opL[T](
+        o: String,
+        handle: (Name, T, T) => T
+    ): Parsley[InfixL.Op[T]] =
       attempt(userOpStart(o).filterNot(_.endsWith(":"))).map(op =>
-        (l, r) => App(App(Var(Name(op)), l, ArgIcit(Expl)), r, ArgIcit(Expl))
+        (l, r) => handle(Name(op), l, r)
       )
 
-    private def opR(o: String): Parsley[InfixR.Op[Tm]] =
-      attempt(userOpStart(o)).map(op =>
-        (l, r) => App(App(Var(Name(op)), l, ArgIcit(Expl)), r, ArgIcit(Expl))
-      )
+    private def opR[T](
+        o: String,
+        handle: (Name, T, T) => T
+    ): Parsley[InfixR.Op[T]] =
+      attempt(userOpStart(o)).map(op => (l, r) => handle(Name(op), l, r))
 
-    private def opP(o: String): Parsley[Prefix.Op[Tm]] =
-      attempt(userOpStart(o)).map(op =>
-        t => App(Var(Name(op)), t, ArgIcit(Expl))
-      )
+    private def opP[T](
+        o: String,
+        handle: (Name, T) => T
+    ): Parsley[Prefix.Op[T]] =
+      attempt(userOpStart(o)).map(op => t => handle(Name(op), t))
 
-    private def opLevel(s: String): List[Ops[Tm, Tm]] =
+    private def opLevel[T](
+        s: String,
+        prefix: (Name, T) => T,
+        infix: (Name, T, T) => T
+    ): List[Ops[T, T]] =
       val chars = s.toList
       List(
-        Ops(Prefix)(chars.map(c => opP(c.toString))*),
-        Ops(InfixL)(chars.map(c => opL(c.toString))*),
-        Ops(InfixR)(chars.map(c => opR(c.toString))*)
+        Ops(Prefix)(chars.map(c => opP(c.toString, prefix))*),
+        Ops(InfixL)(chars.map(c => opL(c.toString, infix))*),
+        Ops(InfixR)(chars.map(c => opR(c.toString, infix))*)
       )
 
-    private def ops(ss: String*): List[Ops[Tm, Tm]] = ss.flatMap(opLevel).toList
+    private def ops[T](prefix: (Name, T) => T, infix: (Name, T, T) => T)(
+        ss: String*
+    ): List[Ops[T, T]] = ss.flatMap(s => opLevel(s, prefix, infix)).toList
+
+    private def defaultOps[T](
+        prefix: (Name, T) => T,
+        infix: (Name, T, T) => T
+    ): List[Ops[T, T]] =
+      ops(prefix, infix)(
+        "`@#?,.",
+        "*/%",
+        "+-",
+        ":",
+        "=!",
+        "<>",
+        "&",
+        "^",
+        "|",
+        "$",
+        "~"
+      )
 
     // definitions
     lazy val defs: Parsley[Defs] = many(defP).map(Defs.apply)
