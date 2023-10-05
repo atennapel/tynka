@@ -28,14 +28,14 @@ TODO:
   - [x] Case split
   - [x] Match without scrutinee
 - [x] Postponing
-- [ ] Pattern matching
+- [x] Pattern matching
   - [x] Pattern elaboration
   - [x] Operators in patterns
   - [x] Multi-match
-  - [ ] As-patterns
-  - [ ] Guards
-  - [ ] Or-patterns
-  - [ ] Consider fat arrow
+  - [x] As-patterns
+- [ ] Pattern guards
+- [ ] Or-patterns
+- [ ] Pattern lambdas, lets and binds
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] More postponing (?) (con and match)

@@ -29,6 +29,7 @@ object Main:
 
       println()
 
+      /*
       getMetas().foreach((m, t, v) =>
         v match
           case None => println(s"?$m : ${ctx.pretty1(t)}")
@@ -50,6 +51,7 @@ object Main:
       )
 
       println()
+       */
 
       allGlobals.foreach {
         case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>

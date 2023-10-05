@@ -123,6 +123,7 @@ object Pretty:
     case Splice(t) => s"$$${prettyParen1(t)}"
 
     case Wk10(tm) => pretty0(tm)(ns.tail)
+    case Wk00(tm) => pretty0(tm)(ns.tail)
 
   def pretty1(tm: Tm1)(implicit ns: List[Bind]): String = tm match
     case Var1(ix) =>

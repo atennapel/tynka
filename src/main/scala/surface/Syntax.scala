@@ -41,12 +41,14 @@ object Syntax:
 
   enum Pat:
     case PVar(name: Bind)
-    case PCon(con: Name, args: List[Pat])
+    case PCon(con: Name, name: Bind, args: List[Pat])
 
     override def toString: String = this match
-      case PVar(x)       => s"$x"
-      case PCon(c, Nil)  => s"$c"
-      case PCon(c, args) => s"($c ${args.mkString(" ")})"
+      case PVar(x)                  => s"$x"
+      case PCon(c, DoBind(x), Nil)  => s"$x @ $c"
+      case PCon(c, DontBind, Nil)   => s"$c"
+      case PCon(c, DoBind(x), args) => s"($x @ $c ${args.mkString(" ")})"
+      case PCon(c, DontBind, args)  => s"($c ${args.mkString(" ")})"
   export Pat.*
 
   type Ty = Tm

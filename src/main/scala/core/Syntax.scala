@@ -20,6 +20,7 @@ object Syntax:
     )
     case Splice(tm: Tm1)
     case Wk10(tm: Tm0)
+    case Wk00(tm: Tm0)
 
     override def toString: String = this match
       case Var0(ix)            => s"'$ix"
@@ -39,10 +40,11 @@ object Syntax:
             .getOrElse("")})"
       case Splice(tm) => s"$$$tm"
       case Wk10(tm)   => s"$tm"
+      case Wk00(tm)   => s"$tm"
 
-    def wkN(n: Int) =
+    def wk0N(n: Int) =
       @tailrec
-      def go(n: Int, t: Tm0): Tm0 = if n == 0 then t else go(n - 1, Wk10(t))
+      def go(n: Int, t: Tm0): Tm0 = if n == 0 then t else go(n - 1, Wk00(t))
       go(n, this)
   export Tm0.*
 

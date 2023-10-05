@@ -324,19 +324,15 @@ object Elaboration extends RetryPostponed:
   // pattern matching
   private enum Pat:
     case PVar(x: Bind)
-    case PCon(cx: Name, args: List[S.Pat])
+    case PCon(cx: Name, x: Bind, args: List[S.Pat])
   import Pat.*
   private final case class Clause(
       pos: PosInfo,
       vars: Map[Lvl, Pat],
       body: (List[(Name, VTy, Lvl)], S.Tm)
   )
-  private final case class VarInfo(
-      ty: VTy,
-      matchedCons: Set[Name],
-      lifted: Boolean
-  ):
-    def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx, lifted)
+  private final case class VarInfo(ty: VTy, matchedCons: Set[Name]):
+    def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx)
   private enum CaseTree:
     case Test(
         x: Lvl,
@@ -379,19 +375,16 @@ object Elaboration extends RetryPostponed:
         val lams = args.foldRight(body) { case ((x, t), b) => Lam0(x, t, b) }
         (cx, lams)
       }
-      val v =
-        if varInfo.get(x).map(_.lifted).getOrElse(false) then
-          Splice(Var1(x.toIx(ctx.lvl)))
-        else Var0(x.toIx(ctx.lvl))
-      Match(v, cases, other)
+      Match(Var0(x.toIx(ctx.lvl)), cases, other)
 
   private def normalizePat(ty: VTy, p: S.Pat)(implicit ctx: Ctx): Pat = p match
-    case S.PCon(cx, args) => PCon(cx, args)
-    case S.PVar(DontBind) => PVar(DontBind)
+    case S.PCon(cx, x, args) => PCon(cx, x, args)
+    case S.PVar(DontBind)    => PVar(DontBind)
     case S.PVar(b @ DoBind(x)) =>
       forceAll1(ty) match
         case VData(_, cs) =>
-          if cs.tm.exists(c => c.name == x && c.args.isEmpty) then PCon(x, Nil)
+          if cs.tm.exists(c => c.name == x && c.args.isEmpty) then
+            PCon(x, DontBind, Nil)
           else PVar(b)
         case _ => PVar(b)
 
@@ -424,17 +417,15 @@ object Elaboration extends RetryPostponed:
 
     val (nctx, varInfo, lets) =
       escruts.zipWithIndex.foldLeft(
-        (ctx, Map.empty[Lvl, VarInfo], List.empty[(Name, Ty, Tm1)])
+        (ctx, Map.empty[Lvl, VarInfo], List.empty[(Name, Ty, Tm0)])
       ) { case ((ctx, varInfo, lets), ((escrut, vscrutty), i)) =>
         val x = Name(s"scrut$i")
         val scrutty = ctx.quote1(vscrutty)
-        val qescrut = quote(escrut.wkN(i))
-        val lty = Lift(Val, scrutty)
-        val vqescrut = ctx.eval1(qescrut)
+        val qescrut = escrut.wk0N(i)
         (
-          ctx.defineInsert(x, lty, qescrut, vqescrut),
-          varInfo + (ctx.lvl -> VarInfo(vscrutty, Set.empty, true)),
-          lets ++ List((x, lty, qescrut))
+          ctx.insert0(DoBind(x), scrutty, Val),
+          varInfo + (ctx.lvl -> VarInfo(vscrutty, Set.empty)),
+          lets ++ List((x, scrutty, qescrut))
         )
       }
     val tree = genMatch(
@@ -455,9 +446,9 @@ object Elaboration extends RetryPostponed:
       vrcv
     )(nctx, varInfo)
     val ctree = compileTree(tree)(nctx, varInfo)
-    val res = splice(
-      lets.foldRight(quote(ctree)) { case ((x, ty, v), b) => Let1(x, ty, v, b) }
-    )
+    val res = lets.foldRight(ctree) { case ((x, ty, v), b) =>
+      Let0(x, ty, v, b)
+    }
     res
 
   private def simplifyClause(c: Clause)(implicit
@@ -465,17 +456,23 @@ object Elaboration extends RetryPostponed:
   ): Clause =
     c match
       case Clause(pos, vars, (lets, tm)) =>
-        def go(p: (Lvl, Pat)): Either[(Bind, Lvl), (Lvl, Pat)] = p match
-          case (lvl, PVar(x)) => Left((x, lvl))
-          case (lvl, p)       => Right((lvl, p))
-        val (nlets, rest) = vars.partitionMap(go)
+        val nlets = mutable.ArrayBuffer.empty[(Name, VTy, Lvl)]
+        val rest = vars.flatMap { (lvl, p) =>
+          p match
+            case PVar(DontBind) => None
+            case PVar(DoBind(x)) =>
+              nlets += ((x, varInfo(lvl).ty, lvl))
+              None
+            case PCon(cx, DontBind, args) => Some(lvl -> p)
+            case PCon(cx, DoBind(x), args) =>
+              nlets += ((x, varInfo(lvl).ty, lvl))
+              Some(lvl -> PCon(cx, DontBind, args))
+        }
         Clause(
           pos,
           rest.toMap,
           (
-            lets ++ nlets.collect { case (DoBind(x), lvl) =>
-              (x, varInfo(lvl).ty, lvl)
-            },
+            lets ++ nlets,
             tm
           )
         )
@@ -530,7 +527,7 @@ object Elaboration extends RetryPostponed:
     forceAll1(dty) match
       case VData(dx, cs) =>
         val cons = cs.tm.map(_.name).toSet
-        val PCon(cx, args) = pats(branchVar): @unchecked
+        val PCon(cx, _, args) = pats(branchVar): @unchecked
         if info.matchedCons.contains(cx) then
           error(s"already matched on $cx of ${ctx.pretty1(dty)}")
         val DataCon(_, dts) = cs.tm
@@ -556,13 +553,13 @@ object Elaboration extends RetryPostponed:
             }
         val newVarInfo =
           vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, ty)) =>
-            vars + (lvl -> VarInfo(ty, Set.empty, false))
+            vars + (lvl -> VarInfo(ty, Set.empty))
           }
         val yes = mutable.ArrayBuffer.empty[Clause]
         val no = mutable.ArrayBuffer.empty[Clause]
         clauses.foreach { case c @ Clause(pos, pats, body) =>
           pats.get(branchVar) match {
-            case Some(PCon(cx2, args2)) =>
+            case Some(PCon(cx2, _, args2)) =>
               if cx == cx2 then {
                 if args.size != args2.size then
                   error("invalid constructor arity")

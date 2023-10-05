@@ -58,7 +58,8 @@ object Parser:
         "^",
         "`",
         "$",
-        "|"
+        "|",
+        "@"
       ),
       identStart = Predicate(c => c.isLetter || c == '_'),
       identLetter = Predicate(c =>
@@ -213,19 +214,30 @@ object Parser:
       }
     )
 
-    private lazy val patConP: Parsley[Pat] =
-      (identOrOp <~> some(patAtomP)).map(PCon.apply)
+    // p := b | c p+ | x @ c p+ | (p) | x @ (p)
+
+    private def addPatAs(x: Name, p: Pat): Parsley[Pat] =
+      p match
+        case PCon(con, DontBind, args) => pure(PCon(con, DoBind(x), args))
+        case _                         => empty
 
     private lazy val patAtomP: Parsley[Pat] =
-      attempt("(" *> userOp.map(x => PVar(DoBind(x))) <* ")") <|>
-        ("(" *> patP <* ")") <|>
+      ("(" *> patP <* ")") <|>
+        attempt(
+          identOrOp <~> "@" *> (("(" *> patP <* ")") <|> (identOrOp <~> some(
+            patAtomP
+          )).map((c, args) => PCon(c, DontBind, args)))
+        ).flatMap(addPatAs) <|>
+        attempt(identOrOp <~> some(patAtomP)).map((c, args) =>
+          PCon(c, DontBind, args)
+        ) <|>
         bind.map(PVar.apply)
 
     private lazy val patP: Parsley[Pat] =
-      precedence[Pat](attempt(patConP) <|> patAtomP)(
+      precedence[Pat](patAtomP)(
         defaultOps(
-          (op, t) => PCon(op, List(t)),
-          (op, l, r) => PCon(op, List(l, r))
+          (op, t) => PCon(op, DontBind, List(t)),
+          (op, l, r) => PCon(op, DontBind, List(l, r))
         )*
       )
 
@@ -247,8 +259,8 @@ object Parser:
             Match(
               List(Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x))),
               List(
-                (pt, List(PCon(Name("True"), Nil)), t),
-                (pf, List(PCon(Name("False"), Nil)), f)
+                (pt, List(PCon(Name("True"), DontBind, Nil)), t),
+                (pf, List(PCon(Name("False"), DontBind, Nil)), f)
               )
             )
           }

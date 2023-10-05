@@ -104,6 +104,7 @@ object Evaluation:
         VMatch(eval0(scrut), cs.map((c, t) => (c, eval0(t))), other.map(eval0))
       case Splice(t) => vsplice(eval1(t))
       case Wk10(t)   => eval0(t)(env.wk1)
+      case Wk00(t)   => eval0(t)(env.wk0)
 
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
