@@ -241,11 +241,11 @@ object Parser:
         )*
       )
 
-    private lazy val clauseP: Parsley[(PosInfo, List[Pat], Tm)] =
-      ("|" *> pos <~> sepBy(patP, ",") <~> "." *> tm).map {
-        case ((pos, pats), tm) =>
-          (pos, pats, tm)
-      }
+    private lazy val clauseP: Parsley[(PosInfo, List[Pat], Option[Tm], Tm)] =
+      ("|" *> pos <~> sepBy(patP, ",") <~> option("if" *> tm) <~> "." *> tm)
+        .map { case (((pos, pats), guard), tm) =>
+          (pos, pats, guard, tm)
+        }
 
     private lazy val matchP: Parsley[Tm] = positioned(
       ("match" *> sepBy(tm, ",") <~> many(clauseP)).map(Match.apply)
@@ -259,8 +259,8 @@ object Parser:
             Match(
               List(Let(x, false, true, Some(Var(Name("Bool"))), c, Var(x))),
               List(
-                (pt, List(PCon(Name("True"), DontBind, Nil)), t),
-                (pf, List(PCon(Name("False"), DontBind, Nil)), f)
+                (pt, List(PCon(Name("True"), DontBind, Nil)), None, t),
+                (pf, List(PCon(Name("False"), DontBind, Nil)), None, f)
               )
             )
           }

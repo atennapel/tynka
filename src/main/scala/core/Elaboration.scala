@@ -329,7 +329,9 @@ object Elaboration extends RetryPostponed:
   private final case class Clause(
       pos: PosInfo,
       vars: Map[Lvl, Pat],
-      body: (List[(Name, VTy, Lvl)], S.Tm)
+      lets: List[(Name, VTy, Lvl)],
+      guard: Option[S.Tm],
+      body: S.Tm
   )
   private final case class VarInfo(ty: VTy, matchedCons: Set[Name]):
     def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx)
@@ -342,6 +344,7 @@ object Elaboration extends RetryPostponed:
         no: CaseTree
     )
     case Run(tm: Tm0)
+    case Guard(condition: Tm0, ifTrue: Tm0, ifFalse: CaseTree)
     case Exhausted
   import CaseTree.*
   private enum Choice:
@@ -353,29 +356,33 @@ object Elaboration extends RetryPostponed:
   private def flattenTree(
       lvl: Lvl,
       t: CaseTree
-  ): (List[(Name, (List[(Bind, Ty)], CaseTree))], Option[Tm0]) =
+  ): (List[(Name, (List[(Bind, Ty)], CaseTree))], Option[CaseTree]) =
     t match
       case Test(x, con, lams, yes, no) =>
         val (cons, rest) = flattenTree(x, no)
         ((con, (lams, yes)) :: cons, rest)
-      case Run(tm)   => (Nil, Some(tm))
       case Exhausted => (Nil, None)
-  private def compileTree(
-      t: CaseTree
-  )(implicit ctx: Ctx, varInfo: Map[Lvl, VarInfo]): Tm0 = t match
+      case cs        => (Nil, Some(cs))
+  private def compileTree(t: CaseTree)(implicit ctx: Ctx): Tm0 = t match
     case Exhausted => impossible()
     case Run(tm)   => tm
+    case Guard(cond, ifTrue, ifFalse) =>
+      Match(
+        cond,
+        List(Name("True") -> ifTrue, Name("False") -> compileTree(ifFalse)),
+        None
+      )
     case Test(x, con, args, yes, no) =>
       val (cons, other) = flattenTree(x, t)
       val cases = cons.map { case (cx, (args, yes)) =>
         val yctx = args.foldLeft(ctx) { case (ctx, (x, ty)) =>
           ctx.bind0(x, ty, ctx.eval1(ty), Val, VVal)
         }
-        val body = compileTree(yes)(yctx, varInfo)
+        val body = compileTree(yes)(yctx)
         val lams = args.foldRight(body) { case ((x, t), b) => Lam0(x, t, b) }
         (cx, lams)
       }
-      Match(Var0(x.toIx(ctx.lvl)), cases, other)
+      Match(Var0(x.toIx(ctx.lvl)), cases, other.map(compileTree(_)))
 
   private def normalizePat(ty: VTy, p: S.Pat)(implicit ctx: Ctx): Pat = p match
     case S.PCon(cx, x, args) => PCon(cx, x, args)
@@ -390,7 +397,7 @@ object Elaboration extends RetryPostponed:
 
   private def checkMatch(
       scrut: Either[List[(Tm0, VTy)], List[S.Tm]],
-      pats: List[(PosInfo, List[S.Pat], S.Tm)],
+      pats: List[(PosInfo, List[S.Pat], Option[S.Tm], S.Tm)],
       vrty: VTy,
       vrcv: VTy
   )(implicit ctx: Ctx): Tm0 =
@@ -429,7 +436,7 @@ object Elaboration extends RetryPostponed:
         )
       }
     val tree = genMatch(
-      pats.map((pos, ps, tm) =>
+      pats.map((pos, ps, guard, tm) =>
         if ps.size != escruts.size then
           error(s"pattern amount mismatch")(ctx.enter(pos))
         val norm =
@@ -439,13 +446,15 @@ object Elaboration extends RetryPostponed:
         Clause(
           pos,
           norm.toMap,
-          (Nil, tm)
+          Nil,
+          guard,
+          tm
         )
       ),
       vrty,
       vrcv
     )(nctx, varInfo)
-    val ctree = compileTree(tree)(nctx, varInfo)
+    val ctree = compileTree(tree)(nctx)
     val res = lets.foldRight(ctree) { case ((x, ty, v), b) =>
       Let0(x, ty, v, b)
     }
@@ -455,7 +464,7 @@ object Elaboration extends RetryPostponed:
       varInfo: Map[Lvl, VarInfo]
   ): Clause =
     c match
-      case Clause(pos, vars, (lets, tm)) =>
+      case Clause(pos, vars, lets, guard, tm) =>
         val nlets = mutable.ArrayBuffer.empty[(Name, VTy, Lvl)]
         val rest = vars.flatMap { (lvl, p) =>
           p match
@@ -471,10 +480,9 @@ object Elaboration extends RetryPostponed:
         Clause(
           pos,
           rest.toMap,
-          (
-            lets ++ nlets,
-            tm
-          )
+          lets ++ nlets,
+          guard,
+          tm
         )
 
   private def branchingHeuristic(
@@ -482,7 +490,7 @@ object Elaboration extends RetryPostponed:
       clauses: List[Clause]
   ): Lvl =
     pats.keys.maxBy(v =>
-      clauses.count { case Clause(_, ps, _) => ps.contains(v) }
+      clauses.count { case Clause(_, ps, _, _, _) => ps.contains(v) }
     )
 
   private def checkMatchBody(
@@ -511,6 +519,14 @@ object Elaboration extends RetryPostponed:
         Let1(x, Lift(Val, ty), Quote(Var0(lvl.toIx(ctx.lvl + i))), b)
     })
 
+  private val vbool = VData(
+    DontBind,
+    Clos(
+      EEmpty,
+      List(DataCon(Name("False"), Nil), DataCon(Name("True"), Nil))
+    )
+  )
+
   private def genMatch(
       clauses0: List[Clause],
       vrty: VTy,
@@ -518,9 +534,19 @@ object Elaboration extends RetryPostponed:
   )(implicit ctx: Ctx, varInfo: Map[Lvl, VarInfo]): CaseTree =
     if clauses0.isEmpty then impossible()
     val clauses = clauses0.map(simplifyClause)
-    val Clause(pos, pats, body) = clauses.head
+    val Clause(pos, pats, lets, guard, body) = clauses.head
     if pats.isEmpty then
-      return Run(checkMatchBody(body._1, body._2, vrty, vrcv)(ctx.enter(pos)))
+      val nctx = ctx.enter(pos)
+      guard match
+        case None =>
+          return Run(checkMatchBody(lets, body, vrty, vrcv)(nctx))
+        case _ if clauses.tail.isEmpty =>
+          error("non-exhaustive pattern match")(nctx)
+        case Some(g) =>
+          val cond = checkMatchBody(lets, g, vbool, VVal)(nctx)
+          val ifTrue = checkMatchBody(lets, body, vrty, vrcv)(nctx)
+          val ifFalse = genMatch(clauses.tail, vrty, vrcv)
+          return Guard(cond, ifTrue, ifFalse)
     val branchVar = branchingHeuristic(pats, clauses)
     val info = varInfo(branchVar)
     val dty = info.ty
@@ -557,7 +583,7 @@ object Elaboration extends RetryPostponed:
           }
         val yes = mutable.ArrayBuffer.empty[Clause]
         val no = mutable.ArrayBuffer.empty[Clause]
-        clauses.foreach { case c @ Clause(pos, pats, body) =>
+        clauses.foreach { case c @ Clause(pos, pats, lets, guard, body) =>
           pats.get(branchVar) match {
             case Some(PCon(cx2, _, args2)) =>
               if cx == cx2 then {
@@ -569,7 +595,13 @@ object Elaboration extends RetryPostponed:
                   .map { case ((lvl, ty), p) =>
                     lvl -> normalizePat(ty, p)
                   }
-                yes += Clause(pos, pats - branchVar ++ newPats, body)
+                yes += Clause(
+                  pos,
+                  pats - branchVar ++ newPats,
+                  lets,
+                  guard,
+                  body
+                )
               } else no += c
             case None =>
               // TODO: improve duplication, join points or generate functions

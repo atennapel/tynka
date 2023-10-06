@@ -33,10 +33,10 @@ TODO:
   - [x] Operators in patterns
   - [x] Multi-match
   - [x] As-patterns
-- [ ] Pattern guards
-- [ ] Or-patterns
-- [ ] Pattern lambdas, lets and binds
+  - [x] Pattern guards
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] More postponing (?) (con and match)
 - [ ] Join points
+- [ ] Or-patterns
+- [ ] Pattern lambdas, lets and binds

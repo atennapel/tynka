@@ -77,7 +77,7 @@ object Syntax:
     case Con(name: Name, args: List[Tm])
     case Match(
         scrut: List[Tm],
-        pats: List[(PosInfo, List[Pat], Tm)]
+        pats: List[(PosInfo, List[Pat], Option[Tm], Tm)]
     )
 
     case Lift(ty: Ty)
@@ -118,9 +118,10 @@ object Syntax:
       case Con(x, Nil) => s"(con $x)"
       case Con(x, as)  => s"(con $x ${as.mkString(" ")})"
       case Match(scrut, pats) =>
-        s"(match${if scrut.isEmpty then "" else " "}${scrut.mkString(", ")}${
-            if pats.isEmpty then "" else " "
-          }${pats.map((_, ps, b) => s"| ${ps.mkString(", ")}. $b").mkString(" ")})"
+        s"(match${if scrut.isEmpty then "" else " "}${scrut
+            .mkString(", ")}${if pats.isEmpty then "" else " "}${pats
+            .map((_, ps, guard, b) => s"| ${ps.mkString(", ")}${guard.map(g => s" if ${g}").getOrElse("")}. $b")
+            .mkString(" ")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"
       case Splice(tm)    => s"$$$tm"
