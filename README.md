@@ -34,9 +34,9 @@ TODO:
   - [x] Multi-match
   - [x] As-patterns
   - [x] Pattern guards
+- [ ] Multi-match check against pi type
+- [ ] Join points
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
-- [ ] More postponing (?) (con and match)
-- [ ] Join points
 - [ ] Or-patterns
 - [ ] Pattern lambdas, lets and binds

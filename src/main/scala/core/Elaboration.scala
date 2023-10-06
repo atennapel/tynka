@@ -217,6 +217,15 @@ object Elaboration extends RetryPostponed:
         unify1(a, VFun(a2, vbcv2, b2))
         (a2, vbcv2, b2)
 
+  private def ensureFunN(n: Int, a: VTy, acv: VCV)(implicit
+      ctx: Ctx
+  ): (List[VTy], VCV, VTy) =
+    if n == 0 then (Nil, acv, a)
+    else
+      val (t1, cv, t2) = ensureFun(a, acv)
+      val (ps, rcv, rt) = ensureFunN(n - 1, t2, cv)
+      (t1 :: ps, rcv, rt)
+
   private def ensureLift(t: VTy)(implicit ctx: Ctx): (VCV, VTy) =
     forceAll1(t) match
       case VLift(cv, ty) => (cv, ty)
@@ -384,16 +393,17 @@ object Elaboration extends RetryPostponed:
       }
       Match(Var0(x.toIx(ctx.lvl)), cases, other.map(compileTree(_)))
 
-  private def normalizePat(ty: VTy, p: S.Pat)(implicit ctx: Ctx): Pat = p match
-    case S.PCon(cx, x, args) => PCon(cx, x, args)
-    case S.PVar(DontBind)    => PVar(DontBind)
-    case S.PVar(b @ DoBind(x)) =>
-      forceAll1(ty) match
-        case VData(_, cs) =>
-          if cs.tm.exists(c => c.name == x && c.args.isEmpty) then
-            PCon(x, DontBind, Nil)
-          else PVar(b)
-        case _ => PVar(b)
+  private def normalizePat(ty: VTy, p: S.Pat)(implicit ctx: Ctx): Pat =
+    p match
+      case S.PCon(cx, x, args) => PCon(cx, x, args)
+      case S.PVar(DontBind)    => PVar(DontBind)
+      case S.PVar(b @ DoBind(x)) =>
+        forceAll1(ty) match
+          case VData(_, cs) =>
+            if cs.tm.exists(c => c.name == x && c.args.isEmpty) then
+              PCon(x, DontBind, Nil)
+            else PVar(b)
+          case _ => PVar(b)
 
   private def checkMatch(
       scrut: Either[List[(Tm0, VTy)], List[S.Tm]],
@@ -410,6 +420,14 @@ object Elaboration extends RetryPostponed:
           val escrut = check0(scrut, vscrutty, VVal)
           (escrut, vscrutty)
         }
+
+    escruts.foreach { (_, ty) =>
+      forceAll1(ty) match
+        case VFlex(_, _) =>
+          // TODO: postpone check
+          error(s"scrutinee in match with flex type: ${ctx.pretty1(ty)}")
+        case _ =>
+    }
 
     if escruts.isEmpty then impossible()
     if pats.isEmpty then
@@ -677,13 +695,21 @@ object Elaboration extends RetryPostponed:
           case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
 
       case S.Match(Nil, ps) =>
-        val (t1, fcv, t2) = ensureFun(ty, cv)
-        val qt1 = ctx.quote1(t1)
-        val x = DoBind(Name("scrut"))
-        val etm = checkMatch(Left(List((Var0(ix0), t1))), ps, t2, fcv)(
-          ctx.insert0(x, qt1, Val)
-        )
-        Lam0(x, qt1, etm)
+        val size = if ps.isEmpty then 1 else ps.head._2.size
+        val (ts, rcv, rt) = ensureFunN(size, ty, cv)
+        val xs = (0 until size).map(i => DoBind(Name(s"scrut$i")))
+        val scruts =
+          (0 until size).reverse
+            .zip(ts)
+            .map((i, t) => (Var0(mkIx(i)), t))
+            .toList
+        val (innerctx, qts) = xs.zip(ts).foldLeft((ctx, List.empty[Ty])) {
+          case ((ctx, qts), (x, t)) =>
+            val qt = ctx.quote1(t)
+            (ctx.insert0(x, qt, Val), qts ++ List(qt))
+        }
+        val etm = checkMatch(Left(scruts), ps, rt, rcv)(innerctx)
+        xs.zip(qts).foldRight(etm) { case ((x, t), b) => Lam0(x, t, b) }
       case S.Match(scruts, ps) =>
         checkMatch(Right(scruts), ps, ty, cv)
 
@@ -747,17 +773,28 @@ object Elaboration extends RetryPostponed:
         Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
 
       case (S.Match(Nil, ps), VPi(x, Expl, t1, t2)) =>
-        val qt1 = ctx.quote1(t1)
-        val y = x match
-          case DontBind => DoBind(Name("x"))
-          case x        => x
-        val nctx = ctx.insert1(y, qt1)
+        // TODO: handle multi-match
         val (vscrutcv, vscrutty) = ensureLift(t1)
-        val (vrcv, vrty) = ensureLift(t2(VVar1(ctx.lvl)))(nctx)
-        unify1(vscrutcv, VVal)
-        val escrut = Left(List((Splice(Var1(ix0)), vscrutty)))
-        val ematch = checkMatch(escrut, ps, vrty, vrcv)(nctx)
-        Lam1(y, Expl, qt1, quote(ematch))
+        forceAll1(vscrutty) match
+          case VFlex(m, _) =>
+            val placeholder = freshMetaId(ty)
+            val pid = newPostponed(PECheck1(ctx, tm, ty, placeholder))
+            addBlocking(pid, m)
+            debug(
+              s"postpone ?p$pid as ?$placeholder: check1 $tm : ${ctx.pretty1(ty)}"
+            )
+            PostponedCheck1(pid)
+          case _ =>
+            val qt1 = ctx.quote1(t1)
+            val y = x match
+              case DontBind => DoBind(Name("x"))
+              case x        => x
+            val nctx = ctx.insert1(y, qt1)
+            val (vrcv, vrty) = ensureLift(t2(VVar1(ctx.lvl)))(nctx)
+            unify1(vscrutcv, VVal)
+            val escrut = Left(List((Splice(Var1(ix0)), vscrutty)))
+            val ematch = checkMatch(escrut, ps, vrty, vrcv)(nctx)
+            Lam1(y, Expl, qt1, quote(ematch))
 
       case (S.Pi(DontBind, Expl, t1, t2), VU0(cv)) =>
         unify1(cv, VComp)
@@ -788,7 +825,7 @@ object Elaboration extends RetryPostponed:
 
       case (S.Hole(_), _) => freshMeta(ty)
 
-      case (tm, VFlex(m, sp)) =>
+      case (tm, VFlex(m, _)) =>
         val placeholder = freshMetaId(ty)
         val pid = newPostponed(PECheck1(ctx, tm, ty, placeholder))
         addBlocking(pid, m)
@@ -986,7 +1023,9 @@ object Elaboration extends RetryPostponed:
         }
         Infer1(Data(x, ecs), VU0(VVal))
 
+      // TODO: add possibility for postponing or else this is hopeless
       case m @ S.Match(Nil, _) =>
+        // TODO: multi-match
         val cv = ctx.eval1(freshCV())
         val t1 = ctx.eval1(freshMeta(VU0(VVal)))
         val t2 = ctx.eval1(freshMeta(VU0(cv)))
