@@ -671,6 +671,7 @@ object Elaboration extends RetryPostponed:
             val ety = tyAnnot(ma, VU0(vcv2))
             (ety, cv2, vcv2)
         val vty = ctx.eval1(ety)
+        if rec then ensureFun(vty, vcv2)
         val nctx = ctx.bind0(DoBind(x), ety, vty, cv2, vcv2)
         val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
         val eb = check0(b, ty, cv)(nctx)
@@ -918,6 +919,7 @@ object Elaboration extends RetryPostponed:
             val ety = tyAnnot(mty, VU0(vcv2))
             (ety, cv2, vcv2)
         val vty = ctx.eval1(ety)
+        if rec then ensureFun(vty, vcv2)
         val nctx = ctx.bind0(DoBind(x), ety, vty, cv2, vcv2)
         val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
         val (eb, rty, rcv) = infer0(b)(nctx)
@@ -1067,6 +1069,7 @@ object Elaboration extends RetryPostponed:
               case None      => freshMeta(VU0(vcv))
               case Some(sty) => check1(sty, VU0(vcv))
             val vty = ctx.eval1(ety)
+            if rec then ensureFun(vty, vcv)
             val ev = check0(v, vty, vcv)(
               if rec then ctx.bind0(DoBind(x), ety, vty, cv, vcv) else ctx
             )
