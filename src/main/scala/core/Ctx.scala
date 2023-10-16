@@ -12,7 +12,11 @@ import Evaluation.{
   quote0 as quote0_,
   eval0 as eval0_
 }
-import Pretty.{pretty0 as pretty0_, pretty1 as pretty1_}
+import Pretty.{
+  pretty0 as pretty0_,
+  pretty1 as pretty1_,
+  prettyParen1 as prettyParen1_
+}
 
 import scala.annotation.tailrec
 
@@ -78,6 +82,9 @@ final case class Ctx(
       pos
     )
 
+  def bindDataParams(ps: List[Name]): Ctx =
+    ps.foldLeft(this)((ctx, x) => ctx.bind1(DoBind(x), U0(Val), VU0(VVal)))
+
   def define(x: Name, ty: Ty, vty: VTy, v: Tm1, vv: Val1): Ctx =
     Ctx(
       lvl + 1,
@@ -131,10 +138,10 @@ final case class Ctx(
     pretty1_(quote1_(v, q)(lvl))(binds)
   def pretty0(v: Val0, q: QuoteOption = UnfoldMetas): String =
     pretty0_(quote0_(v, q)(lvl))(binds)
-  def pretty1(v: Tm1): String =
-    pretty1_(v)(binds)
-  def pretty0(v: Tm0): String =
-    pretty0_(v)(binds)
+  def pretty1(v: Tm1): String = pretty1_(v)(binds)
+  def pretty0(v: Tm0): String = pretty0_(v)(binds)
+
+  def prettyParen1(v: Tm1): String = prettyParen1_(v)(binds)
 
 object Ctx:
   def empty(pos: PosInfo) = Ctx(lvl0, EEmpty, LEmpty, Nil, Nil, Map.empty, pos)

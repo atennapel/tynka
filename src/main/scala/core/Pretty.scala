@@ -50,7 +50,7 @@ object Pretty:
     s"\\${go(tm, true)}"
 
   @tailrec
-  private def prettyParen0(tm: Tm0, app: Boolean = false)(implicit
+  def prettyParen0(tm: Tm0, app: Boolean = false)(implicit
       ns: List[Bind]
   ): String =
     tm match
@@ -58,12 +58,14 @@ object Pretty:
       case Global0(_)        => pretty0(tm)
       case Prim0(_)          => pretty0(tm)
       case Splice(_)         => pretty0(tm)
+      case Con(_, Nil)       => pretty0(tm)
       case App0(_, _) if app => pretty0(tm)
+      case Con(_, _) if app  => pretty0(tm)
       case Wk10(tm)          => prettyParen0(tm, app)(ns.tail)
       case _                 => s"(${pretty0(tm)})"
 
   @tailrec
-  private def prettyParen1(tm: Tm1, app: Boolean = false)(implicit
+  def prettyParen1(tm: Tm1, app: Boolean = false)(implicit
       ns: List[Bind]
   ): String =
     tm match
@@ -75,8 +77,10 @@ object Pretty:
       case Lift(_, _)           => pretty1(tm)
       case Quote(_)             => pretty1(tm)
       case AppPruning(_, _)     => pretty1(tm)
+      case TCon(_, Nil)         => pretty1(tm)
       case App1(_, _, _) if app => pretty1(tm)
       case MetaApp(_, _) if app => pretty1(tm)
+      case TCon(_, _) if app    => pretty1(tm)
       case U0(_)                => pretty1(tm)
       case U1                   => pretty1(tm)
       case CV1                  => pretty1(tm)
@@ -109,9 +113,8 @@ object Pretty:
     case Lam0(_, _, _) => prettyLam0(tm)
     case App0(_, _)    => prettyApp0(tm)
 
-    case Con(x, Nil) => s"con $x"
-    case Con(x, args) =>
-      s"con $x ${args.map(a => prettyParen0(a)).mkString(" ")}"
+    case Con(x, Nil)  => s"$x"
+    case Con(x, args) => s"$x ${args.map(a => prettyParen0(a)).mkString(" ")}"
 
     case Match(scrut, cs, other) =>
       s"match ${prettyParen0(scrut, true)}${if cs.isEmpty then "" else " "}${cs
@@ -151,16 +154,8 @@ object Pretty:
     case App1(_, _, _)    => prettyApp1(tm)
     case MetaApp(_, _)    => prettyApp1(tm)
 
-    case Data(x, Nil) => s"data $x."
-    case Data(x, cs) =>
-      def goCon(c: DataCon): String = c match
-        case DataCon(y, Nil) => s"$y"
-        case DataCon(y, as) =>
-          def goArg(a: (Bind, Ty)): String = a._1 match
-            case DontBind   => s"${prettyParen1(a._2)(x :: ns)}"
-            case DoBind(xa) => s"($xa : ${pretty1(a._2)(x :: ns)})"
-          s"$y ${as.map(goArg).mkString(" ")}"
-      s"data $x. ${cs.map(goCon).mkString(" | ")}"
+    case TCon(x, Nil) => s"$x"
+    case TCon(x, ps)  => s"$x ${ps.map(a => prettyParen1(a)).mkString(" ")}"
 
     case Lift(_, t) => s"^${prettyParen1(t)}"
     case Quote(t)   => s"`${prettyParen0(t)}"

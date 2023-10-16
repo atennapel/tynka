@@ -8,6 +8,15 @@ object Syntax:
     override def toString: String = defs.mkString("\n")
     def toList: List[Def] = defs
 
+  final case class DataCon(pos: PosInfo, name: Name, args: List[(Bind, Ty)]):
+    override def toString: String = this match
+      case DataCon(_, x, Nil) => s"$x"
+      case DataCon(_, x, as) =>
+        def goArg(a: (Bind, Ty)): String = a._1 match
+          case DontBind  => s"${a._2}"
+          case DoBind(x) => s"($x : ${a._2})"
+        s"$x ${as.map(goArg).mkString(" ")}"
+
   enum Def:
     case DDef(
         pos: PosInfo,
@@ -17,27 +26,28 @@ object Syntax:
         ty: Option[Ty],
         value: Tm
     )
+    case DData(
+        pos: PosInfo,
+        name: Name,
+        ps: List[Name],
+        cs: List[DataCon]
+    )
 
     override def toString: String = this match
       case DDef(_, x, rec, m, Some(t), v) =>
         s"def ${if rec then "rec " else ""}$x : $t ${if m then "" else ":"}= $v"
       case DDef(_, x, rec, m, None, v) =>
         s"def ${if rec then "rec " else ""}$x ${if m then "" else ":"}= $v"
+      case DData(_, x, ps, Nil) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
+      case DData(_, x, ps, cs) =>
+        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs.mkString(" | ")}"
   export Def.*
 
   enum ArgInfo:
     case ArgNamed(name: Name)
     case ArgIcit(icit: Icit)
   export ArgInfo.*
-
-  final case class DataCon(pos: PosInfo, name: Name, args: List[(Bind, Ty)]):
-    override def toString: String = this match
-      case DataCon(_, x, Nil) => s"$x"
-      case DataCon(_, x, as) =>
-        def goArg(a: (Bind, Ty)): String = a._1 match
-          case DontBind  => s"${a._2}"
-          case DoBind(x) => s"($x : ${a._2})"
-        s"$x ${as.map(goArg).mkString(" ")}"
 
   enum Pat:
     case PVar(name: Bind)
@@ -73,8 +83,6 @@ object Syntax:
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
 
-    case Data(name: Bind, cons: List[DataCon])
-    case Con(name: Name, args: List[Tm])
     case Match(
         scrut: List[Tm],
         pats: List[(PosInfo, List[Pat], Option[Tm], Tm)]
@@ -113,10 +121,6 @@ object Syntax:
       case App(fn, arg, ArgIcit(Expl)) => s"($fn $arg)"
       case App(fn, arg, ArgIcit(Impl)) => s"($fn ${Impl.wrap(arg)})"
       case App(fn, arg, ArgNamed(x))   => s"($fn ${Impl.wrap(s"$x = $arg")})"
-      case Data(x, Nil)                => s"(data $x.)"
-      case Data(x, cs) => s"(data $x. ${cs.map(_.toString).mkString(" | ")})"
-      case Con(x, Nil) => s"(con $x)"
-      case Con(x, as)  => s"(con $x ${as.mkString(" ")})"
       case Match(scrut, pats) =>
         s"(match${if scrut.isEmpty then "" else " "}${scrut
             .mkString(", ")}${if pats.isEmpty then "" else " "}${pats

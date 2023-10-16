@@ -31,6 +31,8 @@ object Value:
       case E0(env, _) => env
       case _          => impossible()
   export Env.*
+  object Env:
+    def apply(vs: List[Val1]): Env = vs.foldLeft(EEmpty)(E1.apply)
 
   type VTy = Val1
   type VCV = VTy
@@ -101,7 +103,7 @@ object Value:
     case VMetaPi(meta: Boolean, ty: VTy, body: Clos[S.Ty])
     case VMetaLam(meta: Boolean, body: Clos[S.Tm1])
 
-    case VData(name: Bind, cs: Clos[List[S.DataCon]])
+    case VTCon(name: Name, ps: List[Val1])
 
     case VU0(cv: VCV)
     case VU1

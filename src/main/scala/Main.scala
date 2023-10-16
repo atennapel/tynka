@@ -2,6 +2,7 @@ import surface.Parser.defsParser
 import common.Common.*
 import common.Debug.*
 import core.Elaboration.{elaborate, ElaborateError}
+import core.Syntax.*
 import core.Value.*
 import core.Evaluation.*
 import core.Metas.*
@@ -59,6 +60,17 @@ object Main:
         case GlobalEntry1(x, tm, ty, vv, vty) =>
           println(
             s"$x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
+          )
+        case GlobalData0(x, Nil, _) => println(s"data $x")
+        case GlobalData0(x, ps, _)  => println(s"data $x ${ps.mkString(" ")}")
+        case GlobalCon0(x, dx, Nil) => println(s"| $x")
+        case GlobalCon0(x, dx, ps) =>
+          val nctx = ctx.bindDataParams(getGlobalData0(dx).params)
+          def showParam(x: Bind, t: Tm1) = x match
+            case DontBind  => nctx.prettyParen1(t)
+            case DoBind(x) => s"($x : ${nctx.pretty1(t)})"
+          println(
+            s"| $x ${ps.map(showParam).mkString(" ")}"
           )
       }
     catch

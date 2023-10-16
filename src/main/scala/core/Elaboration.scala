@@ -13,6 +13,7 @@ import Ctx.*
 import scala.annotation.tailrec
 import scala.collection.mutable
 import surface.Syntax.Pat
+import surface.Syntax.DataCon
 
 object Elaboration extends RetryPostponed:
   private val unification = new Unification(this)
@@ -331,13 +332,9 @@ object Elaboration extends RetryPostponed:
     go(postponedId(0))
 
   // pattern matching
-  private enum Pat:
-    case PVar(x: Bind)
-    case PCon(cx: Name, x: Bind, args: List[S.Pat])
-  import Pat.*
   private final case class Clause(
       pos: PosInfo,
-      vars: Map[Lvl, Pat],
+      vars: Map[Lvl, S.Pat],
       lets: List[(Name, VTy, Lvl)],
       guard: Option[S.Tm],
       body: S.Tm
@@ -393,17 +390,15 @@ object Elaboration extends RetryPostponed:
       }
       Match(Var0(x.toIx(ctx.lvl)), cases, other.map(compileTree(_)))
 
-  private def normalizePat(ty: VTy, p: S.Pat)(implicit ctx: Ctx): Pat =
+  private def normalizePat(p: S.Pat)(implicit ctx: Ctx): S.Pat =
     p match
-      case S.PCon(cx, x, args) => PCon(cx, x, args)
-      case S.PVar(DontBind)    => PVar(DontBind)
+      case S.PCon(cx, x, args) => S.PCon(cx, x, args)
+      case S.PVar(DontBind)    => S.PVar(DontBind)
       case S.PVar(b @ DoBind(x)) =>
-        forceAll1(ty) match
-          case VData(_, cs) =>
-            if cs.tm.exists(c => c.name == x && c.args.isEmpty) then
-              PCon(x, DontBind, Nil)
-            else PVar(b)
-          case _ => PVar(b)
+        getGlobal(x) match
+          case Some(GlobalCon0(_, _, _))  => S.PCon(x, DontBind, Nil)
+          case Some(GlobalData0(_, _, _)) => error(s"datatype in pattern: $x")
+          case _                          => S.PVar(b)
 
   private def checkMatch(
       scrut: Either[List[(Tm0, VTy)], List[S.Tm]],
@@ -433,7 +428,13 @@ object Elaboration extends RetryPostponed:
     if pats.isEmpty then
       escruts.foreach { (escrut, vscrutty) =>
         forceAll1(vscrutty) match
-          case VData(_, cs) if cs.tm.isEmpty =>
+          case VTCon(x, ps) =>
+            val GlobalData0(_, _, cs) = getGlobalData0(x)
+            if cs.isEmpty then ()
+            else
+              error(
+                s"empty match with non-void type: ${ctx.pretty1(vscrutty)}"
+              )
           case _ =>
             error(s"empty match with non-void type: ${ctx.pretty1(vscrutty)}")
       }
@@ -456,10 +457,10 @@ object Elaboration extends RetryPostponed:
     val tree = genMatch(
       pats.map((pos, ps, guard, tm) =>
         if ps.size != escruts.size then
-          error(s"pattern amount mismatch")(ctx.enter(pos))
+          error(s"pattern amount mismatch")(nctx.enter(pos))
         val norm =
           escruts.zip(ps).zipWithIndex.map { case (((_, vscrutty), pat), i) =>
-            (ctx.lvl + i, normalizePat(vscrutty, pat)(ctx.enter(pos)))
+            (ctx.lvl + i, normalizePat(pat)(ctx.enter(pos)))
           }
         Clause(
           pos,
@@ -486,14 +487,14 @@ object Elaboration extends RetryPostponed:
         val nlets = mutable.ArrayBuffer.empty[(Name, VTy, Lvl)]
         val rest = vars.flatMap { (lvl, p) =>
           p match
-            case PVar(DontBind) => None
-            case PVar(DoBind(x)) =>
+            case S.PVar(DontBind) => None
+            case S.PVar(DoBind(x)) =>
               nlets += ((x, varInfo(lvl).ty, lvl))
               None
-            case PCon(cx, DontBind, args) => Some(lvl -> p)
-            case PCon(cx, DoBind(x), args) =>
+            case S.PCon(cx, DontBind, args) => Some(lvl -> p)
+            case S.PCon(cx, DoBind(x), args) =>
               nlets += ((x, varInfo(lvl).ty, lvl))
-              Some(lvl -> PCon(cx, DontBind, args))
+              Some(lvl -> S.PCon(cx, DontBind, args))
         }
         Clause(
           pos,
@@ -537,13 +538,7 @@ object Elaboration extends RetryPostponed:
         Let1(x, Lift(Val, ty), Quote(Var0(lvl.toIx(ctx.lvl + i))), b)
     })
 
-  private val vbool = VData(
-    DontBind,
-    Clos(
-      EEmpty,
-      List(DataCon(Name("False"), Nil), DataCon(Name("True"), Nil))
-    )
-  )
+  private val vbool = VTCon(Name("Bool"), Nil)
 
   private def genMatch(
       clauses0: List[Clause],
@@ -569,19 +564,18 @@ object Elaboration extends RetryPostponed:
     val info = varInfo(branchVar)
     val dty = info.ty
     forceAll1(dty) match
-      case VData(dx, cs) =>
-        val cons = cs.tm.map(_.name).toSet
-        val PCon(cx, _, args) = pats(branchVar): @unchecked
+      case VTCon(dx, dpas) =>
+        val GlobalData0(_, dps, csl) = getGlobalData0(dx)
+        val cons = csl.toSet
+        val S.PCon(cx, _, args) = pats(branchVar): @unchecked
         if info.matchedCons.contains(cx) then
           error(s"already matched on $cx of ${ctx.pretty1(dty)}")
-        val DataCon(_, dts) = cs.tm
-          .find(_.name == cx)
-          .getOrElse(
-            error(s"pattern $cx does not match type ${ctx.pretty1(dty)}")
-          )
+        if !cons.contains(cx) then
+          error(s"pattern $cx does not match type ${ctx.pretty1(dty)}")
+        val GlobalCon0(_, _, dts) = getGlobalCon0(cx)
         if dts.size != args.size then error(s"pattern $cx arity mismatch")
-        val ts = dts.map((_, t) => eval1(t)(E1(cs.env, dty)))
-        val nargs = ts.zip(args).map(normalizePat)
+        val ts = dts.map((_, t) => eval1(t)(Env(dpas)))
+        val nargs = args.map(normalizePat)
         val vars = (0 until args.size).map(i => ctx.lvl + i).toList
         val (nctx, lams) =
           nargs
@@ -590,8 +584,8 @@ object Elaboration extends RetryPostponed:
             .foldLeft((ctx, List.empty[(Bind, Ty)])) {
               case ((ctx, lams), ((p, ty), i)) =>
                 val x = p match
-                  case PVar(b @ DoBind(x)) => b
-                  case _                   => DoBind(Name(s"x$i"))
+                  case S.PVar(b @ DoBind(x)) => b
+                  case _                     => DoBind(Name(s"x$i"))
                 val qty = ctx.quote1(ty)
                 (ctx.insert0(x, qty, Val), lams ++ List((x, qty)))
             }
@@ -603,7 +597,7 @@ object Elaboration extends RetryPostponed:
         val no = mutable.ArrayBuffer.empty[Clause]
         clauses.foreach { case c @ Clause(pos, pats, lets, guard, body) =>
           pats.get(branchVar) match {
-            case Some(PCon(cx2, _, args2)) =>
+            case Some(S.PCon(cx2, _, args2)) =>
               if cx == cx2 then {
                 if args.size != args2.size then
                   error("invalid constructor arity")
@@ -611,7 +605,7 @@ object Elaboration extends RetryPostponed:
                   .zip(ts)
                   .zip(args2)
                   .map { case ((lvl, ty), p) =>
-                    lvl -> normalizePat(ty, p)
+                    lvl -> normalizePat(p)
                   }
                 yes += Clause(
                   pos,
@@ -676,24 +670,6 @@ object Elaboration extends RetryPostponed:
         val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
         val eb = check0(b, ty, cv)(nctx)
         if rec then LetRec(x, ety, ev, eb) else Let0(x, ety, ev, eb)
-
-      case S.Con(x, args) =>
-        unify1(cv, VVal)
-        forceAll1(ty) match
-          case VData(_, cs) =>
-            cs.tm.find(c => c.name == x) match
-              case None =>
-                error(s"constructor $x not found in ${ctx.pretty1(ty)}")
-              case Some(DataCon(_, args2)) =>
-                if args.size != args2.size then
-                  error(
-                    s"invalid amount of arguments for constructor, expected ${args2.size} but got ${args.size}"
-                  )
-                val eargs = args.zip(args2).map { case (arg, (_, t)) =>
-                  check0(arg, eval1(t)(E1(cs.env, ty)), VVal)
-                }
-                Con(x, eargs)
-          case _ => error(s"expected datatype but got ${ctx.pretty1(ty)}")
 
       case S.Match(Nil, ps) =>
         val size = if ps.isEmpty then 1 else ps.head._2.size
@@ -900,8 +876,9 @@ object Elaboration extends RetryPostponed:
 
       case S.Var(x) =>
         ctx.lookup(x) match
-          case Some(Name0(x, ty, cv)) => Infer0(Var0(x.toIx(ctx.lvl)), ty, cv)
-          case Some(Name1(x, ty))     => Infer1(Var1(x.toIx(ctx.lvl)), ty)
+          case Some(Name0(x, ty, cv)) =>
+            Infer0(Var0(x.toIx(ctx.lvl)), ty, cv)
+          case Some(Name1(x, ty)) => Infer1(Var1(x.toIx(ctx.lvl)), ty)
           case None =>
             getGlobal(x) match
               case None => error(s"undefined variable $x")
@@ -909,6 +886,53 @@ object Elaboration extends RetryPostponed:
                 Infer0(Global0(x), ty, cv)
               case Some(GlobalEntry1(_, _, _, _, ty)) =>
                 Infer1(Global1(x), ty)
+              case Some(GlobalData0(_, ps, _)) =>
+                val vty = U0(Val)
+                val lam =
+                  ps.foldRight(
+                    TCon(
+                      x,
+                      (0 until ps.size).reverse.map(i => Var1(mkIx(i))).toList
+                    )
+                  )((x, b) => Lam1(DoBind(x), Expl, vty, b))
+                val ty = ps.foldRight(vty)((_, b) => Pi(DontBind, Expl, vty, b))
+                Infer1(lam, ctx.eval1(ty))
+              case Some(GlobalCon0(_, dx, cps)) =>
+                val GlobalData0(_, ps, _) = getGlobalData0(dx)
+                val metas = ps.map(_ => freshMeta(VU0(VVal)))
+                val ts = cps
+                  .foldLeft((ctx, List.empty[(Bind, Ty)])) {
+                    case ((innerctx, res), (x, t)) =>
+                      val qt =
+                        innerctx.quote1(
+                          eval1(t)(Env(metas.map(ctx.eval1)))
+                        )
+                      val lty = Lift(Val, qt)
+                      (innerctx.insert1(x, lty), (x, lty) :: res)
+                  }
+                  ._2
+                  .reverse
+                val ty =
+                  ts.foldRight(Lift(Val, TCon(dx, metas)).wk1N(ts.size)) {
+                    case ((x, t), b) => Pi(x, Expl, t, b)
+                  }
+                val vty = ctx.eval1(ty)
+                val lam = ts.zipWithIndex.foldRight(
+                  Quote(
+                    Con(
+                      x,
+                      (0 until cps.size).reverse
+                        .map(i => Splice(Var1(mkIx(i))))
+                        .toList
+                    )
+                  )
+                ) { case (((x, t), i), b) =>
+                  val y = x match
+                    case DontBind  => Name(s"x$i")
+                    case DoBind(x) => x
+                  Lam1(DoBind(y), Expl, t, b)
+                }
+                Infer1(lam, vty)
 
       case S.Let(x, rec, false, mty, v, b) =>
         val (ety, cv2, vcv2) =
@@ -1010,20 +1034,7 @@ object Elaboration extends RetryPostponed:
       case S.Comp   => Infer1(Comp, VCV1)
       case S.Val    => Infer1(Val, VCV1)
 
-      case S.Hole(_)   => error("cannot infer hole")
-      case S.Con(_, _) => error("cannot infer con")
-
-      case S.Data(x, cs) =>
-        val conNames = cs.map(c => c.name)
-        if conNames.size != conNames.distinct.size then
-          error("duplicate constructor names")
-        val newctx = ctx.bind1(x, U0(Val), VU0(VVal))
-        val ecs = cs.map { case S.DataCon(pos, cx, args) =>
-          implicit val newctx2 = newctx.enter(pos)
-          val eargs = args.map((ax, sty) => (ax, check1(sty, VU0(VVal))))
-          DataCon(cx, eargs)
-        }
-        Infer1(Data(x, ecs), VU0(VVal))
+      case S.Hole(_) => error("cannot infer hole")
 
       // TODO: add possibility for postponing or else this is hopeless
       case m @ S.Match(Nil, _) =>
@@ -1041,52 +1052,64 @@ object Elaboration extends RetryPostponed:
         Infer0(etm, ty, cv)
 
   // elaboration
-  def elaborate(d: S.Def): Unit = d match
-    case S.DDef(pos, x, rec, m, mty, v) =>
-      implicit val ctx: Ctx = Ctx.empty(pos)
-      if getGlobal(x).isDefined then error(s"duplicated definition $x")
-      val entry = if m then
-        if rec then error("def rec not allowed in meta definitions")
-        val (ev, ty, vv, vty) = mty match
-          case None =>
-            val (ev, vty) = infer1(v)
-            (ev, ctx.quote1(vty), ctx.eval1(ev), vty)
-          case Some(sty) =>
-            val ety = check1(sty, VU1)
-            val vty = ctx.eval1(ety)
-            val ev = check1(v, vty)
-            (ev, ety, ctx.eval1(ev), vty)
-        GlobalEntry1(x, ev, ty, vv, vty)
-      else
-        val (ev, ty, cv, vty, vcv) = mty match
-          case None if !rec =>
-            val (ev, vty, vcv) = infer0(v)
-            (ev, ctx.quote1(vty), ctx.quote1(vcv), vty, vcv)
-          case _ =>
-            val cv = if rec then Comp else freshCV()
-            val vcv = ctx.eval1(cv)
-            val ety = mty match
-              case None      => freshMeta(VU0(vcv))
-              case Some(sty) => check1(sty, VU0(vcv))
-            val vty = ctx.eval1(ety)
-            if rec then ensureFun(vty, vcv)
-            val ev = check0(v, vty, vcv)(
-              if rec then ctx.bind0(DoBind(x), ety, vty, cv, vcv) else ctx
-            )
-            (
-              if rec then LetRec(x, ety, ev, Var0(ix0)) else ev,
-              ety,
-              cv,
-              vty,
-              vcv
-            )
-        GlobalEntry0(x, ev, ty, cv, ctx.eval0(ev), vty, vcv)
-      retryAllPostponed()
-      val ums = unsolvedMetas()
-      if ums.nonEmpty then
-        val str =
-          ums.map((id, ty) => s"?$id : ${ctx.pretty1(ty)}").mkString("\n")
-        error(s"there are unsolved metas:\n$str")
-      setGlobal(entry)
+  def elaborate(d: S.Def): Unit =
+    debug(s"elaborate $d")
+    d match
+      case S.DData(pos, dx, ps, cs) =>
+        implicit val ctx: Ctx = Ctx.empty(pos)
+        if getGlobal(dx).isDefined then error(s"duplicated definition $dx")
+        setGlobal(GlobalData0(dx, ps, cs.map(_.name)))
+        cs.foreach { case DataCon(pos, cx, cps) =>
+          implicit val nctx = ctx.enter(pos).bindDataParams(ps)
+          // TODO: check for simple recursion
+          val ecps = cps.map { (x, ty) => (x, check1(ty, VU0(VVal))) }
+          setGlobal(GlobalCon0(cx, dx, ecps))
+        }
+      case S.DDef(pos, x, rec, m, mty, v) =>
+        implicit val ctx: Ctx = Ctx.empty(pos)
+        if getGlobal(x).isDefined then error(s"duplicated definition $x")
+        val entry = if m then
+          if rec then error("def rec not allowed in meta definitions")
+          val (ev, ty, vv, vty) = mty match
+            case None =>
+              val (ev, vty) = infer1(v)
+              (ev, ctx.quote1(vty), ctx.eval1(ev), vty)
+            case Some(sty) =>
+              val ety = check1(sty, VU1)
+              val vty = ctx.eval1(ety)
+              val ev = check1(v, vty)
+              (ev, ety, ctx.eval1(ev), vty)
+          GlobalEntry1(x, ev, ty, vv, vty)
+        else
+          val (ev, ty, cv, vty, vcv) = mty match
+            case None if !rec =>
+              val (ev, vty, vcv) = infer0(v)
+              (ev, ctx.quote1(vty), ctx.quote1(vcv), vty, vcv)
+            case _ =>
+              val cv = if rec then Comp else freshCV()
+              val vcv = ctx.eval1(cv)
+              val ety = mty match
+                case None      => freshMeta(VU0(vcv))
+                case Some(sty) => check1(sty, VU0(vcv))
+              val vty = ctx.eval1(ety)
+              if rec then ensureFun(vty, vcv)
+              val ev = check0(v, vty, vcv)(
+                if rec then ctx.bind0(DoBind(x), ety, vty, cv, vcv) else ctx
+              )
+              (
+                if rec then LetRec(x, ety, ev, Var0(ix0)) else ev,
+                ety,
+                cv,
+                vty,
+                vcv
+              )
+          GlobalEntry0(x, ev, ty, cv, ctx.eval0(ev), vty, vcv)
+        retryAllPostponed()
+        val ums = unsolvedMetas()
+        if ums.nonEmpty then
+          val str =
+            ums.map((id, ty) => s"?$id : ${ctx.pretty1(ty)}").mkString("\n")
+          error(s"there are unsolved metas:\n$str")
+        setGlobal(entry)
 
   def elaborate(d: S.Defs): Unit = d.toList.foreach(elaborate)

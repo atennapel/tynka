@@ -142,7 +142,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> doP <|> dataP <|> conP <|> matchP <|> ifP <|>
+      ) <|> let <|> lam <|> doP <|> matchP <|> ifP <|>
         precedence[Tm](app)(
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
         )
@@ -192,49 +192,26 @@ object Parser:
           }
       )
 
-    private lazy val dataP: Parsley[Tm] = positioned(
-      ("data" *> option(bind) <~> ("." <|> "|") *> sepBy(
-        pos <~> identOrOp <~> many(
-          attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
-            (DontBind, t)
-          )
-        ),
-        "|"
-      )).map((x, cs) =>
-        Data(
-          x.getOrElse(DontBind),
-          cs.map { case ((pos, x), as) => DataCon(pos, x, as) }
-        )
-      )
-    )
-
-    private lazy val conP: Parsley[Tm] = positioned(
-      ("con" *> identOrOp <~> many(projAtom)).map { case (c, args) =>
-        Con(c, args)
-      }
-    )
-
-    // p := b | c p+ | x @ c p+ | (p) | x @ (p)
-
     private def addPatAs(x: Name, p: Pat): Parsley[Pat] =
       p match
         case PCon(con, DontBind, args) => pure(PCon(con, DoBind(x), args))
         case _                         => empty
 
-    private lazy val patAtomP: Parsley[Pat] =
-      ("(" *> patP <* ")") <|>
-        attempt(
-          identOrOp <~> "@" *> (("(" *> patP <* ")") <|> (identOrOp <~> some(
-            patAtomP
-          )).map((c, args) => PCon(c, DontBind, args)))
-        ).flatMap(addPatAs) <|>
+    private lazy val patAppP: Parsley[Pat] =
+      attempt(
+        identOrOp <~> "@" *> (("(" *> patP <* ")") <|> (identOrOp <~> some(
+          patAtomP
+        )).map((c, args) => PCon(c, DontBind, args)))
+      ).flatMap(addPatAs) <|>
         attempt(identOrOp <~> some(patAtomP)).map((c, args) =>
           PCon(c, DontBind, args)
-        ) <|>
-        bind.map(PVar.apply)
+        ) <|> patAtomP
+
+    private lazy val patAtomP: Parsley[Pat] =
+      ("(" *> patP <* ")") <|> bind.map(PVar.apply)
 
     private lazy val patP: Parsley[Pat] =
-      precedence[Pat](patAtomP)(
+      precedence[Pat](patAppP)(
         defaultOps(
           (op, t) => PCon(op, DontBind, List(t)),
           (op, l, r) => PCon(op, DontBind, List(l, r))
@@ -478,7 +455,7 @@ object Parser:
       )
 
     // definitions
-    lazy val defs: Parsley[Defs] = many(defP).map(Defs.apply)
+    lazy val defs: Parsley[Defs] = many(defP <|> dataDefP).map(Defs.apply)
 
     private lazy val defP: Parsley[Def] =
       (pos <~> "def" *> option("rec") <~> identOrOp <~> many(
@@ -494,6 +471,29 @@ object Parser:
             m,
             ty.map(typeFromParams(m, ps, _)),
             lamFromDefParams(ps, v, ty.isEmpty)
+          )
+        }
+
+    private lazy val dataDefP: Parsley[Def] =
+      (pos <~> "data" *> identOrOp <~> many(
+        identOrOp
+      ) <~> option(
+        (":=" <|> "|") *> sepBy(
+          pos <~> identOrOp <~> many(
+            attempt("(" *> bind <~> ":" *> tm <* ")") <|> projAtom.map(t =>
+              (DontBind, t)
+            )
+          ),
+          "|"
+        )
+      ))
+        .map { case (((pos, x), ps), cs) =>
+          DData(
+            pos,
+            x,
+            ps,
+            cs.map(cs => cs.map { case ((pos, x), ts) => DataCon(pos, x, ts) })
+              .getOrElse(Nil)
           )
         }
 
