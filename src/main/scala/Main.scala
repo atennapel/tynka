@@ -58,6 +58,7 @@ object Main:
         case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
           println(s"$x : ${ctx.pretty1(vty)} := ${ctx.pretty0(stage(tm))}")
         case GlobalEntry1(x, tm, ty, vv, vty) =>
+          println(tm)
           println(
             s"$x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
           )

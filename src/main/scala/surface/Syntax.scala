@@ -61,6 +61,8 @@ object Syntax:
       case PCon(c, DontBind, args)  => s"($c ${args.mkString(" ")})"
   export Pat.*
 
+  type MatchCase = (PosInfo, List[Pat], Option[Tm], Tm)
+
   type Ty = Tm
   enum Tm:
     case Var(name: Name)
@@ -85,7 +87,7 @@ object Syntax:
 
     case Match(
         scrut: List[Tm],
-        pats: List[(PosInfo, List[Pat], Option[Tm], Tm)]
+        pats: List[MatchCase]
     )
 
     case Lift(ty: Ty)

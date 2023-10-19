@@ -337,7 +337,7 @@ object Elaboration extends RetryPostponed:
       vars: Map[Lvl, S.Pat],
       lets: List[(Name, VTy, Lvl)],
       guard: Option[S.Tm],
-      body: S.Tm
+      body: Either[Lvl, S.Tm]
   )
   private final case class VarInfo(ty: VTy, matchedCons: Set[Name]):
     def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx)
@@ -345,6 +345,7 @@ object Elaboration extends RetryPostponed:
     case Test(
         x: Lvl,
         con: Name,
+        joins: List[(Name, Ty, CV, Tm0)],
         lams: List[(Bind, Ty)],
         yes: CaseTree,
         no: CaseTree
@@ -362,14 +363,17 @@ object Elaboration extends RetryPostponed:
   private def flattenTree(
       lvl: Lvl,
       t: CaseTree
-  ): (List[(Name, (List[(Bind, Ty)], CaseTree))], Option[CaseTree]) =
+  ): (
+      List[(Name, List[(Name, Ty, CV, Tm0)], List[(Bind, Ty)], CaseTree)],
+      Option[CaseTree]
+  ) =
     t match
-      case Test(x, con, lams, yes, no) =>
+      case Test(x, con, joins, lams, yes, no) =>
         val (cons, rest) = flattenTree(x, no)
-        ((con, (lams, yes)) :: cons, rest)
+        ((con, joins, lams, yes) :: cons, rest)
       case Exhausted => (Nil, None)
       case cs        => (Nil, Some(cs))
-  private def compileTree(t: CaseTree)(implicit ctx: Ctx): Tm0 = t match
+  private def compileTree(t: CaseTree)(implicit lvl: Lvl): Tm0 = t match
     case Exhausted => impossible()
     case Run(tm)   => tm
     case Guard(cond, ifTrue, ifFalse) =>
@@ -378,17 +382,26 @@ object Elaboration extends RetryPostponed:
         List(Name("True") -> ifTrue, Name("False") -> compileTree(ifFalse)),
         None
       )
-    case Test(x, con, args, yes, no) =>
+    case Test(x, _, _, _, _, _) =>
       val (cons, other) = flattenTree(x, t)
-      val cases = cons.map { case (cx, (args, yes)) =>
-        val yctx = args.foldLeft(ctx) { case (ctx, (x, ty)) =>
-          ctx.bind0(x, ty, ctx.eval1(ty), Val, VVal)
+      var allJoins = mutable.ArrayBuffer.empty[List[(Name, Ty, CV, Tm0)]]
+      val cases = cons.map { case (cx, joins, args, yes) =>
+        allJoins += joins
+        val currentJoins = allJoins.flatten.toList
+        val body = compileTree(yes)(lvl + args.size + currentJoins.size)
+        val lams = args.foldRight(body) { case ((x, t), b) =>
+          Lam0(x, t, b)
         }
-        val body = compileTree(yes)(yctx)
-        val lams = args.foldRight(body) { case ((x, t), b) => Lam0(x, t, b) }
-        (cx, lams)
+        val lams1 = currentJoins.foldRight(lams) { case ((x, t, cv, v), b) =>
+          Let0(x, t, v, b)
+        }
+        (cx, lams1)
       }
-      Match(Var0(x.toIx(ctx.lvl)), cases, other.map(compileTree(_)))
+      Match(
+        Var0(x.toIx(lvl)),
+        cases,
+        other.map(compileTree(_))
+      )
 
   private def normalizePat(p: S.Pat)(implicit ctx: Ctx): S.Pat =
     p match
@@ -467,13 +480,14 @@ object Elaboration extends RetryPostponed:
           norm.toMap,
           Nil,
           guard,
-          tm
+          Right(tm)
         )
       ),
       vrty,
       vrcv
     )(nctx, varInfo)
-    val ctree = compileTree(tree)(nctx)
+    println(tree)
+    val ctree = compileTree(tree)(nctx.lvl)
     val res = lets.foldRight(ctree) { case ((x, ty, v), b) =>
       Let0(x, ty, v, b)
     }
@@ -514,7 +528,7 @@ object Elaboration extends RetryPostponed:
 
   private def checkMatchBody(
       lets: List[(Name, VTy, Lvl)],
-      body: S.Tm,
+      body: Either[Lvl, S.Tm],
       vrty: VTy,
       vrcv: VCV
   )(implicit
@@ -532,7 +546,9 @@ object Elaboration extends RetryPostponed:
         val v = vquote(VVar0(lvl))
         (ctx.define(x, ctx.quote1(vlty), vlty, ctx.quote1(v), v), ty :: ts)
     }
-    val ebody = check0(body, vrty, vrcv)(innerctx)
+    val ebody = body match
+      case Left(lvl)   => innerctx.quote0(VVar0(lvl))
+      case Right(body) => check0(body, vrty, vrcv)(innerctx)
     splice(lets.zip(ts.reverse).zipWithIndex.foldRight(quote(ebody)) {
       case ((((x, _, lvl), ty), i), b) =>
         Let1(x, Lift(Val, ty), Quote(Var0(lvl.toIx(ctx.lvl + i))), b)
@@ -556,7 +572,7 @@ object Elaboration extends RetryPostponed:
         case _ if clauses.tail.isEmpty =>
           error("non-exhaustive pattern match")(nctx)
         case Some(g) =>
-          val cond = checkMatchBody(lets, g, vbool, VVal)(nctx)
+          val cond = checkMatchBody(lets, Right(g), vbool, VVal)(nctx)
           val ifTrue = checkMatchBody(lets, body, vrty, vrcv)(nctx)
           val ifFalse = genMatch(clauses.tail, vrty, vrcv)
           return Guard(cond, ifTrue, ifFalse)
@@ -577,24 +593,14 @@ object Elaboration extends RetryPostponed:
         val ts = dts.map((_, t) => eval1(t)(Env(dpas)))
         val nargs = args.map(normalizePat)
         val vars = (0 until args.size).map(i => ctx.lvl + i).toList
-        val (nctx, lams) =
-          nargs
-            .zip(ts)
-            .zipWithIndex
-            .foldLeft((ctx, List.empty[(Bind, Ty)])) {
-              case ((ctx, lams), ((p, ty), i)) =>
-                val x = p match
-                  case S.PVar(b @ DoBind(x)) => b
-                  case _                     => DoBind(Name(s"x$i"))
-                val qty = ctx.quote1(ty)
-                (ctx.insert0(x, qty, Val), lams ++ List((x, qty)))
-            }
         val newVarInfo =
           vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, ty)) =>
             vars + (lvl -> VarInfo(ty, Set.empty))
           }
         val yes = mutable.ArrayBuffer.empty[Clause]
         val no = mutable.ArrayBuffer.empty[Clause]
+        var nextctx = ctx
+        val joins = mutable.ArrayBuffer.empty[(Name, Ty, CV, Tm0)]
         clauses.foreach { case c @ Clause(pos, pats, lets, guard, body) =>
           pats.get(branchVar) match {
             case Some(S.PCon(cx2, _, args2)) =>
@@ -616,15 +622,39 @@ object Elaboration extends RetryPostponed:
                 )
               } else no += c
             case None =>
-              // TODO: improve duplication, join points or generate functions
-              yes += c
-              no += c
+              c.body match
+                case Left(_) =>
+                  yes += c
+                  no += c
+                case Right(_) =>
+                  val jtm = checkMatchBody(c.lets, c.body, vrty, vrcv)(nextctx)
+                  val lvl = ctx.lvl
+                  val qty = nextctx.quote1(vrty)
+                  val qcv = nextctx.quote1(vrcv)
+                  val name = Name(s"j$lvl")
+                  nextctx = nextctx.insert0(DoBind(name), qty, qcv)
+                  joins += ((name, qty, qcv, jtm))
+                  val newclause = Clause(c.pos, c.vars, Nil, c.guard, Left(lvl))
+                  yes += newclause
+                  no += newclause
             case _ => impossible()
           }
         }
+        val (yesctx, lams) =
+          nargs
+            .zip(ts)
+            .zipWithIndex
+            .foldLeft((nextctx, List.empty[(Bind, Ty)])) {
+              case ((ctx, lams), ((p, ty), i)) =>
+                val x = p match
+                  case S.PVar(b @ DoBind(x)) => b
+                  case _                     => DoBind(Name(s"x$i"))
+                val qty = ctx.quote1(ty)
+                (ctx.insert0(x, qty, Val), lams ++ List((x, qty)))
+            }
         val yesResult =
           if yes.isEmpty then impossible()
-          else genMatch(yes.toList, vrty, vrcv)(nctx, newVarInfo - branchVar)
+          else genMatch(yes.toList, vrty, vrcv)(yesctx, newVarInfo - branchVar)
         val matchedCons = info.matchedCons + cx
         val noResult =
           if no.isEmpty then
@@ -636,10 +666,10 @@ object Elaboration extends RetryPostponed:
           else if matchedCons == cons then Exhausted
           else
             genMatch(no.toList, vrty, vrcv)(
-              ctx,
+              nextctx,
               varInfo + (branchVar -> info.matchOn(cx))
             )
-        Test(branchVar, cx, lams, yesResult, noResult)
+        Test(branchVar, cx, joins.toList, lams, yesResult, noResult)
       case _ => error(s"expected a datatype but got ${ctx.pretty1(dty)}")
 
   // checking
@@ -719,6 +749,49 @@ object Elaboration extends RetryPostponed:
           case _           => false
       case _ => false
 
+  private def checkLambdaMatch1(
+      scrutCount: Int,
+      ps: List[S.MatchCase],
+      ty: VTy
+  )(implicit
+      ctx: Ctx
+  ): Either[MetaId, Tm1] =
+    debug(s"checkLambdaMatch1 $scrutCount : ${ctx.pretty1(ty)}")
+    @tailrec
+    def go(i: Int, ty: VTy, args: List[(Bind, VTy, Ty)])(implicit
+        ctx: Ctx
+    ): Either[MetaId, Tm1] =
+      if i == 0 then
+        val ixs = 0 until scrutCount
+        val scruts = args.zip(ixs.reverse).map { case ((_, vt, _), i) =>
+          (Splice(Var1(mkIx(i))), vt)
+        }
+        val (vrcv, vrty) = ensureLift(ty)
+        val ematch = checkMatch(Left(scruts), ps, vrty, vrcv)
+        val lams = args.zip(ixs).foldRight(quote(ematch)) {
+          case (((x, _, qt), i), b) => Lam1(x, Expl, qt, b)
+        }
+        Right(lams)
+      else
+        forceAll1(ty) match
+          case VPi(x, Expl, t1, t2) =>
+            val (vscrutcv, vscrutty) = ensureLift(t1)
+            forceAll1(vscrutty) match
+              case VFlex(m, _) => Left(m)
+              case _ =>
+                val qt1 = ctx.quote1(t1)
+                val y = x match
+                  case DontBind => DoBind(Name(s"x${scrutCount - i}"))
+                  case x        => x
+                val nctx = ctx.insert1(y, qt1)
+                unify1(vscrutcv, VVal)
+                go(i - 1, t2(VVar1(ctx.lvl)), args ++ List((y, vscrutty, qt1)))(
+                  nctx
+                )
+          case VFlex(m, _) => Left(m)
+          case _ => error(s"unexpected checking type ${ctx.pretty1(ty)}")
+    go(scrutCount, ty, Nil)
+
   private def check1(tm: S.Tm, ty: VTy)(implicit ctx: Ctx): Tm1 =
     if !tm.isPos then debug(s"check1 $tm : ${ctx.pretty1(ty)}")
     (tm, forceAll1(ty)) match
@@ -749,11 +822,9 @@ object Elaboration extends RetryPostponed:
         val qt1 = ctx.quote1(t1)
         Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
 
-      case (S.Match(Nil, ps), VPi(x, Expl, t1, t2)) =>
-        // TODO: handle multi-match
-        val (vscrutcv, vscrutty) = ensureLift(t1)
-        forceAll1(vscrutty) match
-          case VFlex(m, _) =>
+      case (S.Match(Nil, ps), VPi(x, Expl, t1, t2)) if ps.size > 0 =>
+        checkLambdaMatch1(ps.head._2.size, ps, ty) match
+          case Left(m) => // postpone
             val placeholder = freshMetaId(ty)
             val pid = newPostponed(PECheck1(ctx, tm, ty, placeholder))
             addBlocking(pid, m)
@@ -761,17 +832,7 @@ object Elaboration extends RetryPostponed:
               s"postpone ?p$pid as ?$placeholder: check1 $tm : ${ctx.pretty1(ty)}"
             )
             PostponedCheck1(pid)
-          case _ =>
-            val qt1 = ctx.quote1(t1)
-            val y = x match
-              case DontBind => DoBind(Name("x"))
-              case x        => x
-            val nctx = ctx.insert1(y, qt1)
-            val (vrcv, vrty) = ensureLift(t2(VVar1(ctx.lvl)))(nctx)
-            unify1(vscrutcv, VVal)
-            val escrut = Left(List((Splice(Var1(ix0)), vscrutty)))
-            val ematch = checkMatch(escrut, ps, vrty, vrcv)(nctx)
-            Lam1(y, Expl, qt1, quote(ematch))
+          case Right(tm) => tm
 
       case (S.Pi(DontBind, Expl, t1, t2), VU0(cv)) =>
         unify1(cv, VComp)
@@ -1036,15 +1097,17 @@ object Elaboration extends RetryPostponed:
 
       case S.Hole(_) => error("cannot infer hole")
 
-      // TODO: add possibility for postponing or else this is hopeless
-      case m @ S.Match(Nil, _) =>
-        // TODO: multi-match
-        val cv = ctx.eval1(freshCV())
-        val t1 = ctx.eval1(freshMeta(VU0(VVal)))
-        val t2 = ctx.eval1(freshMeta(VU0(cv)))
-        val fun = VFun(t1, cv, t2)
-        val etm = check0(m, fun, VComp)
-        Infer0(etm, fun, VComp)
+      case S.Match(Nil, _) =>
+        val ty = ctx.eval1(freshMeta(VU1))
+        val placeholder = freshMetaId(ty)
+        val pid = newPostponed(PECheck1(ctx, tm, ty, placeholder))
+        val VFlex(m, _) = ty: @unchecked
+        addBlocking(pid, m)
+        debug(
+          s"postpone ?p$pid as ?$placeholder: check1 $tm : ${ctx.pretty1(ty)}"
+        )
+        Infer1(PostponedCheck1(pid), ty)
+
       case S.Match(scruts, ps) =>
         val cv = ctx.eval1(freshCV())
         val ty = ctx.eval1(freshMeta(VU0(cv)))
