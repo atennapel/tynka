@@ -34,7 +34,7 @@ object Pretty:
       tm match
         case Lam0(x, _, b) =>
           s"${if first then "" else " "}$x${go(b)(x :: ns)}"
-        case rest => s". ${pretty0(rest)}"
+        case rest => s" => ${pretty0(rest)}"
     s"\\${go(tm, true)}"
 
   private def prettyLam1(tm: Tm1)(implicit ns: List[Bind]): String =
@@ -46,7 +46,7 @@ object Pretty:
           s"${if first then "" else " "}{$x}${go(b)(x :: ns)}"
         case MetaLam(m, b) =>
           s"${if first then "" else " "}${if m then "1" else "0"}${go(b)(DontBind :: ns)}"
-        case rest => s". ${pretty1(rest)}"
+        case rest => s" => ${pretty1(rest)}"
     s"\\${go(tm, true)}"
 
   @tailrec
@@ -58,6 +58,7 @@ object Pretty:
       case Global0(_)        => pretty0(tm)
       case Prim0(_)          => pretty0(tm)
       case Splice(_)         => pretty0(tm)
+      case Impossible        => pretty0(tm)
       case Con(_, Nil)       => pretty0(tm)
       case App0(_, _) if app => pretty0(tm)
       case Con(_, _) if app  => pretty0(tm)
@@ -116,12 +117,9 @@ object Pretty:
     case Con(x, Nil)  => s"$x"
     case Con(x, args) => s"$x ${args.map(a => prettyParen0(a)).mkString(" ")}"
 
-    case Match(scrut, cs, other) =>
-      s"match ${prettyParen0(scrut, true)}${if cs.isEmpty then "" else " "}${cs
-          .map((c, b) => s"| $c. ${pretty0(b)}")
-          .mkString(" ")}${if other.isDefined then " " else ""}${other
-          .map(t => s"| _. ${pretty0(t)}")
-          .getOrElse("")}"
+    case Match(scrut, c, b, e) =>
+      s"match ${prettyParen0(scrut, true)} | $c => ${prettyParen0(b, true)} | _ => ${prettyParen0(e, true)}"
+    case Impossible => "impossible"
 
     case Splice(t) => s"$$${prettyParen1(t)}"
 

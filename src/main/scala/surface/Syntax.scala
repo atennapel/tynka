@@ -115,18 +115,18 @@ object Syntax:
       case Val                            => "Val"
       case Pi(DontBind, Expl, ty, b)      => s"($ty -> $b)"
       case Pi(x, i, ty, b)                => s"(${i.wrap(s"$x : $ty")} -> $b)"
-      case Lam(x, ArgIcit(Expl), None, b) => s"(\\$x. $b)"
+      case Lam(x, ArgIcit(Expl), None, b) => s"(\\$x => $b)"
       case Lam(x, ArgIcit(i), ty, b) =>
-        s"(\\${i.wrap(s"$x${ty.map(t => s" : $t").getOrElse("")}")}. $b)"
+        s"(\\${i.wrap(s"$x${ty.map(t => s" : $t").getOrElse("")}")} => $b)"
       case Lam(x, ArgNamed(y), ty, b) =>
-        s"(\\${Impl.wrap(s"$x${ty.map(t => s" : $t").getOrElse("")} = $y")}. $b)"
+        s"(\\${Impl.wrap(s"$x${ty.map(t => s" : $t").getOrElse("")} = $y")} => $b)"
       case App(fn, arg, ArgIcit(Expl)) => s"($fn $arg)"
       case App(fn, arg, ArgIcit(Impl)) => s"($fn ${Impl.wrap(arg)})"
       case App(fn, arg, ArgNamed(x))   => s"($fn ${Impl.wrap(s"$x = $arg")})"
       case Match(scrut, pats) =>
         s"(match${if scrut.isEmpty then "" else " "}${scrut
             .mkString(", ")}${if pats.isEmpty then "" else " "}${pats
-            .map((_, ps, guard, b) => s"| ${ps.mkString(", ")}${guard.map(g => s" if ${g}").getOrElse("")}. $b")
+            .map((_, ps, guard, b) => s"| ${ps.mkString(", ")}${guard.map(g => s" if ${g}").getOrElse("")} => $b")
             .mkString(" ")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"

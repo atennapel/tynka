@@ -338,7 +338,18 @@ object Elaboration extends RetryPostponed:
       lets: List[(Name, VTy, Lvl)],
       guard: Option[S.Tm],
       body: Either[Lvl, S.Tm]
-  )
+  ):
+    override def toString: String =
+      val m = vars.toList.map((l, p) => s"$l -> $p").mkString(", ")
+      val g = guard.map(g => s" if $g").getOrElse("")
+      val ls = lets match
+        case Nil => ""
+        case _ => s"let ${lets.map((x, _, l) => s"$x = '$l").mkString("; ")}; "
+      val b = body match
+        case Left(l)  => s"'$l"
+        case Right(t) => s"$t"
+      s"($m)$g => $ls$b"
+
   private final case class VarInfo(ty: VTy, matchedCons: Set[Name]):
     def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx)
   private enum CaseTree:
@@ -360,48 +371,22 @@ object Elaboration extends RetryPostponed:
     case Both(clause: Clause)
   import Choice.*
 
-  private def flattenTree(
-      lvl: Lvl,
-      t: CaseTree
-  ): (
-      List[(Name, List[(Name, Ty, CV, Tm0)], List[(Bind, Ty)], CaseTree)],
-      Option[CaseTree]
-  ) =
-    t match
-      case Test(x, con, joins, lams, yes, no) =>
-        val (cons, rest) = flattenTree(x, no)
-        ((con, joins, lams, yes) :: cons, rest)
-      case Exhausted => (Nil, None)
-      case cs        => (Nil, Some(cs))
   private def compileTree(t: CaseTree)(implicit lvl: Lvl): Tm0 = t match
-    case Exhausted => impossible()
+    case Exhausted => Impossible
     case Run(tm)   => tm
     case Guard(cond, ifTrue, ifFalse) =>
       Match(
         cond,
-        List(Name("True") -> ifTrue, Name("False") -> compileTree(ifFalse)),
-        None
+        Name("True"),
+        ifTrue,
+        compileTree(ifFalse)
       )
-    case Test(x, _, _, _, _, _) =>
-      val (cons, other) = flattenTree(x, t)
-      var allJoins = mutable.ArrayBuffer.empty[List[(Name, Ty, CV, Tm0)]]
-      val cases = cons.map { case (cx, joins, args, yes) =>
-        allJoins += joins
-        val currentJoins = allJoins.flatten.toList
-        val body = compileTree(yes)(lvl + args.size + currentJoins.size)
-        val lams = args.foldRight(body) { case ((x, t), b) =>
-          Lam0(x, t, b)
-        }
-        val lams1 = currentJoins.foldRight(lams) { case ((x, t, cv, v), b) =>
-          Let0(x, t, v, b)
-        }
-        (cx, lams1)
-      }
-      Match(
-        Var0(x.toIx(lvl)),
-        cases,
-        other.map(compileTree(_))
-      )
+    case Test(x, con, joins, lams, yes, no) =>
+      val inneryes = compileTree(yes)(lvl + joins.size + lams.size)
+      val eyes = lams.foldRight(inneryes) { case ((x, t), b) => Lam0(x, t, b) }
+      val eno = compileTree(no)(lvl + joins.size)
+      val inner = Match(Var0(x.toIx(lvl + joins.size)), con, eyes, eno)
+      joins.foldRight(inner) { case ((x, t, _, v), b) => Let0(x, t, v, b) }
 
   private def normalizePat(p: S.Pat)(implicit ctx: Ctx): S.Pat =
     p match
@@ -451,8 +436,7 @@ object Elaboration extends RetryPostponed:
           case _ =>
             error(s"empty match with non-void type: ${ctx.pretty1(vscrutty)}")
       }
-      // TODO: what about the other scruts
-      return Match(escruts.head._1, Nil, None)
+      return Impossible
 
     val (nctx, varInfo, lets) =
       escruts.zipWithIndex.foldLeft(
@@ -491,6 +475,7 @@ object Elaboration extends RetryPostponed:
     val res = lets.foldRight(ctree) { case ((x, ty, v), b) =>
       Let0(x, ty, v, b)
     }
+    println(res)
     res
 
   private def simplifyClause(c: Clause)(implicit
@@ -561,8 +546,11 @@ object Elaboration extends RetryPostponed:
       vrty: VTy,
       vrcv: VCV
   )(implicit ctx: Ctx, varInfo: Map[Lvl, VarInfo]): CaseTree =
+    debug(s"genMatch ${clauses0.mkString(" | ")} : ${ctx.pretty1(vrty)}")
     if clauses0.isEmpty then impossible()
+    println(clauses0)
     val clauses = clauses0.map(simplifyClause)
+    println(clauses)
     val Clause(pos, pats, lets, guard, body) = clauses.head
     if pats.isEmpty then
       val nctx = ctx.enter(pos)
@@ -592,12 +580,7 @@ object Elaboration extends RetryPostponed:
         if dts.size != args.size then error(s"pattern $cx arity mismatch")
         val ts = dts.map((_, t) => eval1(t)(Env(dpas)))
         val nargs = args.map(normalizePat)
-        val vars = (0 until args.size).map(i => ctx.lvl + i).toList
-        val newVarInfo =
-          vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, ty)) =>
-            vars + (lvl -> VarInfo(ty, Set.empty))
-          }
-        val yes = mutable.ArrayBuffer.empty[Clause]
+        val yes = mutable.ArrayBuffer.empty[Either[(Clause, List[Pat]), Clause]]
         val no = mutable.ArrayBuffer.empty[Clause]
         var nextctx = ctx
         val joins = mutable.ArrayBuffer.empty[(Name, Ty, CV, Tm0)]
@@ -607,24 +590,12 @@ object Elaboration extends RetryPostponed:
               if cx == cx2 then {
                 if args.size != args2.size then
                   error("invalid constructor arity")
-                val newPats = vars
-                  .zip(ts)
-                  .zip(args2)
-                  .map { case ((lvl, ty), p) =>
-                    lvl -> normalizePat(p)
-                  }
-                yes += Clause(
-                  pos,
-                  pats - branchVar ++ newPats,
-                  lets,
-                  guard,
-                  body
-                )
+                yes += Left((c, args2))
               } else no += c
             case None =>
               c.body match
                 case Left(_) =>
-                  yes += c
+                  yes += Right(c)
                   no += c
                 case Right(_) =>
                   val jtm = checkMatchBody(c.lets, c.body, vrty, vrcv)(nextctx)
@@ -635,11 +606,30 @@ object Elaboration extends RetryPostponed:
                   nextctx = nextctx.insert0(DoBind(name), qty, qcv)
                   joins += ((name, qty, qcv, jtm))
                   val newclause = Clause(c.pos, c.vars, Nil, c.guard, Left(lvl))
-                  yes += newclause
+                  yes += Right(newclause)
                   no += newclause
             case _ => impossible()
           }
         }
+
+        val vars = (0 until args.size).map(i => nextctx.lvl + i).toList
+        val newVarInfo =
+          vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, ty)) =>
+            vars + (lvl -> VarInfo(ty, Set.empty))
+          }
+        val yes2 = yes.map {
+          case Right(c) => c
+          case Left((c, args)) =>
+            val newPats = vars.zip(args).map((lvl, p) => lvl -> normalizePat(p))
+            Clause(
+              pos,
+              pats - branchVar ++ newPats,
+              lets,
+              guard,
+              body
+            )
+        }
+
         val (yesctx, lams) =
           nargs
             .zip(ts)
@@ -654,7 +644,7 @@ object Elaboration extends RetryPostponed:
             }
         val yesResult =
           if yes.isEmpty then impossible()
-          else genMatch(yes.toList, vrty, vrcv)(yesctx, newVarInfo - branchVar)
+          else genMatch(yes2.toList, vrty, vrcv)(yesctx, newVarInfo - branchVar)
         val matchedCons = info.matchedCons + cx
         val noResult =
           if no.isEmpty then

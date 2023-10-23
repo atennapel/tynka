@@ -15,32 +15,30 @@ object Syntax:
     case Con(name: Name, args: List[Tm0])
     case Match(
         scrut: Tm0,
-        cs: List[(Name, Tm0)],
-        other: Option[Tm0]
+        con: Name,
+        body: Tm0,
+        other: Tm0
     )
+    case Impossible
     case Splice(tm: Tm1)
     case Wk10(tm: Tm0)
     case Wk00(tm: Tm0)
 
     override def toString: String = this match
-      case Var0(ix)            => s"'$ix"
-      case Global0(x)          => s"$x"
-      case Prim0(x)            => s"$x"
-      case Let0(x, ty, v, b)   => s"(let $x : $ty := $v; $b)"
-      case LetRec(x, ty, v, b) => s"(let rec $x : $ty := $v; $b)"
-      case Lam0(x, ty, b)      => s"(\\($x : $ty). $b)"
-      case App0(fn, arg)       => s"($fn $arg)"
-      case Con(x, Nil)         => s"$x"
-      case Con(x, as)          => s"($x ${as.mkString(" ")})"
-      case Match(scrut, cs, other) =>
-        s"(match $scrut${if cs.isEmpty then "" else " "}${cs
-            .map((c, b) => s"| $c. $b")
-            .mkString(" ")}${if other.isDefined then " " else ""}${other
-            .map((t) => s"| _. $t")
-            .getOrElse("")})"
-      case Splice(tm) => s"$$$tm"
-      case Wk10(tm)   => s"$tm"
-      case Wk00(tm)   => s"$tm"
+      case Var0(ix)              => s"'$ix"
+      case Global0(x)            => s"$x"
+      case Prim0(x)              => s"$x"
+      case Let0(x, ty, v, b)     => s"(let $x : $ty := $v; $b)"
+      case LetRec(x, ty, v, b)   => s"(let rec $x : $ty := $v; $b)"
+      case Lam0(x, ty, b)        => s"(\\($x : $ty) => $b)"
+      case App0(fn, arg)         => s"($fn $arg)"
+      case Con(x, Nil)           => s"$x"
+      case Con(x, as)            => s"($x ${as.mkString(" ")})"
+      case Match(scrut, c, b, e) => s"(match $scrut | $c => $b | _ => $e)"
+      case Impossible            => "impossible"
+      case Splice(tm)            => s"$$$tm"
+      case Wk10(tm)              => s"$tm"
+      case Wk00(tm)              => s"$tm"
 
     def wk0N(n: Int) =
       @tailrec
@@ -97,7 +95,7 @@ object Syntax:
       case U0(cv)               => s"(Ty $cv)"
       case U1                   => "Meta"
       case Pi(x, i, ty, b)      => s"(${i.wrap(s"$x : $ty")} -> $b)"
-      case Lam1(x, i, ty, b)    => s"(\\${i.wrap(s"$x : $ty")}. $b)"
+      case Lam1(x, i, ty, b)    => s"(\\${i.wrap(s"$x : $ty")} => $b)"
       case App1(fn, arg, Expl)  => s"($fn $arg)"
       case App1(fn, arg, i)     => s"($fn ${i.wrap(arg)})"
       case Fun(pty, _, rty)     => s"($pty -> $rty)"
@@ -113,7 +111,7 @@ object Syntax:
       case Wk11(tm)             => s"$tm"
       case Meta(id)             => s"?$id"
       case MetaPi(m, t, b)      => s"($t ${if m then "1" else "0"}-> $b)"
-      case MetaLam(m, b)        => s"(\\${if m then "1" else "0"}. $b)"
+      case MetaLam(m, b)        => s"(\\${if m then "1" else "0"} => $b)"
       case MetaApp(f, Left(a))  => s"($f 0 $a)"
       case MetaApp(f, Right(a)) => s"($f 1 $a)"
       case PostponedCheck1(id)  => s"?p$id"

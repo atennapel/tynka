@@ -49,7 +49,8 @@ object Parser:
         ":",
         ";",
         "\\",
-        ".",
+        // ".",
+        "=>",
         ",",
         "->",
         "<-",
@@ -219,7 +220,7 @@ object Parser:
       )
 
     private lazy val clauseP: Parsley[(PosInfo, List[Pat], Option[Tm], Tm)] =
-      ("|" *> pos <~> sepBy(patP, ",") <~> option("if" *> tm) <~> "." *> tm)
+      ("|" *> pos <~> sepBy(patP, ",") <~> option("if" *> tm) <~> "=>" *> tm)
         .map { case (((pos, pats), guard), tm) =>
           (pos, pats, guard, tm)
         }
@@ -340,7 +341,9 @@ object Parser:
         <|> bind.map(x => (List(x), ArgIcit(Expl), None))
 
     private lazy val lam: Parsley[Tm] =
-      positioned(("\\" *> many(lamParam) <~> "." *> tm).map(lamFromLamParams _))
+      positioned(
+        ("\\" *> many(lamParam) <~> "=>" *> tm).map(lamFromLamParams _)
+      )
 
     private lazy val app: Parsley[Tm] =
       precedence[Tm](appAtom <|> lam)(

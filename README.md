@@ -36,7 +36,6 @@ TODO:
   - [x] Pattern guards
   - [x] Multi-match check against pi type
   - [ ] Infer multi-match lambda
-  - [ ] Fix scoped bug in guards and join points
 - [ ] Join points
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
