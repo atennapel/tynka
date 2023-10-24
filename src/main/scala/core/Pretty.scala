@@ -54,16 +54,16 @@ object Pretty:
       ns: List[Bind]
   ): String =
     tm match
-      case Var0(_)           => pretty0(tm)
-      case Global0(_)        => pretty0(tm)
-      case Prim0(_)          => pretty0(tm)
-      case Splice(_)         => pretty0(tm)
-      case Impossible        => pretty0(tm)
-      case Con(_, Nil)       => pretty0(tm)
-      case App0(_, _) if app => pretty0(tm)
-      case Con(_, _) if app  => pretty0(tm)
-      case Wk10(tm)          => prettyParen0(tm, app)(ns.tail)
-      case _                 => s"(${pretty0(tm)})"
+      case Var0(_)             => pretty0(tm)
+      case Global0(_)          => pretty0(tm)
+      case Prim0(_)            => pretty0(tm)
+      case Splice(_)           => pretty0(tm)
+      case Impossible(_)       => pretty0(tm)
+      case Con(_, _, Nil)      => pretty0(tm)
+      case App0(_, _) if app   => pretty0(tm)
+      case Con(_, _, _) if app => pretty0(tm)
+      case Wk10(tm)            => prettyParen0(tm, app)(ns.tail)
+      case _                   => s"(${pretty0(tm)})"
 
   @tailrec
   def prettyParen1(tm: Tm1, app: Boolean = false)(implicit
@@ -114,12 +114,13 @@ object Pretty:
     case Lam0(_, _, _) => prettyLam0(tm)
     case App0(_, _)    => prettyApp0(tm)
 
-    case Con(x, Nil)  => s"$x"
-    case Con(x, args) => s"$x ${args.map(a => prettyParen0(a)).mkString(" ")}"
+    case Con(x, _, Nil) => s"$x"
+    case Con(x, _, args) =>
+      s"$x ${args.map(a => prettyParen0(a)).mkString(" ")}"
 
-    case Match(scrut, c, b, e) =>
+    case Match(scrut, _, c, _, b, e) =>
       s"match ${prettyParen0(scrut, true)} | $c => ${prettyParen0(b, true)} | _ => ${prettyParen0(e, true)}"
-    case Impossible => "impossible"
+    case Impossible(_) => "impossible"
 
     case Splice(t) => s"$$${prettyParen1(t)}"
 

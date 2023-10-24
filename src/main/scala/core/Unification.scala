@@ -234,16 +234,19 @@ class Unification(retryPostponed: RetryPostponed):
           case None         => throw UnifyError(s"out of scope $x")
           case Some(PS1(_)) => impossible()
           case Some(PS0(v)) => quote0(v, UnfoldNone)(psub.dom)
-      case VGlobal0(x)            => Global0(x)
-      case VPrim0(x)              => Prim0(x)
-      case VLet0(x, ty, v, b)     => Let0(x, go1(ty), go0(v), goClos(b))
-      case VLetRec(x, ty, v, b)   => LetRec(x, go1(ty), goClos(v), goClos(b))
-      case VLam0(x, ty, b)        => Lam0(x, go1(ty), goClos(b))
-      case VApp0(f, a)            => App0(go0(f), go0(a))
-      case VCon(x, args)          => Con(x, args.map(a => go0(a)))
-      case VMatch(scrut, c, b, o) => Match(go0(scrut), c, go0(b), go0(o))
-      case VImpossible            => Impossible
-      case VSplice(v)             => splice(go1(v))
+      case VGlobal0(x) => Global0(x)
+      case VPrim0(x)   => Prim0(x)
+      case VLet0(x, ty, v, b) =>
+        Let0(x, go1(ty), go0(v), goClos(b))
+      case VLetRec(x, ty, v, b) =>
+        LetRec(x, go1(ty), goClos(v), goClos(b))
+      case VLam0(x, ty, b)  => Lam0(x, go1(ty), goClos(b))
+      case VApp0(f, a)      => App0(go0(f), go0(a))
+      case VCon(x, t, args) => Con(x, go1(t), args.map(a => go0(a)))
+      case VMatch(scrut, ty, c, params, b, o) =>
+        Match(go0(scrut), go1(ty), c, params.map(p => go1(p)), go0(b), go0(o))
+      case VImpossible(ty) => Impossible(go1(ty))
+      case VSplice(v)      => splice(go1(v))
 
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
@@ -326,14 +329,18 @@ class Unification(retryPostponed: RetryPostponed):
       case (VSplice(v1), VSplice(v2))         => unify1(v1, v2)
       case (VLam0(_, _, b1), VLam0(_, _, b2)) => goClos(b1, b2)
       case (VApp0(f1, a1), VApp0(f2, a2))     => unify0(f1, f2); unify0(a1, a2)
-      case (VCon(x1, as1), VCon(x2, as2)) if x1 == x2 && as1.size == as2.size =>
+      case (VCon(x1, _, as1), VCon(x2, _, as2))
+          if x1 == x2 && as1.size == as2.size =>
         as1.zip(as2).foreach(unify0)
-      case (VMatch(scrut1, c1, b1, o1), VMatch(scrut2, c2, b2, o2))
-          if c1 == c2 =>
+      case (
+            VMatch(scrut1, ty1, c1, _, b1, o1),
+            VMatch(scrut2, ty2, c2, _, b2, o2)
+          ) if c1 == c2 =>
+        unify1(ty1, ty2)
         unify0(scrut1, scrut2)
         unify0(b1, b2)
         unify0(o1, o2)
-      case (VImpossible, VImpossible) => ()
+      case (VImpossible(_), VImpossible(_)) => ()
       case _ =>
         throw UnifyError(
           s"cannot unify ${quote0(a, UnfoldNone)} ~ ${quote0(b, UnfoldNone)}"

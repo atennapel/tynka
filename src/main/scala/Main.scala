@@ -1,19 +1,20 @@
 import surface.Parser.defsParser
 import common.Common.*
 import common.Debug.*
-import core.Elaboration.{elaborate, ElaborateError}
+import common.Ref
 import core.Syntax.*
 import core.Value.*
 import core.Evaluation.*
 import core.Metas.*
 import core.Ctx
 import core.Globals.*
+import core.Elaboration.{elaborate, ElaborateError}
+import ir.Monomorphize.monomorphize
+import ir.Simplify.simplify
 
 import java.io.File
 import scala.io.Source
 import parsley.io.given
-import core.Metas.getAllPostponed
-import core.Metas.PostponedEntry
 
 object Main:
   @main def run(filename: String): Unit =
@@ -58,7 +59,7 @@ object Main:
         case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
           println(s"$x : ${ctx.pretty1(vty)} := ${ctx.pretty0(stage(tm))}")
         case GlobalEntry1(x, tm, ty, vv, vty) =>
-          println(tm)
+          // println(tm)
           println(
             s"$x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
           )
@@ -74,6 +75,22 @@ object Main:
             s"| $x ${ps.map(showParam).mkString(" ")}"
           )
       }
+
+      println()
+
+      allGlobals.foreach {
+        case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
+          val mty = monomorphize(ty)
+          implicit val ref = Ref(0)
+          val mtm = monomorphize(stage(tm))
+          println(s"$x : $mty := $mtm")
+          val stm = simplify(mtm)
+          println(stm)
+        case _ =>
+      }
+
+      println()
+
     catch
       case err: ElaborateError =>
         println(err.getMessage)

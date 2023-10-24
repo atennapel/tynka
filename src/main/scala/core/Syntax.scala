@@ -12,33 +12,36 @@ object Syntax:
     case LetRec(name: Name, ty: Ty, value: Tm0, body: Tm0)
     case Lam0(name: Bind, ty: Ty, body: Tm0)
     case App0(fn: Tm0, arg: Tm0)
-    case Con(name: Name, args: List[Tm0])
+    case Con(name: Name, ty: Ty, args: List[Tm0])
     case Match(
         scrut: Tm0,
+        ty: Ty,
         con: Name,
+        params: List[Ty],
         body: Tm0,
         other: Tm0
     )
-    case Impossible
+    case Impossible(ty: Ty)
     case Splice(tm: Tm1)
     case Wk10(tm: Tm0)
     case Wk00(tm: Tm0)
 
     override def toString: String = this match
-      case Var0(ix)              => s"'$ix"
-      case Global0(x)            => s"$x"
-      case Prim0(x)              => s"$x"
-      case Let0(x, ty, v, b)     => s"(let $x : $ty := $v; $b)"
-      case LetRec(x, ty, v, b)   => s"(let rec $x : $ty := $v; $b)"
-      case Lam0(x, ty, b)        => s"(\\($x : $ty) => $b)"
-      case App0(fn, arg)         => s"($fn $arg)"
-      case Con(x, Nil)           => s"$x"
-      case Con(x, as)            => s"($x ${as.mkString(" ")})"
-      case Match(scrut, c, b, e) => s"(match $scrut | $c => $b | _ => $e)"
-      case Impossible            => "impossible"
-      case Splice(tm)            => s"$$$tm"
-      case Wk10(tm)              => s"$tm"
-      case Wk00(tm)              => s"$tm"
+      case Var0(ix)            => s"'$ix"
+      case Global0(x)          => s"$x"
+      case Prim0(x)            => s"$x"
+      case Let0(x, ty, v, b)   => s"(let $x : $ty := $v; $b)"
+      case LetRec(x, ty, v, b) => s"(let rec $x : $ty := $v; $b)"
+      case Lam0(x, ty, b)      => s"(\\($x : $ty) => $b)"
+      case App0(fn, arg)       => s"($fn $arg)"
+      case Con(x, _, Nil)      => s"$x"
+      case Con(x, _, as)       => s"($x ${as.mkString(" ")})"
+      case Match(scrut, t, c, _, b, e) =>
+        s"(match ($scrut : $t) | $c => $b | _ => $e)"
+      case Impossible(_) => "impossible"
+      case Splice(tm)    => s"$$$tm"
+      case Wk10(tm)      => s"$tm"
+      case Wk00(tm)      => s"$tm"
 
     def wk0N(n: Int) =
       @tailrec
@@ -81,6 +84,11 @@ object Syntax:
     case MetaApp(fn: Tm1, arg: Either[Tm0, Tm1])
     case AppPruning(id: MetaId, pruning: Pruning)
     case PostponedCheck1(id: PostponedId)
+
+    def wk0N(n: Int) =
+      @tailrec
+      def go(n: Int, t: Tm1): Tm1 = if n == 0 then t else go(n - 1, Wk01(t))
+      go(n, this)
 
     def wk1N(n: Int) =
       @tailrec

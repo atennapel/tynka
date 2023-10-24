@@ -77,9 +77,16 @@ object Value:
     )
     case VLam0(name: Bind, ty: VTy, body: Clos[S.Tm0])
     case VApp0(fn: Val0, arg: Val0)
-    case VCon(name: Name, args: List[Val0])
-    case VMatch(scrut: Val0, con: Name, body: Val0, other: Val0)
-    case VImpossible
+    case VCon(name: Name, ty: VTy, args: List[Val0])
+    case VMatch(
+        scrut: Val0,
+        ty: VTy,
+        con: Name,
+        params: List[VTy],
+        body: Val0,
+        other: Val0
+    )
+    case VImpossible(ty: VTy)
     case VSplice(tm: Val1)
   export Val0.*
 
