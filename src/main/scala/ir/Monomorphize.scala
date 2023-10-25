@@ -76,14 +76,19 @@ object Monomorphize:
     ref.updateGetOld(_ + 1)
 
   // monomorphization
-  private val monoMap: mutable.Map[(Name, List[Ty]), Name] = mutable.Map.empty
+  type DatatypeCons = List[(Name, List[(Bind, Ty)])]
+  type Datatype = (Name, DatatypeCons)
+  private val monoMap: mutable.Map[(Name, List[Ty]), Name] =
+    mutable.Map.empty
+  private val monoData: mutable.ArrayBuffer[Datatype] =
+    mutable.ArrayBuffer.empty
 
   private inline def goTDef(t: S.Ty): TDef = goVTDef(eval1(t)(EEmpty))
   private def goVTDef(t: VTy): TDef = forceAll1(t) match
     case VFun(pty, _, rty) => TDef(goVTy(pty), goVTDef(rty))
     case t                 => TDef(goVTy(t))
 
-  private inline def goTy(t: S.Ty): Ty = goVTy(eval1(t)(EEmpty))
+  private inline def goTy(t: S.Ty, env: Env = EEmpty): Ty = goVTy(eval1(t)(env))
   private def goVTy(t: VTy): Ty = forceAll1(t) match
     case VTCon(dx, ps) => TCon(mono(dx, ps))
     case _             => impossible()
@@ -103,4 +108,14 @@ object Monomorphize:
       case None =>
         val x = genName(dx, mps)
         monoMap += (dx, mps) -> x
+        monoData += ((x, monoCons(dx, ps)))
         x
+
+  private def monoCons(dx: Name, ps: List[VTy]): DatatypeCons =
+    val env = ps.foldLeft(EEmpty)(E1.apply)
+    getGlobalData0(dx).cons.map { cx =>
+      val ps = getGlobalCon0(cx).params.map((x, t) => (x, goTy(t, env)))
+      (cx, ps)
+    }
+
+  def monomorphizedDatatypes: List[Datatype] = monoData.toList

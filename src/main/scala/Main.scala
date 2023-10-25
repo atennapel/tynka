@@ -9,8 +9,7 @@ import core.Metas.*
 import core.Ctx
 import core.Globals.*
 import core.Elaboration.{elaborate, ElaborateError}
-import ir.Monomorphize.monomorphize
-import ir.Simplify.simplify
+import ir.Compile.compile
 
 import java.io.File
 import scala.io.Source
@@ -78,16 +77,7 @@ object Main:
 
       println()
 
-      allGlobals.foreach {
-        case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
-          val mty = monomorphize(ty)
-          implicit val ref = Ref(0)
-          val mtm = monomorphize(stage(tm))
-          println(s"$x : $mty := $mtm")
-          val stm = simplify(mtm)
-          println(stm)
-        case _ =>
-      }
+      compile()
 
       println()
 

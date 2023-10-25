@@ -24,9 +24,12 @@ object Syntax:
     def head: Ty = ps match
       case Nil     => impossible()
       case hd :: _ => hd
+    def returnType = TDef(Nil, rt)
+    def isFunction: Boolean = ps.nonEmpty
   object TDef:
     def apply(rt: Ty): TDef = TDef(Nil, rt)
     def apply(t: Ty, rt: TDef): TDef = TDef(t :: rt.ps, rt.rt)
+    def apply(ts: List[Ty], t: TDef): TDef = TDef(ts ++ t.ps, t.rt)
 
   enum Tm:
     case Var(name: LName, ty: TDef)
@@ -62,6 +65,13 @@ object Syntax:
       case Impossible          => "impossible"
       case Field(value, _, ix) => s"(#$ix $value)"
 
+    def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
+
+    def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
+      ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
+        (Lam(x, t, rt, b), TDef(t, rt))
+      }._1
+
     def subst(x: LName, v: Tm): Tm = subst(Map(x -> v))
     def subst(ss: Map[LName, Tm]): Tm = this match
       case Var(x, _)             => ss.get(x).getOrElse(this)
@@ -77,17 +87,17 @@ object Syntax:
       case Match(s, t, bty, c, x, b, o) =>
         Match(s.subst(ss), t, bty, c, x, b.subst(ss), o.subst(ss))
 
-    def free: List[LName] = this match
-      case Var(x, _)           => List(x)
+    def free: List[(LName, TDef)] = this match
+      case Var(x, t)           => List((x, t))
       case Global(x, _)        => Nil
       case Con(_, args)        => args.flatMap(_.free)
       case App(f, a)           => f.free ++ a.free
       case Impossible          => Nil
       case Field(v, _, ix)     => v.free
-      case Let(x, ty, _, v, b) => v.free ++ b.free.filterNot(_ == x)
+      case Let(x, ty, _, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
       case LetRec(x, ty, _, v, b) =>
-        v.free.filterNot(_ == x) ++ b.free.filterNot(_ == x)
-      case Lam(x, ty, _, b) => b.free.filterNot(_ == x)
+        v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
+      case Lam(x, ty, _, b) => b.free.filterNot((y, _) => x == y)
       case Match(s, _, _, _, x, b, o) =>
-        s.free ++ b.free.filterNot(_ == x) ++ o.free
+        s.free ++ b.free.filterNot((y, _) => x == y) ++ o.free
   export Tm.*
