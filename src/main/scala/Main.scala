@@ -77,9 +77,8 @@ object Main:
 
       println()
 
-      compile()
-
-      println()
+      val all = compile(Name("main"))
+      all.foreach(println)
 
     catch
       case err: ElaborateError =>

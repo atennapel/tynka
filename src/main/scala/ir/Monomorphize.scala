@@ -29,14 +29,17 @@ object Monomorphize:
             val td = goTDef(ty)
             (Global(x, td), td)
           case _ => impossible()
-      case S.Impossible(ty) => (Impossible, goTDef(ty))
+      case S.Impossible(ty) =>
+        val td = goTDef(ty)
+        (Impossible(td), td)
 
       case S.App0(fn, arg) =>
         val (ef, tf) = go(fn)
         val (ea, ta) = go(arg)
         (App(ef, ea), tf.tail)
       case S.Con(name, ty, args) =>
-        (Con(name, args.map(a => go(a)._1)), TDef(goTy(ty)))
+        val dt = goTy(ty)
+        (Con(name, dt, args.map(a => go(a)._1)), TDef(dt))
       case S.Wk10(tm) => go(tm)
       case S.Wk00(tm) => go(tm)(ref, ctx.tail)
 
