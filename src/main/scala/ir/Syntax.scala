@@ -36,6 +36,9 @@ object Syntax:
     case Global(name: Name, ty: TDef)
     case Let(name: LName, ty: TDef, bty: TDef, value: Tm, body: Tm)
     case LetRec(name: LName, ty: TDef, bty: TDef, value: Tm, body: Tm)
+    case Join(name: LName, ps: List[Ty], rty: TDef, value: Tm, body: Tm)
+    case JoinRec(name: LName, ps: List[Ty], rty: TDef, value: Tm, body: Tm)
+    case Jump(name: LName, ty: TDef)
     case Lam(name: LName, ty: Ty, bty: TDef, body: Tm)
     case App(fn: Tm, arg: Tm)
     case Con(name: Name, args: List[Tm])
@@ -56,10 +59,14 @@ object Syntax:
       case Global(x, _)           => s"$x"
       case Let(x, ty, _, v, b)    => s"(let '$x : $ty := $v; $b)"
       case LetRec(x, ty, _, v, b) => s"(let rec '$x : $ty := $v; $b)"
-      case Lam(x, ty, _, b)       => s"(\\('$x : $ty) => $b)"
-      case App(fn, arg)           => s"($fn $arg)"
-      case Con(x, Nil)            => s"$x"
-      case Con(x, as)             => s"($x ${as.mkString(" ")})"
+      case Join(x, ps, ty, v, b)  => s"(join '$x : ${TDef(ps, ty)} := $v; $b)"
+      case JoinRec(x, ps, ty, v, b) =>
+        s"(join rec '$x : ${TDef(ps, ty)} := $v; $b)"
+      case Jump(x, _)       => s"(jump $x)"
+      case Lam(x, ty, _, b) => s"(\\('$x : $ty) => $b)"
+      case App(fn, arg)     => s"($fn $arg)"
+      case Con(x, Nil)      => s"$x"
+      case Con(x, as)       => s"($x ${as.mkString(" ")})"
       case Match(scrut, _, _, c, x, b, e) =>
         s"(match $scrut | $c as '$x => $b | _ => $e)"
       case Impossible          => "impossible"
@@ -72,6 +79,12 @@ object Syntax:
         (Lam(x, t, rt, b), TDef(t, rt))
       }._1
 
+    def flattenApps: (Tm, List[Tm]) = this match
+      case App(fn, arg) =>
+        val (f, args) = fn.flattenApps
+        (f, args ++ List(arg))
+      case t => (t, Nil)
+
     def subst(x: LName, v: Tm): Tm = subst(Map(x -> v))
     def subst(ss: Map[LName, Tm]): Tm = this match
       case Var(x, _)             => ss.get(x).getOrElse(this)
@@ -83,6 +96,10 @@ object Syntax:
       case Let(x, ty, bty, v, b) => Let(x, ty, bty, v.subst(ss), b.subst(ss))
       case LetRec(x, ty, bty, v, b) =>
         LetRec(x, ty, bty, v.subst(ss), b.subst(ss))
+      case Join(x, ps, ty, v, b) => Join(x, ps, ty, v.subst(ss), b.subst(ss))
+      case JoinRec(x, ps, ty, v, b) =>
+        JoinRec(x, ps, ty, v.subst(ss), b.subst(ss))
+      case Jump(x, _)            => ss.get(x).getOrElse(this)
       case Lam(x, ty, bty, body) => Lam(x, ty, bty, body.subst(ss))
       case Match(s, t, bty, c, x, b, o) =>
         Match(s.subst(ss), t, bty, c, x, b.subst(ss), o.subst(ss))
@@ -97,6 +114,10 @@ object Syntax:
       case Let(x, ty, _, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
       case LetRec(x, ty, _, v, b) =>
         v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
+      case Join(x, ps, ty, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
+      case JoinRec(x, ps, ty, v, b) =>
+        v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
+      case Jump(x, t)       => List((x, t))
       case Lam(x, ty, _, b) => b.free.filterNot((y, _) => x == y)
       case Match(s, _, _, _, x, b, o) =>
         s.free ++ b.free.filterNot((y, _) => x == y) ++ o.free
