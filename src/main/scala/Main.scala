@@ -11,6 +11,8 @@ import core.Globals.*
 import core.Elaboration.{elaborate, ElaborateError}
 import ir.Compile.compile
 
+import jvmir.DataGenerator.genDatatypes
+
 import java.io.File
 import scala.io.Source
 import parsley.io.given
@@ -79,6 +81,8 @@ object Main:
 
       val all = compile(Name("main"))
       all.foreach(println)
+
+      genDatatypes(all)
 
     catch
       case err: ElaborateError =>

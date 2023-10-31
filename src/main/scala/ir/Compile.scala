@@ -20,7 +20,7 @@ object Compile:
         implicit val ref = Ref(0)
         val mtm = monomorphize(stage(tm))
         simplify(x, mtm, mty).map { (x, t, v) =>
-          println(s"def $x : $t = $v")
+          // println(s"def $x : $t = $v")
           implicit val rename: LocalRename = LocalRename()
           v.flattenLams match
             case (None, v) => J.DDef(x, go(t), go(v))
