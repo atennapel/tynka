@@ -98,7 +98,7 @@ object Syntax:
         con: Name,
         name: LName,
         body: Tm,
-        other: Tm
+        other: Option[Tm]
     )
 
     def globals: Set[Name] = this match
@@ -115,9 +115,10 @@ object Syntax:
       case JoinRec(_, _, v, b) => v.globals ++ b.globals
       case Jump(_, as)         => as.flatMap(_.globals).toSet
 
-      case Con(_, as)           => as.flatMap(_.globals).toSet
-      case Field(_, s, _)       => s.globals
-      case Match(s, _, _, b, o) => s.globals ++ b.globals ++ o.globals
+      case Con(_, as)     => as.flatMap(_.globals).toSet
+      case Field(_, s, _) => s.globals
+      case Match(s, _, _, b, o) =>
+        s.globals ++ b.globals ++ o.map(_.globals).getOrElse(Set.empty)
 
     def dataGlobals: Set[Name] = this match
       case Arg(ix)   => Set.empty
@@ -140,7 +141,9 @@ object Syntax:
       case Con(_, as)     => as.flatMap(_.dataGlobals).toSet
       case Field(_, s, _) => s.dataGlobals
       case Match(s, _, _, b, o) =>
-        s.dataGlobals ++ b.dataGlobals ++ o.dataGlobals
+        s.dataGlobals ++ b.dataGlobals ++ o
+          .map(_.dataGlobals)
+          .getOrElse(Set.empty)
 
     override def toString: String = this match
       case Arg(i)       => s"'arg$i"
@@ -164,7 +167,9 @@ object Syntax:
 
       case Con(x, Nil) => s"$x"
       case Con(x, as)  => s"($x ${as.mkString(" ")})"
-      case Match(scrut, c, x, b, e) =>
+      case Match(scrut, c, x, b, Some(e)) =>
         s"(match $scrut | $c as '$x => $b | _ => $e)"
+      case Match(scrut, c, x, b, None) =>
+        s"(match $scrut | $c as '$x => $b)"
       case Field(_, value, ix) => s"(#$ix $value)"
   export Tm.*

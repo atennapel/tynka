@@ -273,31 +273,46 @@ object Generator:
         val info = conInfo(cx)
         val dataInfo = dataInfoFromCon(cx)
         val nilary = info.params.isEmpty
-        val lEnd = new Label
-        var lOther = new Label
         gen(s)
-        mg.dup()
-        if nilary then
-          mg.getStatic(dataInfo.ty, s"$$${info.jname}$$", info.ty)
-          mg.visitJumpInsn(IF_ACMPNE, lOther)
-          mg.pop()
-          gen(b)
-        else
-          mg.instanceOf(info.ty)
-          mg.visitJumpInsn(IFEQ, lOther)
-          mg.checkCast(info.ty)
-          val local = mg.newLocal(info.ty)
-          mg.storeLocal(local)
-          gen(b)(
-            mg,
-            ctx,
-            locals + (x -> LLocal(local, TCon(info.data)))
-          )
-        mg.visitJumpInsn(GOTO, lEnd)
-        mg.visitLabel(lOther)
-        mg.pop()
-        gen(o)
-        mg.visitLabel(lEnd)
+        o match
+          case Some(o) =>
+            val lEnd = new Label
+            var lOther = new Label
+            mg.dup()
+            if nilary then
+              mg.getStatic(dataInfo.ty, s"$$${info.jname}$$", info.ty)
+              mg.visitJumpInsn(IF_ACMPNE, lOther)
+              mg.pop()
+              gen(b)
+            else
+              mg.instanceOf(info.ty)
+              mg.visitJumpInsn(IFEQ, lOther)
+              mg.checkCast(info.ty)
+              val local = mg.newLocal(info.ty)
+              mg.storeLocal(local)
+              gen(b)(
+                mg,
+                ctx,
+                locals + (x -> LLocal(local, TCon(info.data)))
+              )
+            mg.visitJumpInsn(GOTO, lEnd)
+            mg.visitLabel(lOther)
+            mg.pop()
+            gen(o)
+            mg.visitLabel(lEnd)
+          case None =>
+            if nilary then
+              mg.pop()
+              gen(b)
+            else
+              mg.checkCast(info.ty)
+              val local = mg.newLocal(info.ty)
+              mg.storeLocal(local)
+              gen(b)(
+                mg,
+                ctx,
+                locals + (x -> LLocal(local, TCon(info.data)))
+              )
 
   private def genLocal(scrut: Tm, jty: Type, t: Ty)(implicit
       mg: GeneratorAdapter,

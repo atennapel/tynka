@@ -214,8 +214,8 @@ object Simplify:
           case s =>
             val eb = go(b)
             go(o) match
-              case Impossible(_) => go(Let(x, TDef(t), bt, s, eb))
-              case o             => Match(s, t, bt, c, x, eb, o)
+              // case Impossible(_) => go(Let(x, TDef(t), bt, s, eb))
+              case o => Match(s, t, bt, c, x, eb, o)
 
       case Field(cx, v, ty, ix) =>
         go(v) match

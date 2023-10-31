@@ -103,7 +103,9 @@ object Compile:
 
       case Match(s, ty, bty, c, x0, b, o) =>
         val x = localrename.fresh(x0, false)
-        J.Match(go(s), c, x, go(b), go(o))
+        o match
+          case Impossible(_) => J.Match(go(s), c, x, go(b), None)
+          case _             => J.Match(go(s), c, x, go(b), Some(go(o)))
 
       case Join(x0, ps, rty, v, b) =>
         val x = localrename.fresh(x0, false)
