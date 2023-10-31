@@ -19,16 +19,16 @@ object Compile:
         val mty = monomorphize(ty)
         implicit val ref = Ref(0)
         val mtm = monomorphize(stage(tm))
-        simplify(x, mtm, mty).map { (x, t, v) =>
-          // println(s"def $x : $t = $v")
+        simplify(x, mtm, mty).map { (g, x, t, v) =>
+          // println(s"def${if g then "[gen]" else ""} $x : $t = $v")
           implicit val rename: LocalRename = LocalRename()
           v.flattenLams match
-            case (None, v) => J.DDef(x, go(t), go(v))
+            case (None, v) => J.DDef(g, x, go(t), go(v))
             case (Some(ps, _), v) =>
               ps.zipWithIndex.foreach { case ((x, _), i) =>
                 rename.set(x, i, true)
               }
-              J.DDef(x, go(t), go(v))
+              J.DDef(g, x, go(t), go(v))
         }
       case _ => Nil
     }
@@ -53,7 +53,7 @@ object Compile:
   private def removeUnused(top: Name, ds: List[J.Def]): List[J.Def] =
     def isUsed(x: Name, ds: List[J.Def]): Boolean =
       ds.filterNot {
-        case J.DDef(y, _, _) => y == x; case _ => false
+        case J.DDef(_, y, _, _) => y == x; case _ => false
       }.flatMap(_.globals)
         .contains(x)
     def isDataUsed(x: Name, ds: List[J.Def]): Boolean =
@@ -65,9 +65,9 @@ object Compile:
       case (d @ J.DData(x, _)) :: tl if isDataUsed(x, full) =>
         go(tl, full).map(d :: _)
       case J.DData(_, _) :: tl => Some(tl)
-      case (d @ J.DDef(x, _, _)) :: tl if x == top || isUsed(x, full) =>
+      case (d @ J.DDef(_, x, _, _)) :: tl if x == top || isUsed(x, full) =>
         go(tl, full).map(d :: _)
-      case J.DDef(x, _, _) :: tl => Some(tl)
+      case J.DDef(_, x, _, _) :: tl => Some(tl)
     @tailrec
     def loop(ds: List[J.Def]): List[J.Def] = go(ds, ds) match
       case None      => ds
@@ -87,9 +87,9 @@ object Compile:
       case Var(x0, _) =>
         val (x, arg) = localrename.get(x0)
         if arg then J.Arg(x) else J.Var(x)
-      case Con(cx, _, as)  => J.Con(cx, as.map(go))
-      case Field(s, ty, i) => J.Field(go(s), go(ty), i)
-      case Global(x, ty)   => J.Global(x, go(ty.ty))
+      case Con(cx, _, as)      => J.Con(cx, as.map(go))
+      case Field(cx, s, ty, i) => J.Field(cx, go(s), i)
+      case Global(x, ty)       => J.Global(x, go(ty.ty))
 
       case Let(x0, t, rt, v, b) =>
         val x = localrename.fresh(x0, false)
@@ -103,14 +103,13 @@ object Compile:
 
       case Match(s, ty, bty, c, x0, b, o) =>
         val x = localrename.fresh(x0, false)
-        J.Match(go(s), go(ty), c, x, go(b), go(o))
+        J.Match(go(s), c, x, go(b), go(o))
 
       case Join(x0, ps, rty, v, b) =>
         val x = localrename.fresh(x0, false)
         J.Join(
           x,
           ps.map((y, t) => (localrename.fresh(y, false), go(t))),
-          go(rty),
           go(v),
           go(b)
         )
@@ -119,7 +118,6 @@ object Compile:
         J.JoinRec(
           x,
           ps.map((y, t) => (localrename.fresh(y, false), go(t))),
-          go(rty),
           go(v),
           go(b)
         )

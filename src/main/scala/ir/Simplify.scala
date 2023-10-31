@@ -9,7 +9,7 @@ import scala.collection.mutable
 object Simplify:
   def simplify(x: Name, t: Tm, ty: TDef)(implicit
       ref: Ref[LName]
-  ): List[(Name, TDef, Tm)] =
+  ): List[(Boolean, Name, TDef, Tm)] =
     val extraDefs = mutable.ArrayBuffer.empty[(Name, TDef, Tm)]
     var uniq = 0
     implicit val gendef: GenDef[Tm] = k =>
@@ -19,7 +19,8 @@ object Simplify:
       extraDefs += ((dx, ty, v))
       r
     val ev = go(t) // do not inline
-    extraDefs.toList ++ List((x, ty, ev))
+    val genDefs = extraDefs.toList.map((x, t, v) => (true, x, t, v))
+    genDefs ++ List((false, x, ty, ev))
 
   private type GenDef[R] = (Name => ((TDef, Tm), R)) => R
 
@@ -216,22 +217,24 @@ object Simplify:
               case Impossible(_) => go(Let(x, TDef(t), bt, s, eb))
               case o             => Match(s, t, bt, c, x, eb, o)
 
-      case Field(v, ty, ix) =>
+      case Field(cx, v, ty, ix) =>
         go(v) match
           case Impossible(_)     => Impossible(TDef(ty))
           case Con(_, _, args)   => args(ix)
           case j @ Jump(_, _, _) => j
           case Let(x, t, bt, v, b) =>
-            go(Let(x, t, ty, v, Field(b, ty, ix)))
+            go(Let(x, t, ty, v, Field(cx, b, ty, ix)))
           case LetRec(x, t, bt, v, b) =>
-            go(LetRec(x, t, ty, v, Field(b, ty, ix)))
+            go(LetRec(x, t, ty, v, Field(cx, b, ty, ix)))
           case Join(x, ps, rt, v, b) =>
-            go(Join(x, ps, ty, Field(v, ty, ix), Field(b, ty, ix)))
+            go(Join(x, ps, ty, Field(cx, v, ty, ix), Field(cx, b, ty, ix)))
           case JoinRec(x, ps, rt, v, b) =>
-            go(JoinRec(x, ps, ty, Field(v, ty, ix), Field(b, ty, ix)))
+            go(JoinRec(x, ps, ty, Field(cx, v, ty, ix), Field(cx, b, ty, ix)))
           case Match(s, t, bt, c, x, b, o) =>
-            go(Match(s, t, ty, c, x, Field(b, ty, ix), Field(o, ty, ix)))
-          case v => Field(v, ty, ix)
+            go(
+              Match(s, t, ty, c, x, Field(cx, b, ty, ix), Field(cx, o, ty, ix))
+            )
+          case v => Field(cx, v, ty, ix)
 
       /*
       case ReturnIO(v) =>
@@ -312,13 +315,13 @@ object Simplify:
       t.flatMap(_.free).forall((y, _) => x != y)
     inline def inTail(t: Tm): Boolean = tailPos(x, arity, t)
     b match
-      case Var(y, _)          => x != y || arity == 0
-      case Impossible(_)      => true
-      case Field(value, _, _) => notContains(value)
-      case Global(_, _)       => true
-      case Jump(_, _, args)   => notAnyContains(args)
-      case Con(_, _, args)    => notAnyContains(args)
-      case Lam(_, bty, body)  => notContains(body)
+      case Var(y, _)             => x != y || arity == 0
+      case Impossible(_)         => true
+      case Field(_, value, _, _) => notContains(value)
+      case Global(_, _)          => true
+      case Jump(_, _, args)      => notAnyContains(args)
+      case Con(_, _, args)       => notAnyContains(args)
+      case Lam(_, bty, body)     => notContains(body)
 
       case ReturnIO(v) => inTail(v)
       case RunIO(c)    => inTail(c)

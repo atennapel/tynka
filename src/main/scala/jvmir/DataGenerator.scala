@@ -13,14 +13,14 @@ import java.io.BufferedOutputStream
 import java.io.FileOutputStream
 
 object DataGenerator:
-  private final case class DataInfo(
+  final case class DataInfo(
       jname: String,
       desc: String,
       ty: Type,
       cons: List[Name]
   )
   private val types: mutable.Map[Name, DataInfo] = mutable.Map.empty
-  private final case class ConInfo(
+  final case class ConInfo(
       jname: String,
       data: Name,
       className: String,
@@ -30,7 +30,14 @@ object DataGenerator:
   )
   private val cons: mutable.Map[Name, ConInfo] = mutable.Map.empty
 
-  def genDatatypes(ds: List[Def]): Unit =
+  def dataInfo(dx: Name): DataInfo = types(dx)
+  def conInfo(cx: Name): ConInfo = cons(cx)
+  def dataInfoFromCon(cx: Name): DataInfo = types(cons(cx).data)
+
+  def genDatatypes(
+      ds: List[Def],
+      visitInnerClass: Option[(ClassWriter, String)] = None
+  ): Unit =
     ds.foreach {
       case DData(dx, cs) =>
         val edx = escape(dx.expose)
@@ -49,7 +56,7 @@ object DataGenerator:
             val y = x match
               case DoBind(x) => escape(x.expose)
               case DontBind  => s"a$i"
-            (y, gen(t))
+            (y, genTy(t))
           }
           cons += (cx -> ConInfo(
             ecx,
@@ -63,14 +70,18 @@ object DataGenerator:
       case _ =>
     }
     ds.foreach {
-      case DData(dx, cs) => genData(dx, cs)
+      case DData(dx, cs) => genData(dx, cs, visitInnerClass)
       case _             =>
     }
 
-  def gen(t: Ty): Type = t match
+  def genTy(t: Ty): Type = t match
     case TCon(dx) => types(dx).ty
 
-  private def genData(dx: Name, cs: List[(Name, List[(Bind, Ty)])]): Unit =
+  private def genData(
+      dx: Name,
+      cs: List[(Name, List[(Bind, Ty)])],
+      visitInnerClass: Option[(ClassWriter, String)]
+  ): Unit =
     val className = types(dx).jname
     val datacw = new ClassWriter(
       ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES
@@ -145,13 +156,14 @@ object DataGenerator:
 
     // output
     datacw.visitEnd()
-    /*
-    cw.visitInnerClass(
-      className,
-      ???,
-      className,
-      ACC_PUBLIC + ACC_ABSTRACT + ACC_STATIC
-    )*/
+    visitInnerClass.foreach { (cw, outerClassName) =>
+      cw.visitInnerClass(
+        className,
+        outerClassName,
+        className,
+        ACC_PUBLIC + ACC_ABSTRACT + ACC_STATIC
+      )
+    }
     val bos = new BufferedOutputStream(
       new FileOutputStream(s"$className.class")
     )

@@ -39,14 +39,14 @@ object Syntax:
 
   enum Def:
     case DData(name: Name, cons: List[(Name, List[(Bind, Ty)])])
-    case DDef(name: Name, ty: TDef, value: Tm)
+    case DDef(gen: Boolean, name: Name, ty: TDef, value: Tm)
 
     def globals: Set[Name] = this match
-      case DDef(name, ty, value) => value.globals
-      case DData(name, cs)       => Set.empty
+      case DDef(_, name, ty, value) => value.globals
+      case DData(name, cs)          => Set.empty
 
     def dataGlobals: Set[Name] = this match
-      case DDef(name, ty, value) => ty.dataGlobals ++ value.dataGlobals
+      case DDef(_, name, ty, value) => ty.dataGlobals ++ value.dataGlobals
       case DData(name, cs) =>
         cs.flatMap((_, as) => as.flatMap((_, t) => t.dataGlobals)).toSet
 
@@ -68,9 +68,9 @@ object Syntax:
           }
           .mkString(" | ")
         s"data $x = $scs"
-      case DDef(x, t, v) =>
+      case DDef(g, x, t, v) =>
         val sps = t.ps.map(_.mkString(" ")).getOrElse("")
-        s"def $x${if t.ps.isEmpty then "" else " "}$sps : ${t.rt} = $v"
+        s"def${if g then "[gen]" else ""} $x${if t.ps.isEmpty then "" else " "}$sps : ${t.rt} = $v"
   export Def.*
 
   enum Tm:
@@ -80,11 +80,10 @@ object Syntax:
 
     case Let(name: LName, ty: Ty, value: Tm, body: Tm)
 
-    case Join(name: LName, ps: List[(LName, Ty)], ty: Ty, value: Tm, body: Tm)
+    case Join(name: LName, ps: List[(LName, Ty)], value: Tm, body: Tm)
     case JoinRec(
         name: LName,
         ps: List[(LName, Ty)],
-        ty: Ty,
         value: Tm,
         body: Tm
     )
@@ -93,10 +92,9 @@ object Syntax:
     case GlobalApp(name: Name, ty: TDef, as: List[Tm])
 
     case Con(con: Name, args: List[Tm])
-    case Field(scrut: Tm, ty: Ty, ix: Int)
+    case Field(cx: Name, scrut: Tm, ix: Int)
     case Match(
         scrut: Tm,
-        ty: Ty,
         con: Name,
         name: LName,
         body: Tm,
@@ -113,13 +111,13 @@ object Syntax:
       case Let(name, ty, value, body) =>
         value.globals ++ body.globals
 
-      case Join(x, ps, ty, v, b)  => v.globals ++ b.globals
-      case JoinRec(_, _, _, v, b) => v.globals ++ b.globals
-      case Jump(_, as)            => as.flatMap(_.globals).toSet
+      case Join(x, ps, v, b)   => v.globals ++ b.globals
+      case JoinRec(_, _, v, b) => v.globals ++ b.globals
+      case Jump(_, as)         => as.flatMap(_.globals).toSet
 
-      case Con(_, as)              => as.flatMap(_.globals).toSet
-      case Field(s, _, _)          => s.globals
-      case Match(s, _, _, _, b, o) => s.globals ++ b.globals ++ o.globals
+      case Con(_, as)           => as.flatMap(_.globals).toSet
+      case Field(_, s, _)       => s.globals
+      case Match(s, _, _, b, o) => s.globals ++ b.globals ++ o.globals
 
     def dataGlobals: Set[Name] = this match
       case Arg(ix)   => Set.empty
@@ -131,18 +129,18 @@ object Syntax:
       case Let(name, ty, value, body) =>
         ty.dataGlobals ++ value.dataGlobals ++ body.dataGlobals
 
-      case Join(x, ps, ty, v, b) =>
+      case Join(x, ps, v, b) =>
         ps.flatMap((_, t) => t.dataGlobals)
           .toSet ++ v.dataGlobals ++ b.dataGlobals
-      case JoinRec(_, ps, ty, v, b) =>
+      case JoinRec(_, ps, v, b) =>
         ps.flatMap((_, t) => t.dataGlobals)
           .toSet ++ v.dataGlobals ++ b.dataGlobals
       case Jump(_, as) => as.flatMap(_.dataGlobals).toSet
 
-      case Con(_, as)      => as.flatMap(_.dataGlobals).toSet
-      case Field(s, ty, _) => s.dataGlobals ++ ty.dataGlobals
-      case Match(s, t, bt, _, b, o) =>
-        t.dataGlobals ++ s.dataGlobals ++ b.dataGlobals ++ o.dataGlobals
+      case Con(_, as)     => as.flatMap(_.dataGlobals).toSet
+      case Field(_, s, _) => s.dataGlobals
+      case Match(s, _, _, b, o) =>
+        s.dataGlobals ++ b.dataGlobals ++ o.dataGlobals
 
     override def toString: String = this match
       case Arg(i)       => s"'arg$i"
@@ -151,14 +149,14 @@ object Syntax:
 
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
 
-      case Join(x, ps, t, v, b) =>
+      case Join(x, ps, v, b) =>
         s"(join $x${if ps.isEmpty then "" else " "}${ps
             .map((x, t) => s"($x : $t)")
-            .mkString(" ")} : $t = $v; $b)"
-      case JoinRec(x, ps, t, v, b) =>
+            .mkString(" ")} = $v; $b)"
+      case JoinRec(x, ps, v, b) =>
         s"(join rec $x${if ps.isEmpty then "" else " "}${ps
             .map((x, t) => s"($x : $t)")
-            .mkString(" ")} : $t = $v; $b)"
+            .mkString(" ")} = $v; $b)"
       case Jump(x, as) => s"jump@$x(${as.mkString(", ")})"
 
       case GlobalApp(x, _, as) =>
@@ -166,7 +164,7 @@ object Syntax:
 
       case Con(x, Nil) => s"$x"
       case Con(x, as)  => s"($x ${as.mkString(" ")})"
-      case Match(scrut, _, c, x, b, e) =>
+      case Match(scrut, c, x, b, e) =>
         s"(match $scrut | $c as '$x => $b | _ => $e)"
-      case Field(value, _, ix) => s"(#$ix $value)"
+      case Field(_, value, ix) => s"(#$ix $value)"
   export Tm.*

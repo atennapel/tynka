@@ -78,7 +78,7 @@ object Monomorphize:
         val vx = Var(x, TDef(dt))
         val eb =
           (0 until ps.size).zip(ps).foldLeft(go(b)._1) { case (v, (i, t)) =>
-            App(v, Field(vx, goTy(t), i))
+            App(v, Field(c, vx, goTy(t), i))
           }
         val (eo, to) = go(o)
         val (vs, rt, spine) = eta(to)
