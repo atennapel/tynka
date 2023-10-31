@@ -31,40 +31,41 @@ object Syntax:
       ps.flatMap(_.dataGlobals).toSet ++ rt.dataGlobals
     def drop(n: Int): TDef = TDef(ps.drop(n), io, rt)
     def returnIO: TDef = if io then impossible() else TDef(ps, true, rt)
-    def runIO: TDef = if !io then impossible() else TDef(ps, false, rt)
+    def runIO: Ty = if !io || ps.nonEmpty then impossible() else rt
   object TDef:
     def apply(rt: Ty): TDef = TDef(Nil, false, rt)
     def apply(io: Boolean, rt: Ty): TDef = TDef(Nil, io, rt)
     def apply(t: Ty, rt: TDef): TDef = TDef(t :: rt.ps, rt.io, rt.rt)
+    def apply(t: Ty, rt: Ty): TDef = TDef(List(t), false, rt)
     def apply(ts: List[Ty], t: TDef): TDef = TDef(ts ++ t.ps, t.io, t.rt)
 
   enum Tm:
     case Var(name: LName, ty: TDef)
     case Global(name: Name, ty: TDef)
-    case Let(name: LName, ty: TDef, bty: TDef, value: Tm, body: Tm)
-    case LetRec(name: LName, ty: TDef, bty: TDef, value: Tm, body: Tm)
+    case Let(name: LName, ty: TDef, bty: Ty, value: Tm, body: Tm)
+    case LetRec(name: LName, ty: TDef, bty: Ty, value: Tm, body: Tm)
     case Join(
         name: LName,
         ps: List[(LName, Ty)],
-        rty: TDef,
+        rty: Ty,
         value: Tm,
         body: Tm
     )
     case JoinRec(
         name: LName,
         ps: List[(LName, Ty)],
-        rty: TDef,
+        rty: Ty,
         value: Tm,
         body: Tm
     )
     case Jump(name: LName, ty: TDef, args: List[Tm])
-    case Lam(name: LName, ty: Ty, bty: TDef, body: Tm)
+    case Lam(params: List[(LName, Ty)], bty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm)
     case Con(name: Name, ty: Ty, args: List[Tm])
     case Match(
         scrut: Tm,
         ty: Ty,
-        bty: TDef,
+        bty: Ty,
         con: Name,
         name: LName,
         body: Tm,
@@ -93,10 +94,13 @@ object Syntax:
         s"(join rec '$x$sps : ${ty} = $v; $b)"
       case Jump(x, _, Nil)  => s"(jump $x)"
       case Jump(x, _, args) => s"(jump $x ${args.mkString(" ")})"
-      case Lam(x, ty, _, b) => s"(\\('$x : $ty) => $b)"
-      case App(fn, arg)     => s"($fn $arg)"
-      case Con(x, _, Nil)   => s"$x"
-      case Con(x, _, as)    => s"($x ${as.mkString(" ")})"
+      case Lam(ps, ty, b) =>
+        s"(\\${ps.map((x, t) => s"('$x : $t')").mkString(" ")} => $b)"
+      case app @ App(_, _) =>
+        val (f, as) = app.flattenApps
+        s"($f ${as.mkString(" ")})"
+      case Con(x, _, Nil) => s"$x"
+      case Con(x, _, as)  => s"($x ${as.mkString(" ")})"
       case Match(scrut, _, _, c, x, b, e) =>
         s"(match $scrut | $c as '$x => $b | _ => $e)"
       case Impossible(_)         => "impossible"
@@ -107,10 +111,8 @@ object Syntax:
 
     def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
 
-    def lams(ps: List[(LName, Ty)], rt: TDef): Tm =
-      ps.foldRight[(Tm, TDef)]((this, rt)) { case ((x, t), (b, rt)) =>
-        (Lam(x, t, rt, b), TDef(t, rt))
-      }._1
+    def lams(ps: List[(LName, Ty)], rt: Ty) =
+      if ps.isEmpty then this else Lam(ps, rt, this)
 
     def flattenApps: (Tm, List[Tm]) = this match
       case App(fn, arg) =>
@@ -118,16 +120,10 @@ object Syntax:
         (f, args ++ List(arg))
       case t => (t, Nil)
 
-    def flattenLams: (Option[(List[(LName, Ty)], TDef)], Tm) =
-      def go(t: Tm): (Option[(List[(LName, Ty)], TDef)], Tm) = t match
-        case Lam(x, t1, t2, b) =>
-          val (opt, b2) = go(b)
-          opt match
-            case None => (Some((List((x, t1)), t2)), b2)
-            case Some((xs, rt)) =>
-              (Some(((x, t1) :: xs, rt)), b2)
-        case b => (None, b)
-      go(this)
+    def flattenLams: (Option[(List[(LName, Ty)], Ty)], Tm) =
+      this match
+        case Lam(ps, ty, b) => (Some((ps, ty)), b)
+        case t              => (None, t)
 
     def subst(x: LName, v: Tm): Tm = subst(Map(x -> v))
     def subst(ss: Map[LName, Tm]): Tm =
@@ -148,7 +144,7 @@ object Syntax:
         case Jump(x, t, args) =>
           val args2 = args.map(go(_))
           ss.get(x).map(hd => hd.apps(args2)).getOrElse(Jump(x, t, args2))
-        case Lam(x, ty, bty, body) => Lam(x, ty, bty, go(body))
+        case Lam(ps, bty, body) => Lam(ps, bty, go(body))
         case Match(s, t, bty, c, x, b, o) =>
           Match(go(s), t, bty, c, x, go(b), go(o))
         case ReturnIO(v) => ReturnIO(go(v))
@@ -170,7 +166,8 @@ object Syntax:
       case JoinRec(x, ps, ty, v, b) =>
         v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
       case Jump(x, t, args) => List((x, t)) ++ args.flatMap(_.free)
-      case Lam(x, ty, _, b) => b.free.filterNot((y, _) => x == y)
+      case Lam(ps, _, b) =>
+        b.free.filterNot((y, _) => ps.exists((x, _) => x == y))
       case Match(s, _, _, _, x, b, o) =>
         s.free ++ b.free.filterNot((y, _) => x == y) ++ o.free
       case ReturnIO(v)           => v.free

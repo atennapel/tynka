@@ -20,7 +20,7 @@ object Compile:
         implicit val ref = Ref(0)
         val mtm = monomorphize(stage(tm))
         simplify(x, mtm, mty).map { (x, t, v) =>
-          // println(s"def $x : $t = $v")
+          println(s"def $x : $t = $v")
           implicit val rename: LocalRename = LocalRename()
           v.flattenLams match
             case (None, v) => J.DDef(x, go(t), go(v))
@@ -110,7 +110,7 @@ object Compile:
         J.Join(
           x,
           ps.map((y, t) => (localrename.fresh(y, false), go(t))),
-          go(rty.ty),
+          go(rty),
           go(v),
           go(b)
         )
@@ -119,7 +119,7 @@ object Compile:
         J.JoinRec(
           x,
           ps.map((y, t) => (localrename.fresh(y, false), go(t))),
-          go(rty.ty),
+          go(rty),
           go(v),
           go(b)
         )
@@ -133,6 +133,6 @@ object Compile:
         J.Let(x, go(t1), go(v), go(b))
       case RunIO(v) => go(v) // TODO: is this correct?
 
-      case Lam(x, ty, bty, b)       => impossible()
+      case Lam(ps, bty, b)          => impossible()
       case LetRec(x, ty, bty, v, b) => impossible()
       case Impossible(_)            => impossible()

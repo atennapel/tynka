@@ -12,7 +12,10 @@ import scala.collection.mutable
 
 object Monomorphize:
   // t should be staged
-  def monomorphize(t: S.Tm0)(implicit ref: Ref[LName]): Tm = go(t)(ref, Nil)._1
+  def monomorphize(t: S.Tm0)(implicit ref: Ref[LName]): Tm =
+    val (tm, ty) = go(t)(ref, Nil)
+    val (vs, rt, spine) = eta(ty)
+    tm.apps(spine).lams(vs, rt)
 
   def monomorphize(t: S.Ty): TDef = goTDef(t)
 
@@ -47,19 +50,27 @@ object Monomorphize:
         val x = fresh()
         val ta = goTy(ty)
         val (eb, bty) = go(b)(ref, (x, TDef(ta)) :: ctx)
-        (Lam(x, ta, bty, eb), TDef(ta, bty))
+        val (vs, rt, spine) = eta(bty)
+        (eb.apps(spine).lams((x, ta) :: vs, rt), TDef(ta, bty))
       case S.Let0(_, ty, v, b) =>
         val x = fresh()
         val tv = goTDef(ty)
+        val (vvs, vrt, vspine) = eta(tv)
         val (ev, _) = go(v)
         val (eb, tb) = go(b)(ref, (x, tv) :: ctx)
-        (Let(x, tv, tb, ev, eb), tb)
+        val (vs, rt, spine) = eta(tb)
+        (
+          Let(x, tv, rt, ev.apps(vspine).lams(vvs, vrt), eb.apps(spine))
+            .lams(vs, rt),
+          tb
+        )
       case S.LetRec(_, ty, v, b) =>
         val x = fresh()
         val tv = goTDef(ty)
         val (ev, _) = go(v)(ref, (x, tv) :: ctx)
         val (eb, tb) = go(b)(ref, (x, tv) :: ctx)
-        (LetRec(x, tv, tb, ev, eb), tb)
+        val (vs, rt, spine) = eta(tb)
+        (LetRec(x, tv, rt, ev, eb.apps(spine)).lams(vs, rt), tb)
       case S.Match(s, t, c, ps, b, o) =>
         val x = fresh()
         val dt = goTy(t)
@@ -70,13 +81,28 @@ object Monomorphize:
             App(v, Field(vx, goTy(t), i))
           }
         val (eo, to) = go(o)
-        (Match(es, dt, to, c, x, eb, eo), to)
+        val (vs, rt, spine) = eta(to)
+        (
+          Match(es, dt, rt, c, x, eb.apps(spine), eo.apps(spine))
+            .lams(vs, rt),
+          to
+        )
 
       case S.Splice(tm)  => impossible()
       case S.Prim0(name) => impossible()
 
   private inline def fresh()(implicit ref: Ref[LName]): LName =
     ref.updateGetOld(_ + 1)
+
+  private def eta(ty: TDef)(implicit
+      ref: Ref[LName]
+  ): (List[(LName, Ty)], Ty, List[Tm]) =
+    val ps = ty.ps
+    val vs = ps.foldLeft(List.empty[(LName, Ty)])((vs, ty) =>
+      vs ++ List((fresh(), ty))
+    )
+    val spine = vs.map((x, t) => Var(x, TDef(t)))
+    (vs, ty.rt, spine)
 
   // monomorphization
   type DatatypeCons = List[(Name, List[(Bind, Ty)])]
