@@ -75,15 +75,16 @@ object DataGenerator:
     }
 
   def genTy(t: Ty): Type = t match
-    case TCon(dx) => types(dx).ty
-    case TByte    => Type.BYTE_TYPE
-    case TShort   => Type.SHORT_TYPE
-    case TInt     => Type.INT_TYPE
-    case TLong    => Type.LONG_TYPE
-    case TFloat   => Type.FLOAT_TYPE
-    case TDouble  => Type.DOUBLE_TYPE
-    case TBool    => Type.BOOLEAN_TYPE
-    case TChar    => Type.CHAR_TYPE
+    case TCon(dx)   => types(dx).ty
+    case TArray(ty) => Type.getType(s"[${genTy(ty).getDescriptor()}")
+    case TByte      => Type.BYTE_TYPE
+    case TShort     => Type.SHORT_TYPE
+    case TInt       => Type.INT_TYPE
+    case TLong      => Type.LONG_TYPE
+    case TFloat     => Type.FLOAT_TYPE
+    case TDouble    => Type.DOUBLE_TYPE
+    case TBool      => Type.BOOLEAN_TYPE
+    case TChar      => Type.CHAR_TYPE
 
   private def genData(
       dx: Name,

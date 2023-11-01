@@ -8,6 +8,7 @@ object Syntax:
 
   enum Ty:
     case TCon(name: Name)
+    case TArray(ty: Ty)
     case TByte
     case TShort
     case TInt
@@ -19,6 +20,7 @@ object Syntax:
 
     override def toString: String = this match
       case TCon(name) => s"$name"
+      case TArray(ty) => s"(Array $ty)"
       case TByte      => "Byte"
       case TShort     => "Short"
       case TInt       => "Int"
@@ -29,8 +31,9 @@ object Syntax:
       case TChar      => "Char"
 
     def dataGlobals: Set[Name] = this match
-      case TCon(x) => Set(x)
-      case _       => Set.empty
+      case TCon(x)    => Set(x)
+      case TArray(ty) => ty.dataGlobals
+      case _          => Set.empty
   export Ty.*
 
   final case class TDef(ps: Option[List[Ty]], rt: Ty):

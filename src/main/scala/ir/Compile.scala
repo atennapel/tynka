@@ -92,6 +92,7 @@ object Compile:
     case TPrim(Name("Float"))  => J.TFloat
     case TPrim(Name("Double")) => J.TDouble
     case TPrim(Name("Char"))   => J.TChar
+    case TArray(ty)            => J.TArray(go(ty))
     case TCon(dx) =>
       val info = monomorphizedDatatype(dx)
       info._2 match

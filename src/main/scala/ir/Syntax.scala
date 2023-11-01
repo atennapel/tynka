@@ -8,14 +8,17 @@ object Syntax:
   enum Ty:
     case TCon(name: Name)
     case TPrim(name: Name)
+    case TArray(ty: Ty)
 
     override def toString: String = this match
       case TCon(name)  => s"$name"
       case TPrim(name) => s"$name"
+      case TArray(ty)  => s"(Array $ty)"
 
     def dataGlobals: Set[Name] = this match
-      case TCon(x)  => Set(x)
-      case TPrim(x) => Set.empty
+      case TCon(x)    => Set(x)
+      case TArray(ty) => ty.dataGlobals
+      case TPrim(x)   => Set.empty
   export Ty.*
 
   final case class TDef(ps: List[Ty], io: Boolean, rt: Ty):
