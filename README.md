@@ -35,9 +35,13 @@ TODO:
   - [x] As-patterns
   - [x] Pattern guards
   - [x] Multi-match check against pi type
-  - [ ] Infer multi-match lambda
-- [ ] Join points
+- [x] Join points
+- [x] Unboxed and newtypes
+- [ ] IO monad
+- [ ] Primitive datatypes and literals
+- [ ] Inline bytecodes (?)
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] Or-patterns
 - [ ] Pattern lambdas, lets and binds
+- [ ] Infer multi-match lambda

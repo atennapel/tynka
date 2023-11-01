@@ -477,8 +477,11 @@ object Parser:
           )
         }
 
+    private lazy val datakindP: Parsley[SDataKind] =
+      "(" *> (("boxed" #> SBoxed) <|> ("unboxed" #> SUnboxed) <|> ("newtype" #> SNewtype)) <* ")"
+
     private lazy val dataDefP: Parsley[Def] =
-      (pos <~> "data" *> identOrOp <~> many(
+      (pos <~> "data" *> option(datakindP) <~> identOrOp <~> many(
         identOrOp
       ) <~> option(
         (":=" <|> "|") *> sepBy(
@@ -490,9 +493,10 @@ object Parser:
           "|"
         )
       ))
-        .map { case (((pos, x), ps), cs) =>
+        .map { case ((((pos, k), x), ps), cs) =>
           DData(
             pos,
+            k.getOrElse(SBoxed),
             x,
             ps,
             cs.map(cs => cs.map { case ((pos, x), ts) => DataCon(pos, x, ts) })

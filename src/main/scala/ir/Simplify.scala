@@ -168,24 +168,25 @@ object Simplify:
 
       case Con(x, t, args) => Con(x, t, args.map(go))
 
-      case m @ Match(s, t, bt, c, x, b, o) =>
+      case m @ Match(dx, s, bt, c, x, b, o) =>
         go(s) match
-          case Impossible(ty)               => Impossible(TDef(bt))
-          case s @ Con(c2, _, _) if c == c2 => go(Let(x, TDef(t), bt, s, b))
-          case Con(_, _, _)                 => go(o)
-          case j @ Jump(_, _, _)            => j
+          case Impossible(ty) => Impossible(TDef(bt))
+          case s @ Con(_, c2, _) if c == c2 =>
+            go(Let(x, TDef(TCon(dx)), bt, s, b))
+          case Con(_, _, _)      => go(o)
+          case j @ Jump(_, _, _) => j
           case Let(y, t2, bt2, v, b2) =>
-            go(Let(y, t2, bt, v, Match(b2, t, bt, c, x, b, o)))
+            go(Let(y, t2, bt, v, Match(dx, b2, bt, c, x, b, o)))
           case LetRec(y, t2, bt2, v, b2) =>
-            go(LetRec(y, t2, bt, v, Match(b2, t, bt, c, x, b, o)))
+            go(LetRec(y, t2, bt, v, Match(dx, b2, bt, c, x, b, o)))
           case Join(y, ps, t2, v, b2) =>
             go(
               Join(
                 y,
                 ps,
                 bt,
-                Match(v, t, bt, c, x, b, o),
-                Match(b2, t, bt, c, x, b, o)
+                Match(dx, v, bt, c, x, b, o),
+                Match(dx, b2, bt, c, x, b, o)
               )
             )
           case JoinRec(y, ps, t2, v, b2) =>
@@ -194,47 +195,72 @@ object Simplify:
                 y,
                 ps,
                 bt,
-                Match(v, t, bt, c, x, b, o),
-                Match(b2, t, bt, c, x, b, o)
+                Match(dx, v, bt, c, x, b, o),
+                Match(dx, b2, bt, c, x, b, o)
               )
             )
-          case Match(s2, t2, bt2, c2, x2, b2, o2) =>
+          case Match(dx2, s2, bt2, c2, x2, b2, o2) =>
             val f = fresh()
             val y = fresh()
+            val t = TCon(dx)
             inline def vf(a: Tm) = Jump(f, TDef(t, bt), List(a))
             go(
               Join(
                 f,
                 List((y, t)),
                 bt,
-                Match(Var(y, TDef(t)), t, bt, c, x, b, o),
-                Match(s2, t2, bt, c2, x2, vf(b2), vf(o2))
+                Match(dx, Var(y, TDef(t)), bt, c, x, b, o),
+                Match(dx2, s2, bt, c2, x2, vf(b2), vf(o2))
               )
             )
           case s =>
             val eb = go(b)
             go(o) match
               // case Impossible(_) => go(Let(x, TDef(t), bt, s, eb))
-              case o => Match(s, t, bt, c, x, eb, o)
+              case o => Match(dx, s, bt, c, x, eb, o)
 
-      case Field(cx, v, ty, ix) =>
+      case Field(dx, cx, v, ty, ix) =>
         go(v) match
           case Impossible(_)     => Impossible(TDef(ty))
           case Con(_, _, args)   => args(ix)
           case j @ Jump(_, _, _) => j
           case Let(x, t, bt, v, b) =>
-            go(Let(x, t, ty, v, Field(cx, b, ty, ix)))
+            go(Let(x, t, ty, v, Field(dx, cx, b, ty, ix)))
           case LetRec(x, t, bt, v, b) =>
-            go(LetRec(x, t, ty, v, Field(cx, b, ty, ix)))
+            go(LetRec(x, t, ty, v, Field(dx, cx, b, ty, ix)))
           case Join(x, ps, rt, v, b) =>
-            go(Join(x, ps, ty, Field(cx, v, ty, ix), Field(cx, b, ty, ix)))
+            go(
+              Join(
+                x,
+                ps,
+                ty,
+                Field(dx, cx, v, ty, ix),
+                Field(dx, cx, b, ty, ix)
+              )
+            )
           case JoinRec(x, ps, rt, v, b) =>
-            go(JoinRec(x, ps, ty, Field(cx, v, ty, ix), Field(cx, b, ty, ix)))
+            go(
+              JoinRec(
+                x,
+                ps,
+                ty,
+                Field(dx, cx, v, ty, ix),
+                Field(dx, cx, b, ty, ix)
+              )
+            )
           case Match(s, t, bt, c, x, b, o) =>
             go(
-              Match(s, t, ty, c, x, Field(cx, b, ty, ix), Field(cx, o, ty, ix))
+              Match(
+                s,
+                t,
+                ty,
+                c,
+                x,
+                Field(dx, cx, b, ty, ix),
+                Field(dx, cx, o, ty, ix)
+              )
             )
-          case v => Field(cx, v, ty, ix)
+          case v => Field(dx, cx, v, ty, ix)
 
       /*
       case ReturnIO(v) =>
@@ -315,13 +341,13 @@ object Simplify:
       t.flatMap(_.free).forall((y, _) => x != y)
     inline def inTail(t: Tm): Boolean = tailPos(x, arity, t)
     b match
-      case Var(y, _)             => x != y || arity == 0
-      case Impossible(_)         => true
-      case Field(_, value, _, _) => notContains(value)
-      case Global(_, _)          => true
-      case Jump(_, _, args)      => notAnyContains(args)
-      case Con(_, _, args)       => notAnyContains(args)
-      case Lam(_, bty, body)     => notContains(body)
+      case Var(y, _)                => x != y || arity == 0
+      case Impossible(_)            => true
+      case Field(_, _, value, _, _) => notContains(value)
+      case Global(_, _)             => true
+      case Jump(_, _, args)         => notAnyContains(args)
+      case Con(_, _, args)          => notAnyContains(args)
+      case Lam(_, bty, body)        => notContains(body)
 
       case ReturnIO(v) => inTail(v)
       case RunIO(c)    => inTail(c)
@@ -337,6 +363,6 @@ object Simplify:
       case LetRec(_, _, _, v, b)  => notContains(v) && inTail(b)
       case Join(_, _, _, v, b)    => inTail(v) && inTail(b)
       case JoinRec(_, _, _, v, b) => inTail(v) && inTail(b)
-      case Match(s, _, _, _, _, b, o) =>
+      case Match(_, s, _, _, _, b, o) =>
         notContains(s) && inTail(b) && inTail(o)
       case BindIO(_, _, _, v, b) => notContains(v) && inTail(b)

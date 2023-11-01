@@ -8,12 +8,29 @@ object Syntax:
 
   enum Ty:
     case TCon(name: Name)
+    case TByte
+    case TShort
+    case TInt
+    case TLong
+    case TFloat
+    case TDouble
+    case TBool
+    case TChar
 
     override def toString: String = this match
       case TCon(name) => s"$name"
+      case TByte      => "Byte"
+      case TShort     => "Short"
+      case TInt       => "Int"
+      case TLong      => "Long"
+      case TFloat     => "Float"
+      case TDouble    => "Double"
+      case TBool      => "Bool"
+      case TChar      => "Char"
 
     def dataGlobals: Set[Name] = this match
       case TCon(x) => Set(x)
+      case _       => Set.empty
   export Ty.*
 
   final case class TDef(ps: Option[List[Ty]], rt: Ty):
@@ -100,10 +117,14 @@ object Syntax:
         body: Tm,
         other: Option[Tm]
     )
+    case FinMatch(scrut: Tm, con: Int, body: Tm, other: Option[Tm])
+
+    case IntLit(n: Int)
 
     def globals: Set[Name] = this match
-      case Arg(ix)   => Set.empty
-      case Var(name) => Set.empty
+      case Arg(_)    => Set.empty
+      case Var(_)    => Set.empty
+      case IntLit(_) => Set.empty
 
       case Global(x, ty)        => Set(x)
       case GlobalApp(x, ty, as) => Set(x) ++ as.flatMap(_.globals)
@@ -119,10 +140,13 @@ object Syntax:
       case Field(_, s, _) => s.globals
       case Match(s, _, _, b, o) =>
         s.globals ++ b.globals ++ o.map(_.globals).getOrElse(Set.empty)
+      case FinMatch(s, _, b, o) =>
+        s.globals ++ b.globals ++ o.map(_.globals).getOrElse(Set.empty)
 
     def dataGlobals: Set[Name] = this match
-      case Arg(ix)   => Set.empty
-      case Var(name) => Set.empty
+      case Arg(_)    => Set.empty
+      case Var(_)    => Set.empty
+      case IntLit(_) => Set.empty
 
       case Global(x, ty)        => ty.dataGlobals
       case GlobalApp(x, ty, as) => ty.dataGlobals ++ as.flatMap(_.dataGlobals)
@@ -144,11 +168,16 @@ object Syntax:
         s.dataGlobals ++ b.dataGlobals ++ o
           .map(_.dataGlobals)
           .getOrElse(Set.empty)
+      case FinMatch(s, _, b, o) =>
+        s.dataGlobals ++ b.dataGlobals ++ o
+          .map(_.dataGlobals)
+          .getOrElse(Set.empty)
 
     override def toString: String = this match
       case Arg(i)       => s"'arg$i"
       case Var(x)       => s"'$x"
       case Global(x, _) => s"$x"
+      case IntLit(n)    => s"$n"
 
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
 
@@ -172,4 +201,8 @@ object Syntax:
       case Match(scrut, c, x, b, None) =>
         s"(match $scrut | $c as '$x => $b)"
       case Field(_, value, ix) => s"(#$ix $value)"
+      case FinMatch(scrut, c, b, Some(e)) =>
+        s"(finmatch $scrut | $c => $b | _ => $e)"
+      case FinMatch(scrut, c, b, None) =>
+        s"(finmatch $scrut | $c => $b)"
   export Tm.*

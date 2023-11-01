@@ -4,13 +4,14 @@ import common.Common.*
 import common.Ref
 import core.Globals.*
 import core.Evaluation.stage
-import Monomorphize.{monomorphize, monomorphizedDatatypes}
+import Monomorphize.*
 import Simplify.simplify
 import Syntax.*
 import jvmir.Syntax as J
 
 import scala.collection.mutable
 import scala.annotation.tailrec
+import jvmir.DataGenerator.dataInfo
 
 object Compile:
   def compile(top: Name): List[J.Def] =
@@ -32,8 +33,12 @@ object Compile:
         }
       case _ => Nil
     }
-    val dataDefs = monomorphizedDatatypes.map { (dx, cs) =>
-      J.DData(dx, cs.map((cx, as) => (cx, as.map((x, t) => (x, go(t))))))
+    val dataDefs = monomorphizedDatatypes.flatMap {
+      case (dx, Boxed, cs) =>
+        Some(
+          J.DData(dx, cs.map((cx, as) => (cx, as.map((x, t) => (x, go(t))))))
+        )
+      case _ => None
     }
     removeUnused(top, dataDefs ++ defs)
 
@@ -80,16 +85,37 @@ object Compile:
     case TDef(ps, _, rt)      => J.TDef(ps.map(go), go(rt))
 
   private def go(t: Ty): J.Ty = t match
-    case TCon(name) => J.TCon(name)
+    case TCon(dx) =>
+      val info = monomorphizedDatatype(dx)
+      info._2 match
+        case Boxed   => J.TCon(dx)
+        case Newtype => go(info._3.head._2.head._2)
+        case Unboxed =>
+          info._3.size match
+            case n if n <= 2     => J.TBool
+            case n if n <= 128   => J.TByte
+            case n if n <= 32768 => J.TShort
+            case _               => J.TInt
 
   private def go(t: Tm)(implicit localrename: LocalRename): J.Tm =
     t match
       case Var(x0, _) =>
         val (x, arg) = localrename.get(x0)
         if arg then J.Arg(x) else J.Var(x)
-      case Con(cx, _, as)      => J.Con(cx, as.map(go))
-      case Field(cx, s, ty, i) => J.Field(cx, go(s), i)
-      case Global(x, ty)       => J.Global(x, go(ty.ty))
+      case Global(x, ty) => J.Global(x, go(ty.ty))
+
+      case Con(dx, cx, as) =>
+        val info = monomorphizedDatatype(dx)
+        info._2 match
+          case Boxed   => J.Con(cx, as.map(go))
+          case Newtype => go(as.head)
+          case Unboxed => J.IntLit(info._3.indexWhere((cx2, _) => cx == cx2))
+      case Field(dx, cx, s, ty, i) =>
+        val info = monomorphizedDatatype(dx)
+        info._2 match
+          case Boxed   => J.Field(cx, go(s), i)
+          case Newtype => go(s)
+          case Unboxed => impossible()
 
       case Let(x0, t, rt, v, b) =>
         val x = localrename.fresh(x0, false)
@@ -101,11 +127,20 @@ object Compile:
           case Global(x, t) => J.GlobalApp(x, go(t), as.map(go))
           case _            => impossible()
 
-      case Match(s, ty, bty, c, x0, b, o) =>
-        val x = localrename.fresh(x0, false)
-        o match
-          case Impossible(_) => J.Match(go(s), c, x, go(b), None)
-          case _             => J.Match(go(s), c, x, go(b), Some(go(o)))
+      case Match(dx, s, bty, c, x0, b, o) =>
+        val info = monomorphizedDatatype(dx)
+        info._2 match
+          case Newtype => go(b.subst(x0, s))
+          case Boxed =>
+            val x = localrename.fresh(x0, false)
+            o match
+              case Impossible(_) => J.Match(go(s), c, x, go(b), None)
+              case _             => J.Match(go(s), c, x, go(b), Some(go(o)))
+          case Unboxed =>
+            val ix = info._3.indexWhere((cx2, _) => c == cx2)
+            o match
+              case Impossible(_) => J.FinMatch(go(s), ix, go(b), None)
+              case _             => J.FinMatch(go(s), ix, go(b), Some(go(o)))
 
       case Join(x0, ps, rty, v, b) =>
         val x = localrename.fresh(x0, false)

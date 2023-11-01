@@ -63,8 +63,9 @@ object Main:
           println(
             s"$x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
           )
-        case GlobalData0(x, Nil, _) => println(s"data $x")
-        case GlobalData0(x, ps, _)  => println(s"data $x ${ps.mkString(" ")}")
+        case GlobalData0(x, k, Nil, _) => println(s"data($k) $x")
+        case GlobalData0(x, k, ps, _) =>
+          println(s"data($k) $x ${ps.mkString(" ")}")
         case GlobalCon0(x, dx, Nil) => println(s"| $x")
         case GlobalCon0(x, dx, ps) =>
           val nctx = ctx.bindDataParams(getGlobalData0(dx).params)

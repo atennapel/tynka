@@ -17,6 +17,17 @@ object Syntax:
           case DoBind(x) => s"($x : ${a._2})"
         s"$x ${as.map(goArg).mkString(" ")}"
 
+  enum SDataKind:
+    case SBoxed
+    case SUnboxed
+    case SNewtype
+
+    override def toString: String = this match
+      case SBoxed   => "boxed"
+      case SUnboxed => "unboxed"
+      case SNewtype => "newtype"
+  export SDataKind.*
+
   enum Def:
     case DDef(
         pos: PosInfo,
@@ -28,6 +39,7 @@ object Syntax:
     )
     case DData(
         pos: PosInfo,
+        kind: SDataKind,
         name: Name,
         ps: List[Name],
         cs: List[DataCon]
@@ -38,10 +50,10 @@ object Syntax:
         s"def ${if rec then "rec " else ""}$x : $t ${if m then "" else ":"}= $v"
       case DDef(_, x, rec, m, None, v) =>
         s"def ${if rec then "rec " else ""}$x ${if m then "" else ":"}= $v"
-      case DData(_, x, ps, Nil) =>
-        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
-      case DData(_, x, ps, cs) =>
-        s"data $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs.mkString(" | ")}"
+      case DData(_, k, x, ps, Nil) =>
+        s"data($k) $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
+      case DData(_, k, x, ps, cs) =>
+        s"data($k) $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs.mkString(" | ")}"
   export Def.*
 
   enum ArgInfo:

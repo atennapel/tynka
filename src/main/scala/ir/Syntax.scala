@@ -61,10 +61,10 @@ object Syntax:
     case Jump(name: LName, ty: TDef, args: List[Tm])
     case Lam(params: List[(LName, Ty)], bty: Ty, body: Tm)
     case App(fn: Tm, arg: Tm)
-    case Con(name: Name, ty: Ty, args: List[Tm])
+    case Con(dx: Name, name: Name, args: List[Tm])
     case Match(
+        dx: Name,
         scrut: Tm,
-        ty: Ty,
         bty: Ty,
         con: Name,
         name: LName,
@@ -72,7 +72,7 @@ object Syntax:
         other: Tm
     )
     case Impossible(ty: TDef)
-    case Field(cx: Name, value: Tm, rt: Ty, ix: Int)
+    case Field(dx: Name, cx: Name, value: Tm, rt: Ty, ix: Int)
     case ReturnIO(value: Tm)
     case BindIO(x: LName, t1: Ty, t2: Ty, value: Tm, body: Tm)
     case RunIO(value: Tm)
@@ -99,15 +99,15 @@ object Syntax:
       case app @ App(_, _) =>
         val (f, as) = app.flattenApps
         s"($f ${as.mkString(" ")})"
-      case Con(x, _, Nil) => s"$x"
-      case Con(x, _, as)  => s"($x ${as.mkString(" ")})"
-      case Match(scrut, _, _, c, x, b, e) =>
+      case Con(_, x, Nil) => s"$x"
+      case Con(_, x, as)  => s"($x ${as.mkString(" ")})"
+      case Match(_, scrut, _, c, x, b, e) =>
         s"(match $scrut | $c as '$x => $b | _ => $e)"
-      case Impossible(_)          => "impossible"
-      case Field(_, value, _, ix) => s"(#$ix $value)"
-      case ReturnIO(v)            => s"(returnIO $v)"
-      case BindIO(x, _, _, v, b)  => s"($x <- $v; $b)"
-      case RunIO(v)               => s"(unsafePerformIO $v)"
+      case Impossible(_)             => "impossible"
+      case Field(_, _, value, _, ix) => s"(#$ix $value)"
+      case ReturnIO(v)               => s"(returnIO $v)"
+      case BindIO(x, _, _, v, b)     => s"($x <- $v; $b)"
+      case RunIO(v)                  => s"(unsafePerformIO $v)"
 
     def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
 
@@ -129,13 +129,13 @@ object Syntax:
     def subst(ss: Map[LName, Tm]): Tm =
       inline def go(t: Tm) = t.subst(ss)
       this match
-        case Var(x, _)                => ss.get(x).getOrElse(this)
-        case Global(x, _)             => this
-        case Impossible(_)            => this
-        case Field(cx, value, ty, ix) => Field(cx, go(value), ty, ix)
-        case App(fn, arg)             => App(go(fn), go(arg))
-        case Con(x, t, args)          => Con(x, t, args.map(go(_)))
-        case Let(x, ty, bty, v, b)    => Let(x, ty, bty, go(v), go(b))
+        case Var(x, _)                    => ss.get(x).getOrElse(this)
+        case Global(x, _)                 => this
+        case Impossible(_)                => this
+        case Field(dx, cx, value, ty, ix) => Field(dx, cx, go(value), ty, ix)
+        case App(fn, arg)                 => App(go(fn), go(arg))
+        case Con(dx, x, args)             => Con(dx, x, args.map(go(_)))
+        case Let(x, ty, bty, v, b)        => Let(x, ty, bty, go(v), go(b))
         case LetRec(x, ty, bty, v, b) =>
           LetRec(x, ty, bty, go(v), go(b))
         case Join(x, ps, ty, v, b) => Join(x, ps, ty, go(v), go(b))
@@ -145,21 +145,21 @@ object Syntax:
           val args2 = args.map(go(_))
           ss.get(x).map(hd => hd.apps(args2)).getOrElse(Jump(x, t, args2))
         case Lam(ps, bty, body) => Lam(ps, bty, go(body))
-        case Match(s, t, bty, c, x, b, o) =>
-          Match(go(s), t, bty, c, x, go(b), go(o))
+        case Match(dx, s, bty, c, x, b, o) =>
+          Match(dx, go(s), bty, c, x, go(b), go(o))
         case ReturnIO(v) => ReturnIO(go(v))
         case BindIO(x, t1, t2, v, b) =>
           BindIO(x, t1, t2, go(v), go(b))
         case RunIO(v) => RunIO(go(v))
 
     def free: List[(LName, TDef)] = this match
-      case Var(x, t)           => List((x, t))
-      case Global(x, _)        => Nil
-      case Con(_, _, args)     => args.flatMap(_.free)
-      case App(f, a)           => f.free ++ a.free
-      case Impossible(_)       => Nil
-      case Field(_, v, _, _)   => v.free
-      case Let(x, ty, _, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
+      case Var(x, t)            => List((x, t))
+      case Global(x, _)         => Nil
+      case Con(_, _, args)      => args.flatMap(_.free)
+      case App(f, a)            => f.free ++ a.free
+      case Impossible(_)        => Nil
+      case Field(_, _, v, _, _) => v.free
+      case Let(x, ty, _, v, b)  => v.free ++ b.free.filterNot((y, _) => x == y)
       case LetRec(x, ty, _, v, b) =>
         v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
       case Join(x, ps, ty, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
@@ -168,7 +168,7 @@ object Syntax:
       case Jump(x, t, args) => List((x, t)) ++ args.flatMap(_.free)
       case Lam(ps, _, b) =>
         b.free.filterNot((y, _) => ps.exists((x, _) => x == y))
-      case Match(s, _, _, _, x, b, o) =>
+      case Match(_, s, _, _, x, b, o) =>
         s.free ++ b.free.filterNot((y, _) => x == y) ++ o.free
       case ReturnIO(v)           => v.free
       case BindIO(x, _, _, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)

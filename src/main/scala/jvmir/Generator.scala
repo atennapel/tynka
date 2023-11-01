@@ -194,6 +194,9 @@ object Generator:
           case LTm(t)       => gen(t)
           case LLocal(l, _) => mg.loadLocal(l)
           case _            => impossible()
+
+      case IntLit(n) => mg.push(n)
+
       case Global(x, ty) =>
         mg.getStatic(ctx.moduleType, escape(x.expose), genTy(ty))
       case GlobalApp(x, TDef(Some(ps), rt), as) =>
@@ -313,6 +316,20 @@ object Generator:
                 ctx,
                 locals + (x -> LLocal(local, TCon(info.data)))
               )
+      case FinMatch(s, ix, b, o) =>
+        o match
+          case None => gen(s); mg.pop(); gen(b)
+          case Some(o) =>
+            gen(s)
+            val lEnd = new Label
+            var lOther = new Label
+            mg.push(ix)
+            mg.ifICmp(GeneratorAdapter.NE, lOther)
+            gen(b)
+            mg.visitJumpInsn(GOTO, lEnd)
+            mg.visitLabel(lOther)
+            gen(o)
+            mg.visitLabel(lEnd)
 
   private def genLocal(scrut: Tm, jty: Type, t: Ty)(implicit
       mg: GeneratorAdapter,

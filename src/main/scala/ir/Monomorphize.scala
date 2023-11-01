@@ -12,6 +12,7 @@ import scala.collection.mutable
 
 object Monomorphize:
   // t should be staged
+  // t will be monomorphized and eta-expanded
   def monomorphize(t: S.Tm0)(implicit ref: Ref[LName]): Tm =
     val (tm, ty) = go(t)(ref, Nil)
     val (vs, rt, spine) = eta(ty)
@@ -41,8 +42,9 @@ object Monomorphize:
         val (ea, ta) = go(arg)
         (App(ef, ea), tf.tail)
       case S.Con(name, ty, args) =>
-        val dt = goTy(ty)
-        (Con(name, dt, args.map(a => go(a)._1)), TDef(dt))
+        val dt = goTy(ty): @unchecked
+        val TCon(dx) = dt: @unchecked
+        (Con(dx, name, args.map(a => go(a)._1)), TDef(dt))
       case S.Wk10(tm) => go(tm)
       case S.Wk00(tm) => go(tm)(ref, ctx.tail)
 
@@ -74,17 +76,17 @@ object Monomorphize:
       case S.Match(s, t, c, ps, b, o) =>
         val x = fresh()
         val dt = goTy(t)
+        val TCon(dx) = dt: @unchecked
         val (es, _) = go(s)
         val vx = Var(x, TDef(dt))
         val eb =
           (0 until ps.size).zip(ps).foldLeft(go(b)._1) { case (v, (i, t)) =>
-            App(v, Field(c, vx, goTy(t), i))
+            App(v, Field(dx, c, vx, goTy(t), i))
           }
         val (eo, to) = go(o)
         val (vs, rt, spine) = eta(to)
         (
-          Match(es, dt, rt, c, x, eb.apps(spine), eo.apps(spine))
-            .lams(vs, rt),
+          Match(dx, es, rt, c, x, eb.apps(spine), eo.apps(spine)).lams(vs, rt),
           to
         )
 
@@ -106,7 +108,7 @@ object Monomorphize:
 
   // monomorphization
   type DatatypeCons = List[(Name, List[(Bind, Ty)])]
-  type Datatype = (Name, DatatypeCons)
+  type Datatype = (Name, DataKind, DatatypeCons)
   private val monoMap: mutable.Map[(Name, List[Ty]), Name] =
     mutable.Map.empty
   private val monoData: mutable.ArrayBuffer[Datatype] =
@@ -137,7 +139,7 @@ object Monomorphize:
       case None =>
         val x = genName(dx, mps)
         monoMap += (dx, mps) -> x
-        monoData += ((x, monoCons(dx, ps)))
+        monoData += ((x, getGlobalData0(dx).kind, monoCons(dx, ps)))
         x
 
   private def monoCons(dx: Name, ps: List[VTy]): DatatypeCons =
@@ -148,3 +150,6 @@ object Monomorphize:
     }
 
   def monomorphizedDatatypes: List[Datatype] = monoData.toList
+
+  def monomorphizedDatatype(dx: Name): Datatype =
+    monomorphizedDatatypes.find(_._1 == dx).get

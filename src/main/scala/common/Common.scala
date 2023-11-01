@@ -97,3 +97,15 @@ object Common:
     inline def +(o: Int): PostponedId = id + o
     @targetName("ltPostponedId")
     inline def <(o: PostponedId): Boolean = id < o
+
+  // datatypes
+  enum DataKind:
+    case Boxed
+    case Unboxed
+    case Newtype
+
+    override def toString: String = this match
+      case Boxed   => "boxed"
+      case Unboxed => "unboxed"
+      case Newtype => "newtype"
+  export DataKind.*
