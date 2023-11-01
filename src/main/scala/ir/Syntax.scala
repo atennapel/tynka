@@ -9,16 +9,13 @@ object Syntax:
     case TCon(name: Name)
     case TPrim(name: Name)
     case TArray(ty: Ty)
+    case TClass(name: String)
 
     override def toString: String = this match
-      case TCon(name)  => s"$name"
-      case TPrim(name) => s"$name"
-      case TArray(ty)  => s"(Array $ty)"
-
-    def dataGlobals: Set[Name] = this match
-      case TCon(x)    => Set(x)
-      case TArray(ty) => ty.dataGlobals
-      case TPrim(x)   => Set.empty
+      case TCon(name)   => s"$name"
+      case TPrim(name)  => s"$name"
+      case TArray(ty)   => s"(Array $ty)"
+      case TClass(name) => s"$name"
   export Ty.*
 
   final case class TDef(ps: List[Ty], io: Boolean, rt: Ty):
@@ -33,8 +30,6 @@ object Syntax:
     def head: Ty = ps.head
     def returnType = TDef(Nil, io, rt)
     def isFunction: Boolean = ps.nonEmpty && !io
-    def dataGlobals: Set[Name] =
-      ps.flatMap(_.dataGlobals).toSet ++ rt.dataGlobals
     def drop(n: Int): TDef = TDef(ps.drop(n), io, rt)
     def returnIO: TDef = if io then impossible() else TDef(ps, true, rt)
     def runIO: Ty = if !io || ps.nonEmpty then impossible() else rt

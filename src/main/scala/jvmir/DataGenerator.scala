@@ -77,6 +77,7 @@ object DataGenerator:
   def genTy(t: Ty): Type = t match
     case TCon(dx)   => types(dx).ty
     case TArray(ty) => Type.getType(s"[${genTy(ty).getDescriptor()}")
+    case TClass(x)  => Type.getType(s"L${x.replace(".", "/")};")
     case TByte      => Type.BYTE_TYPE
     case TShort     => Type.SHORT_TYPE
     case TInt       => Type.INT_TYPE

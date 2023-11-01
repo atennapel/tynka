@@ -125,7 +125,11 @@ object Monomorphize:
     case VTCon(dx, ps)                                     => TCon(mono(dx, ps))
     case VPrim1(x)                                         => TPrim(x)
     case VRigid(HPrim(Name("Array")), SApp(SId, ty, Expl)) => TArray(goVTy(ty))
-    case _                                                 => impossible()
+    case VRigid(HPrim(Name("Class")), SApp(SId, l, Expl)) =>
+      forceAll1(l) match
+        case VLabelLit(x) => TClass(x)
+        case _            => impossible()
+    case _ => impossible()
 
   private def genName(dx: Name, ps: List[Ty]): Name =
     if ps.isEmpty then dx
@@ -135,7 +139,8 @@ object Monomorphize:
   private def genName(t: Ty): Name = t match
     case TCon(dx)   => dx
     case TPrim(x)   => x
-    case TArray(ty) => Name(s"Array_${genName(ty)}")
+    case TArray(ty) => Name(s"Array$$${genName(ty)}")
+    case TClass(x)  => Name(x.replace(".", "$"))
 
   private def mono(dx: Name, ps: List[VTy]): Name =
     val mps = ps.map(goVTy)

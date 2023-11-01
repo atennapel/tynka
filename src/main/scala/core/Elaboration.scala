@@ -948,6 +948,17 @@ object Elaboration extends RetryPostponed:
       case S.StringLit(v) => Infer1(LabelLit(v), VPrim1(Name("Label")))
 
       case S.Var(x @ Name("Label")) => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("Class")) =>
+        val label = Name("Label")
+        Infer1(
+          Lam1(
+            DoBind(Name("A")),
+            Expl,
+            Prim1(label),
+            App1(Prim1(x), Var1(ix0), Expl)
+          ),
+          VPi(DontBind, Expl, VPrim1(label), Clos(EEmpty, U0(Val)))
+        )
 
       case S.Var(x @ Name("Byte"))   => Infer1(Prim1(x), VU0(VVal))
       case S.Var(x @ Name("Short"))  => Infer1(Prim1(x), VU0(VVal))

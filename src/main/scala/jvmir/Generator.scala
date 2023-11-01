@@ -95,20 +95,21 @@ object Generator:
       case _ => false
     }
     if mainexists then
+      val strArray = Type.getType("[Ljava/lang/String;")
       val m = new Method(
         "main",
         Type.VOID_TYPE,
-        List(Type.getType("[Ljava/lang/String;")).toArray
+        List(strArray).toArray
       )
       val main: GeneratorAdapter =
         new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC, m, null, null, cw)
-      main.visitInsn(ACONST_NULL)
+      main.loadArg(0)
       main.invokeStatic(
         ctx.moduleType,
         new Method(
           escape("main"),
-          OBJECT_TYPE,
-          List(OBJECT_TYPE).toArray
+          Type.BOOLEAN_TYPE,
+          List(strArray).toArray
         )
       )
       main.pop()

@@ -42,7 +42,7 @@ TODO:
   - [x] Array datatype
   - [x] Int literals
   - [x] Labels
-  - [ ] Class types
+  - [x] Class types
   - [ ] String literals
   - [ ] Array literals
   - [ ] IO monad

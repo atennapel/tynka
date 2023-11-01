@@ -9,6 +9,7 @@ object Syntax:
   enum Ty:
     case TCon(name: Name)
     case TArray(ty: Ty)
+    case TClass(name: String)
     case TByte
     case TShort
     case TInt
@@ -19,16 +20,17 @@ object Syntax:
     case TChar
 
     override def toString: String = this match
-      case TCon(name) => s"$name"
-      case TArray(ty) => s"(Array $ty)"
-      case TByte      => "Byte"
-      case TShort     => "Short"
-      case TInt       => "Int"
-      case TLong      => "Long"
-      case TFloat     => "Float"
-      case TDouble    => "Double"
-      case TBool      => "Bool"
-      case TChar      => "Char"
+      case TCon(name)   => s"$name"
+      case TArray(ty)   => s"(Array $ty)"
+      case TClass(name) => s"$name"
+      case TByte        => "Byte"
+      case TShort       => "Short"
+      case TInt         => "Int"
+      case TLong        => "Long"
+      case TFloat       => "Float"
+      case TDouble      => "Double"
+      case TBool        => "Bool"
+      case TChar        => "Char"
 
     def dataGlobals: Set[Name] = this match
       case TCon(x)    => Set(x)
