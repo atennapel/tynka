@@ -29,6 +29,7 @@ object Simplify:
       case Var(_, _)        => t
       case Global(_, _)     => t
       case Impossible(_)    => t
+      case IntLit(_)        => t
       case Jump(x, t, args) => Jump(x, t, args.map(go))
 
       case l @ Let(x, ty, bty, v0, b) =>
@@ -343,6 +344,7 @@ object Simplify:
     b match
       case Var(y, _)                => x != y || arity == 0
       case Impossible(_)            => true
+      case IntLit(_)                => true
       case Field(_, _, value, _, _) => notContains(value)
       case Global(_, _)             => true
       case Jump(_, _, args)         => notAnyContains(args)

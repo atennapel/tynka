@@ -40,11 +40,13 @@ TODO:
 - [ ] JVM interop
   - [x] Primitive datatypes
   - [x] Array datatype
-  - [ ] Primitive literals
+  - [x] Int literals
+  - [ ] Labels
+  - [ ] Class types
+  - [ ] String literals
   - [ ] Array literals
   - [ ] IO monad
-  - [ ] String literals
-  - [ ] Class types
+  - [ ] Non-Int primitive literals
   - [ ] Inline bytecodes (?)
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes

@@ -87,6 +87,8 @@ object Syntax:
         body: Tm
     )
 
+    case IntLit(value: Int)
+
     case U0(cv: Ty)
     case U1
     case CV
@@ -120,6 +122,7 @@ object Syntax:
         s"(let ${if rec then "rec " else ""}$x${ty
             .map(t => s" : $t")
             .getOrElse("")} ${if m then "" else ":"}= $v; $b)"
+      case IntLit(v)                      => s"$v"
       case U0(cv)                         => s"(Ty $cv)"
       case U1                             => "Meta"
       case CV                             => "CV"

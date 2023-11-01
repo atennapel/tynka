@@ -96,6 +96,7 @@ object Evaluation:
       case Var0(ix)   => vvar0(ix)
       case Global0(x) => VGlobal0(x)
       case Prim0(x)   => VPrim0(x)
+      case IntLit(v)  => VIntLit(v)
       case Let0(x, ty, v, b) =>
         VLet0(x, eval1(ty), eval0(v), Clos(b))
       case LetRec(x, ty, v, b) =>
@@ -254,6 +255,7 @@ object Evaluation:
       case VVar0(x)    => Var0(x.toIx)
       case VGlobal0(x) => Global0(x)
       case VPrim0(x)   => Prim0(x)
+      case VIntLit(v)  => IntLit(v)
       case VLet0(x, ty, v, b) =>
         Let0(x, go1(ty), go0(v), goClos(b))
       case VLetRec(x, ty, v, b) =>

@@ -236,6 +236,7 @@ class Unification(retryPostponed: RetryPostponed):
           case Some(PS0(v)) => quote0(v, UnfoldNone)(psub.dom)
       case VGlobal0(x) => Global0(x)
       case VPrim0(x)   => Prim0(x)
+      case VIntLit(v)  => IntLit(v)
       case VLet0(x, ty, v, b) =>
         Let0(x, go1(ty), go0(v), goClos(b))
       case VLetRec(x, ty, v, b) =>
@@ -320,8 +321,9 @@ class Unification(retryPostponed: RetryPostponed):
       unify0(a(VVar0(lvl)), b(VVar0(lvl)))(lvl + 1)
     debug(s"unify0 ${quote0(a, UnfoldMetas)} ~ ${quote0(b, UnfoldMetas)}")
     (forceMetas0(a), forceMetas0(b)) match
-      case (VVar0(x), VVar0(y)) if x == y   => ()
-      case (VPrim0(x), VPrim0(y)) if x == y => ()
+      case (VVar0(x), VVar0(y)) if x == y     => ()
+      case (VPrim0(x), VPrim0(y)) if x == y   => ()
+      case (VIntLit(x), VIntLit(y)) if x == y => ()
       case (VLet0(_, ty1, v1, b1), VLet0(_, ty2, v2, b2)) =>
         unify1(ty1, ty2); unify0(v1, v2); goClos(b1, b2)
       case (VLetRec(_, ty1, v1, b1), VLetRec(_, ty2, v2, b2)) =>

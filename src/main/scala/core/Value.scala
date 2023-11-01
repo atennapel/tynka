@@ -63,6 +63,7 @@ object Value:
     case VVar0(lvl: Lvl)
     case VGlobal0(name: Name)
     case VPrim0(name: Name)
+    case VIntLit(value: Int)
     case VLet0(
         name: Name,
         ty: VTy,

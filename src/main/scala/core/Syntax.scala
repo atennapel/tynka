@@ -8,6 +8,7 @@ object Syntax:
     case Var0(ix: Ix)
     case Global0(name: Name)
     case Prim0(name: Name)
+    case IntLit(value: Int)
     case Let0(name: Name, ty: Ty, value: Tm0, body: Tm0)
     case LetRec(name: Name, ty: Ty, value: Tm0, body: Tm0)
     case Lam0(name: Bind, ty: Ty, body: Tm0)
@@ -30,6 +31,7 @@ object Syntax:
       case Var0(ix)            => s"'$ix"
       case Global0(x)          => s"$x"
       case Prim0(x)            => s"$x"
+      case IntLit(v)           => s"$v"
       case Let0(x, ty, v, b)   => s"(let $x : $ty := $v; $b)"
       case LetRec(x, ty, v, b) => s"(let rec $x : $ty := $v; $b)"
       case Lam0(x, ty, b)      => s"(\\($x : $ty) => $b)"

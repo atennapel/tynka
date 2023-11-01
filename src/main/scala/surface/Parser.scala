@@ -78,6 +78,7 @@ object Parser:
     val userOp: Parsley[String] = lexer.userOp
     val natural: Parsley[Int] = lexer.natural
     val string: Parsley[String] = lexer.stringLiteral
+    val int: Parsley[Int] = lexer.integer
 
     object Implicits:
       given Conversion[String, Parsley[Unit]] with
@@ -91,7 +92,7 @@ object Parser:
     import parsley.combinator.{many, some, option, sepEndBy, sepBy}
     import parsley.Parsley.pos
 
-    import LangLexer.{ident as ident0, userOp as userOp0, natural, string}
+    import LangLexer.{ident as ident0, userOp as userOp0, int, string}
     import LangLexer.Implicits.given
 
     private def positioned(p: => Parsley[Tm]): Parsley[Tm] =
@@ -119,7 +120,7 @@ object Parser:
         <|> attempt("(" *> userOp.map(x => Var(x)) <* ")")
         <|> ("(" *> tm <* ")")
         <|> attempt(holeP)
-        <|> nat
+        <|> attempt(int.map(IntLit.apply))
         <|> ("Meta" #> U1)
         <|> ("Ty" *> projAtom).map(cv => U0(cv))
         <|> ("CV" #> CV)
@@ -130,15 +131,6 @@ object Parser:
 
     private val unittype = Var(Name("Unit"))
     private val hole = Hole(None)
-    private val nZ = Var(Name("Z"))
-    private val nS = Var(Name("S"))
-
-    private lazy val nat: Parsley[Tm] =
-      natural.map { i =>
-        var c = nZ
-        for (_ <- 0 until i) c = App(nS, c, ArgIcit(Expl))
-        c
-      }
 
     lazy val tm: Parsley[Tm] = positioned(
       attempt(

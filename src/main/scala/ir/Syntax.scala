@@ -48,6 +48,7 @@ object Syntax:
   enum Tm:
     case Var(name: LName, ty: TDef)
     case Global(name: Name, ty: TDef)
+    case IntLit(value: Int)
     case Let(name: LName, ty: TDef, bty: Ty, value: Tm, body: Tm)
     case LetRec(name: LName, ty: TDef, bty: Ty, value: Tm, body: Tm)
     case Join(
@@ -86,6 +87,7 @@ object Syntax:
     override def toString: String = this match
       case Var(x, _)              => s"'$x"
       case Global(x, _)           => s"$x"
+      case IntLit(v)              => s"$v"
       case Let(x, ty, _, v, b)    => s"(let '$x : $ty = $v; $b)"
       case LetRec(x, ty, _, v, b) => s"(let rec '$x : $ty = $v; $b)"
       case Join(x, ps, ty, v, b) =>
@@ -138,6 +140,7 @@ object Syntax:
         case Var(x, _)                    => ss.get(x).getOrElse(this)
         case Global(x, _)                 => this
         case Impossible(_)                => this
+        case IntLit(_)                    => this
         case Field(dx, cx, value, ty, ix) => Field(dx, cx, go(value), ty, ix)
         case App(fn, arg)                 => App(go(fn), go(arg))
         case Con(dx, x, args)             => Con(dx, x, args.map(go(_)))
@@ -161,6 +164,7 @@ object Syntax:
     def free: List[(LName, TDef)] = this match
       case Var(x, t)            => List((x, t))
       case Global(x, _)         => Nil
+      case IntLit(_)            => Nil
       case Con(_, _, args)      => args.flatMap(_.free)
       case App(f, a)            => f.free ++ a.free
       case Impossible(_)        => Nil
