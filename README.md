@@ -37,8 +37,10 @@ TODO:
   - [x] Multi-match check against pi type
 - [x] Join points
 - [x] Unboxed and newtypes
+- [x] Primitive datatypes
+- [ ] Primitive literals
 - [ ] IO monad
-- [ ] Primitive datatypes and literals
+- [ ] String literals
 - [ ] Inline bytecodes (?)
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes

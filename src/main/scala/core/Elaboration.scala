@@ -944,6 +944,13 @@ object Elaboration extends RetryPostponed:
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
 
+      case S.Var(x @ Name("Byte"))   => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Short"))  => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Int"))    => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Long"))   => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Float"))  => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Double")) => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Char"))   => Infer1(Prim1(x), VU0(VVal))
       case S.Var(x) =>
         ctx.lookup(x) match
           case Some(Name0(x, ty, cv)) =>

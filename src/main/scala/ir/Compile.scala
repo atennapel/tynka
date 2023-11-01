@@ -85,6 +85,13 @@ object Compile:
     case TDef(ps, _, rt)      => J.TDef(ps.map(go), go(rt))
 
   private def go(t: Ty): J.Ty = t match
+    case TPrim(Name("Byte"))   => J.TByte
+    case TPrim(Name("Short"))  => J.TShort
+    case TPrim(Name("Int"))    => J.TInt
+    case TPrim(Name("Long"))   => J.TLong
+    case TPrim(Name("Float"))  => J.TFloat
+    case TPrim(Name("Double")) => J.TDouble
+    case TPrim(Name("Char"))   => J.TChar
     case TCon(dx) =>
       val info = monomorphizedDatatype(dx)
       info._2 match
@@ -96,6 +103,7 @@ object Compile:
             case n if n <= 128   => J.TByte
             case n if n <= 32768 => J.TShort
             case _               => J.TInt
+    case _ => impossible()
 
   private def go(t: Tm)(implicit localrename: LocalRename): J.Tm =
     t match

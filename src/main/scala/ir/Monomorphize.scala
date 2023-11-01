@@ -122,6 +122,7 @@ object Monomorphize:
   private inline def goTy(t: S.Ty, env: Env = EEmpty): Ty = goVTy(eval1(t)(env))
   private def goVTy(t: VTy): Ty = forceAll1(t) match
     case VTCon(dx, ps) => TCon(mono(dx, ps))
+    case VPrim1(x)     => TPrim(x)
     case _             => impossible()
 
   private def genName(dx: Name, ps: List[Ty]): Name =
@@ -131,6 +132,7 @@ object Monomorphize:
       Name(s"${dx}_$gps")
   private def genName(t: Ty): Name = t match
     case TCon(dx) => dx
+    case TPrim(x) => x
 
   private def mono(dx: Name, ps: List[VTy]): Name =
     val mps = ps.map(goVTy)

@@ -7,12 +7,15 @@ object Syntax:
 
   enum Ty:
     case TCon(name: Name)
+    case TPrim(name: Name)
 
     override def toString: String = this match
-      case TCon(name) => s"$name"
+      case TCon(name)  => s"$name"
+      case TPrim(name) => s"$name"
 
     def dataGlobals: Set[Name] = this match
-      case TCon(x) => Set(x)
+      case TCon(x)  => Set(x)
+      case TPrim(x) => Set.empty
   export Ty.*
 
   final case class TDef(ps: List[Ty], io: Boolean, rt: Ty):
