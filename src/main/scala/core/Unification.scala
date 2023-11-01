@@ -285,6 +285,7 @@ class Unification(retryPostponed: RetryPostponed):
       case VCV1                       => CV1
       case VComp                      => Comp
       case VVal                       => Val
+      case VLabelLit(v)               => LabelLit(v)
       case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
       case VQuote(tm)                 => quote(go0(tm))
       case VMetaPi(m, t, b) =>
@@ -417,6 +418,7 @@ class Unification(retryPostponed: RetryPostponed):
     debug(s"unify1 ${quote1(a, UnfoldMetas)} ~ ${quote1(b, UnfoldMetas)}")
     (forceMetas1(a), forceMetas1(b)) match
       case (VRigid(x, sp1), VRigid(y, sp2)) if x == y => unify1(a, sp1, b, sp2)
+      case (VLabelLit(v1), VLabelLit(v2)) if v1 == v2 => ()
 
       case (VLift(cv1, ty1), VLift(cv2, ty2)) =>
         unify1(cv1, cv2); unify1(ty1, ty2)

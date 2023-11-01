@@ -124,6 +124,8 @@ object Value:
     case VLift(cv: VCV, ty: VTy)
 
     case VQuote(tm: Val0)
+
+    case VLabelLit(value: String)
   export Val1.*
 
   object VVar1:

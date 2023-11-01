@@ -75,6 +75,7 @@ object Pretty:
       case Global1(_)           => pretty1(tm)
       case Prim1(_)             => pretty1(tm)
       case Meta(_)              => pretty1(tm)
+      case LabelLit(_)          => pretty1(tm)
       case PostponedCheck1(_)   => pretty1(tm)
       case Lift(_, _)           => pretty1(tm)
       case Quote(_)             => pretty1(tm)
@@ -136,8 +137,9 @@ object Pretty:
         case DoBind(x) if ns.take(ix.expose).contains(DoBind(x)) =>
           s"$x@${ns.size - ix.expose - 1}"
         case DoBind(x) => s"$x"
-    case Global1(x) => s"$x"
-    case Prim1(x)   => s"$x"
+    case Global1(x)  => s"$x"
+    case Prim1(x)    => s"$x"
+    case LabelLit(v) => s"\"$v\""
     case Let1(x, t, v, b) =>
       s"let $x : ${pretty1(t)} = ${pretty1(v)}; ${prettyLift1(x.toBind, b)}"
 

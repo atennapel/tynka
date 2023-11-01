@@ -121,6 +121,7 @@ object Parser:
         <|> ("(" *> tm <* ")")
         <|> attempt(holeP)
         <|> attempt(int.map(IntLit.apply))
+        <|> string.map(StringLit.apply)
         <|> ("Meta" #> U1)
         <|> ("Ty" *> projAtom).map(cv => U0(cv))
         <|> ("CV" #> CV)

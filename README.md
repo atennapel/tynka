@@ -41,7 +41,7 @@ TODO:
   - [x] Primitive datatypes
   - [x] Array datatype
   - [x] Int literals
-  - [ ] Labels
+  - [x] Labels
   - [ ] Class types
   - [ ] String literals
   - [ ] Array literals

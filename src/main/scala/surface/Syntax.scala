@@ -88,6 +88,7 @@ object Syntax:
     )
 
     case IntLit(value: Int)
+    case StringLit(value: String)
 
     case U0(cv: Ty)
     case U1
@@ -123,6 +124,7 @@ object Syntax:
             .map(t => s" : $t")
             .getOrElse("")} ${if m then "" else ":"}= $v; $b)"
       case IntLit(v)                      => s"$v"
+      case StringLit(v)                   => s"\"$v\""
       case U0(cv)                         => s"(Ty $cv)"
       case U1                             => "Meta"
       case CV                             => "CV"

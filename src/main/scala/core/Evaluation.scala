@@ -127,6 +127,7 @@ object Evaluation:
       case CV1                  => VCV1
       case Comp                 => VComp
       case Val                  => VVal
+      case LabelLit(v)          => VLabelLit(v)
       case Lift(cv, ty)         => VLift(eval1(cv), eval1(ty))
       case Quote(tm)            => vquote(eval0(tm))
       case AppPruning(m, p)     => vappPruning(vmeta(m), p)
@@ -236,6 +237,7 @@ object Evaluation:
       case VCV1                       => CV1
       case VComp                      => Comp
       case VVal                       => Val
+      case VLabelLit(v)               => LabelLit(v)
       case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
       case VQuote(tm)                 => quote(go0(tm))
       case VMetaPi(m, t, b) =>

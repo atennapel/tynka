@@ -944,7 +944,10 @@ object Elaboration extends RetryPostponed:
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
 
-      case S.IntLit(v) => Infer0(IntLit(v), VPrim1(Name("Int")), VVal)
+      case S.IntLit(v)    => Infer0(IntLit(v), VPrim1(Name("Int")), VVal)
+      case S.StringLit(v) => Infer1(LabelLit(v), VPrim1(Name("Label")))
+
+      case S.Var(x @ Name("Label")) => Infer1(Prim1(x), VU1)
 
       case S.Var(x @ Name("Byte"))   => Infer1(Prim1(x), VU0(VVal))
       case S.Var(x @ Name("Short"))  => Infer1(Prim1(x), VU0(VVal))
@@ -963,6 +966,7 @@ object Elaboration extends RetryPostponed:
           ),
           VPi(DontBind, Expl, VU0(VVal), Clos(EEmpty, U0(Val)))
         )
+
       case S.Var(x) =>
         ctx.lookup(x) match
           case Some(Name0(x, ty, cv)) =>

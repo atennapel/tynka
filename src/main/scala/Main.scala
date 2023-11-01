@@ -15,6 +15,7 @@ import jvmir.Generator.generate
 import java.io.File
 import scala.io.Source
 import parsley.io.given
+import scala.util.Using
 
 object Main:
   @main def run(filename: String): Unit =
@@ -23,7 +24,9 @@ object Main:
       implicit val ctx: Ctx = Ctx.empty((0, 0))
 
       val etimeStart = System.nanoTime()
-      val text = Source.fromFile(filename).mkString
+      val text = Using(Source.fromFile(filename)) { source =>
+        source.mkString
+      }.get
       val sdefs = defsParser.parse(text).toTry.get
       elaborate(sdefs)
       val etime = System.nanoTime() - etimeStart

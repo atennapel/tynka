@@ -58,6 +58,7 @@ object Syntax:
     case Var1(ix: Ix)
     case Global1(name: Name)
     case Prim1(name: Name)
+    case LabelLit(value: String)
     case Let1(name: Name, ty: Ty, value: Tm1, body: Tm1)
 
     case U0(cv: Tm1)
@@ -101,6 +102,7 @@ object Syntax:
       case Var1(ix)             => s"'$ix"
       case Global1(x)           => s"$x"
       case Prim1(x)             => s"$x"
+      case LabelLit(v)          => s"\"$v\""
       case Let1(x, ty, v, b)    => s"(let $x : $ty = $v; $b)"
       case U0(cv)               => s"(Ty $cv)"
       case U1                   => "Meta"
