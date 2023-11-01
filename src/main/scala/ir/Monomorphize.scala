@@ -92,6 +92,14 @@ object Monomorphize:
           to
         )
 
+      case S.Foreign(ty, code, args) =>
+        val rt = goTy(ty)
+        val eargs = args.map { t =>
+          val (et, ty) = go(t)
+          (et, ty.ty)
+        }
+        (Foreign(rt, goLabel(code), eargs), TDef(rt))
+
       case S.Splice(tm)  => impossible()
       case S.Prim0(name) => impossible()
 
@@ -126,11 +134,14 @@ object Monomorphize:
     case VTCon(dx, ps)                                     => TCon(mono(dx, ps))
     case VPrim1(x)                                         => TPrim(x)
     case VRigid(HPrim(Name("Array")), SApp(SId, ty, Expl)) => TArray(goVTy(ty))
-    case VRigid(HPrim(Name("Class")), SApp(SId, l, Expl)) =>
-      forceAll1(l) match
-        case VLabelLit(x) => TClass(x)
-        case _            => impossible()
-    case _ => impossible()
+    case VRigid(HPrim(Name("Class")), SApp(SId, l, Expl)) => TClass(goVLabel(l))
+    case _                                                => impossible()
+
+  private def goLabel(l: S.Tm1): String = goVLabel(eval1(l)(EEmpty))
+  private def goVLabel(l: Val1): String =
+    forceAll1(l) match
+      case VLabelLit(x) => x
+      case _            => impossible()
 
   private def genName(dx: Name, ps: List[Ty]): Name =
     if ps.isEmpty then dx

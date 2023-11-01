@@ -333,6 +333,24 @@ object Generator:
             gen(o)
             mg.visitLabel(lEnd)
 
+      case Foreign(ty, code, args) =>
+        code match
+          case code if code.startsWith("op:") =>
+            args.foreach((t, _) => gen(t))
+            mg.visitInsn(code.drop(3).toInt)
+          case code if code.startsWith("branch:") =>
+            val ins = code.drop(7).toInt
+            args.foreach((t, _) => gen(t))
+            val skip = mg.newLabel()
+            val end = mg.newLabel()
+            mg.ifICmp(ins, skip)
+            mg.push(false)
+            mg.visitJumpInsn(GOTO, end)
+            mg.visitLabel(skip)
+            mg.push(true)
+            mg.visitLabel(end)
+          case _ => impossible()
+
   private def genLocal(scrut: Tm, jty: Type, t: Ty)(implicit
       mg: GeneratorAdapter,
       ctx: Ctx,

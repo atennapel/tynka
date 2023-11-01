@@ -181,6 +181,9 @@ object Compile:
         J.Let(x, go(t1), go(v), go(b))
       case RunIO(v) => go(v) // TODO: is this correct?
 
+      case Foreign(ty, code, args) =>
+        J.Foreign(go(ty), code, args.map((t, ty) => (go(t), go(ty))))
+
       case Lam(ps, bty, b)          => impossible()
       case LetRec(x, ty, bty, v, b) => impossible()
       case Impossible(_)            => impossible()

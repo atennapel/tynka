@@ -109,6 +109,8 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
+    case Foreign(ty: Ty, code: Tm, args: List[Tm])
+
     case Hole(name: Option[Name])
 
     case Pos(pos: PosInfo, tm: Tm)
@@ -145,10 +147,13 @@ object Syntax:
             .mkString(", ")}${if pats.isEmpty then "" else " "}${pats
             .map((_, ps, guard, b) => s"| ${ps.mkString(", ")}${guard.map(g => s" if ${g}").getOrElse("")} => $b")
             .mkString(" ")})"
-      case Lift(ty)      => s"^$ty"
-      case Quote(tm)     => s"`$tm"
-      case Splice(tm)    => s"$$$tm"
-      case Hole(None)    => s"_"
-      case Hole(Some(x)) => s"_$x"
-      case Pos(_, tm)    => s"$tm"
+      case Lift(ty)               => s"^$ty"
+      case Quote(tm)              => s"`$tm"
+      case Splice(tm)             => s"$$$tm"
+      case Hole(None)             => s"_"
+      case Hole(Some(x))          => s"_$x"
+      case Foreign(ty, code, Nil) => s"(unsafeJVM $ty $code)"
+      case Foreign(ty, code, args) =>
+        s"(unsafeJVM $ty $code ${args.mkString(" ")})"
+      case Pos(_, tm) => s"$tm"
   export Tm.*

@@ -35,7 +35,7 @@ object Parser:
         "if",
         "then",
         "else",
-        // "foreign",
+        "unsafeJVM",
         // "foreignIO",
         // "mutable",
         "do"
@@ -136,7 +136,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> doP <|> matchP <|> ifP <|>
+      ) <|> let <|> lam <|> doP <|> matchP <|> ifP <|> foreignP <|>
         precedence[Tm](app)(
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
         )
@@ -236,6 +236,15 @@ object Parser:
             )
           }
       )
+
+    private lazy val foreignP: Parsley[Tm] = positioned(
+      ("unsafeJVM" *> projAtom <~> projAtom <~> many(
+        projAtom
+      ))
+        .map { case ((rt, l), as) =>
+          Foreign(rt, l, as)
+        }
+    )
 
     private enum DoEntry:
       case DoBind(pos: PosInfo, x: Bind, t: Option[Ty], v: Tm)

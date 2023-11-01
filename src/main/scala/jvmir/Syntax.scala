@@ -127,6 +127,8 @@ object Syntax:
     case IntLit(n: Int)
     case StringLit(value: String)
 
+    case Foreign(ty: Ty, code: String, args: List[(Tm, Ty)])
+
     def globals: Set[Name] = this match
       case Arg(_)       => Set.empty
       case Var(_)       => Set.empty
@@ -149,6 +151,8 @@ object Syntax:
         s.globals ++ b.globals ++ o.map(_.globals).getOrElse(Set.empty)
       case FinMatch(s, _, b, o) =>
         s.globals ++ b.globals ++ o.map(_.globals).getOrElse(Set.empty)
+
+      case Foreign(ty, code, args) => args.flatMap((t, _) => t.globals).toSet
 
     def dataGlobals: Set[Name] = this match
       case Arg(_)       => Set.empty
@@ -180,6 +184,9 @@ object Syntax:
         s.dataGlobals ++ b.dataGlobals ++ o
           .map(_.dataGlobals)
           .getOrElse(Set.empty)
+
+      case Foreign(ty, code, args) =>
+        ty.dataGlobals ++ args.flatMap((t, _) => t.dataGlobals)
 
     override def toString: String = this match
       case Arg(i)       => s"'arg$i"
@@ -214,4 +221,8 @@ object Syntax:
         s"(finmatch $scrut | $c => $b | _ => $e)"
       case FinMatch(scrut, c, b, None) =>
         s"(finmatch $scrut | $c => $b)"
+
+      case Foreign(ty, code, Nil) => s"(unsafeJVM $ty $code)"
+      case Foreign(ty, code, args) =>
+        s"(unsafeJVM $ty $code ${args.map(_._1).mkString(" ")})"
   export Tm.*

@@ -90,6 +90,7 @@ object Value:
     )
     case VImpossible(ty: VTy)
     case VSplice(tm: Val1)
+    case VForeign(ty: VTy, code: Val1, args: List[Val0])
   export Val0.*
 
   enum Head:

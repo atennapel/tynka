@@ -26,12 +26,15 @@ object Simplify:
 
   private def go(t: Tm)(implicit ref: Ref[LName], gendef: GenDef[Tm]): Tm =
     t match
-      case Var(_, _)        => t
-      case Global(_, _)     => t
-      case Impossible(_)    => t
-      case IntLit(_)        => t
-      case StringLit(_)     => t
+      case Var(_, _)     => t
+      case Global(_, _)  => t
+      case Impossible(_) => t
+      case IntLit(_)     => t
+      case StringLit(_)  => t
+
       case Jump(x, t, args) => Jump(x, t, args.map(go))
+      case Foreign(ty, code, args) =>
+        Foreign(ty, code, args.map((t, ty) => (go(t), ty)))
 
       case l @ Let(x, ty, bty, v0, b) =>
         go(v0) match
@@ -352,6 +355,7 @@ object Simplify:
       case Jump(_, _, args)         => notAnyContains(args)
       case Con(_, _, args)          => notAnyContains(args)
       case Lam(_, bty, body)        => notContains(body)
+      case Foreign(ty, code, args)  => notAnyContains(args.map(_._1))
 
       case ReturnIO(v) => inTail(v)
       case RunIO(c)    => inTail(c)

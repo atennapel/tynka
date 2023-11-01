@@ -44,10 +44,10 @@ TODO:
   - [x] Labels
   - [x] Class types
   - [x] String literals
-  - [ ] Array literals
+  - [x] JVM interop calls
   - [ ] IO monad
+  - [ ] Array literals
   - [ ] Non-Int primitive literals
-  - [ ] Inline bytecodes (?)
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] Or-patterns

@@ -1181,6 +1181,14 @@ object Elaboration extends RetryPostponed:
         val etm = checkMatch(Right(scruts), ps, ty, cv)
         Infer0(etm, ty, cv)
 
+      case S.Foreign(ty, code, args) =>
+        val ety = check1(ty, VU0(VVal))
+        val ecode = check1(code, VPrim1(Name("Label")))
+        val eargs = args.map { t =>
+          check0(t, ctx.eval1(freshMeta(VU0(VVal))), VVal)
+        }
+        Infer0(Foreign(ety, ecode, eargs), ctx.eval1(ety), VVal)
+
   // elaboration
   def elaborate(d: S.Def): Unit =
     debug(s"elaborate $d")

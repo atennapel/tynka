@@ -129,6 +129,10 @@ object Pretty:
 
     case Splice(t) => s"$$${prettyParen1(t)}"
 
+    case Foreign(ty, code, Nil) => s"unsafeJVM $ty $code"
+    case Foreign(ty, code, args) =>
+      s"unsafeJVM $ty $code ${args.mkString(" ")}"
+
     case Wk10(tm) => pretty0(tm)(ns.tail)
     case Wk00(tm) => pretty0(tm)(ns.tail)
 

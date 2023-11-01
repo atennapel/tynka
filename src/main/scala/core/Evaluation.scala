@@ -109,8 +109,10 @@ object Evaluation:
         VMatch(eval0(scrut), eval1(t), c, ps.map(eval1), eval0(b), eval0(o))
       case Impossible(ty) => VImpossible(eval1(ty))
       case Splice(t)      => vsplice(eval1(t))
-      case Wk10(t)        => eval0(t)(env.wk1)
-      case Wk00(t)        => eval0(t)(env.wk0)
+      case Foreign(ty, code, args) =>
+        VForeign(eval1(ty), eval1(code), args.map(eval0))
+      case Wk10(t) => eval0(t)(env.wk1)
+      case Wk00(t) => eval0(t)(env.wk0)
 
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
@@ -271,6 +273,8 @@ object Evaluation:
         Match(go0(scrut), go1(t), c, ps.map(p => go1(p)), go0(b), go0(o))
       case VImpossible(ty) => Impossible(go1(ty))
       case VSplice(tm)     => splice(go1(tm))
+      case VForeign(ty, code, args) =>
+        Foreign(go1(ty), go1(code), args.map(x => go0(x)))
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
     quote1(eval1(tm)(EEmpty), q)(lvl0)

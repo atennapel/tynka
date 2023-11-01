@@ -79,6 +79,7 @@ object Syntax:
     case ReturnIO(value: Tm)
     case BindIO(x: LName, t1: Ty, t2: Ty, value: Tm, body: Tm)
     case RunIO(value: Tm)
+    case Foreign(ty: Ty, code: String, args: List[(Tm, Ty)])
 
     override def toString: String = this match
       case Var(x, _)              => s"'$x"
@@ -113,6 +114,9 @@ object Syntax:
       case ReturnIO(v)               => s"(returnIO $v)"
       case BindIO(x, _, _, v, b)     => s"($x <- $v; $b)"
       case RunIO(v)                  => s"(unsafePerformIO $v)"
+      case Foreign(ty, code, Nil)    => s"(unsafeJVM $ty $code)"
+      case Foreign(ty, code, args) =>
+        s"(unsafeJVM $ty $code ${args.map(_._1).mkString(" ")})"
 
     def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
 
@@ -158,6 +162,8 @@ object Syntax:
         case BindIO(x, t1, t2, v, b) =>
           BindIO(x, t1, t2, go(v), go(b))
         case RunIO(v) => RunIO(go(v))
+        case Foreign(ty, code, args) =>
+          Foreign(ty, code, args.map((t, ty) => (go(t), ty)))
 
     def free: List[(LName, TDef)] = this match
       case Var(x, t)            => List((x, t))
@@ -182,4 +188,5 @@ object Syntax:
       case ReturnIO(v)           => v.free
       case BindIO(x, _, _, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
       case RunIO(v)              => v.free
+      case Foreign(_, _, args)   => args.flatMap((t, _) => t.free)
   export Tm.*
