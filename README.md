@@ -43,7 +43,7 @@ TODO:
   - [x] Int literals
   - [x] Labels
   - [x] Class types
-  - [ ] String literals
+  - [x] String literals
   - [ ] Array literals
   - [ ] IO monad
   - [ ] Non-Int primitive literals

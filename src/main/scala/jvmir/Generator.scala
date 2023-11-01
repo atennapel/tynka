@@ -196,7 +196,8 @@ object Generator:
           case LLocal(l, _) => mg.loadLocal(l)
           case _            => impossible()
 
-      case IntLit(n) => mg.push(n)
+      case IntLit(n)    => mg.push(n)
+      case StringLit(s) => mg.push(s)
 
       case Global(x, ty) =>
         mg.getStatic(ctx.moduleType, escape(x.expose), genTy(ty))

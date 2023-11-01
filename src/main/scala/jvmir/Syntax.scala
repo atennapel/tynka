@@ -125,11 +125,13 @@ object Syntax:
     case FinMatch(scrut: Tm, con: Int, body: Tm, other: Option[Tm])
 
     case IntLit(n: Int)
+    case StringLit(value: String)
 
     def globals: Set[Name] = this match
-      case Arg(_)    => Set.empty
-      case Var(_)    => Set.empty
-      case IntLit(_) => Set.empty
+      case Arg(_)       => Set.empty
+      case Var(_)       => Set.empty
+      case IntLit(_)    => Set.empty
+      case StringLit(_) => Set.empty
 
       case Global(x, ty)        => Set(x)
       case GlobalApp(x, ty, as) => Set(x) ++ as.flatMap(_.globals)
@@ -149,9 +151,10 @@ object Syntax:
         s.globals ++ b.globals ++ o.map(_.globals).getOrElse(Set.empty)
 
     def dataGlobals: Set[Name] = this match
-      case Arg(_)    => Set.empty
-      case Var(_)    => Set.empty
-      case IntLit(_) => Set.empty
+      case Arg(_)       => Set.empty
+      case Var(_)       => Set.empty
+      case IntLit(_)    => Set.empty
+      case StringLit(_) => Set.empty
 
       case Global(x, ty)        => ty.dataGlobals
       case GlobalApp(x, ty, as) => ty.dataGlobals ++ as.flatMap(_.dataGlobals)
@@ -183,6 +186,7 @@ object Syntax:
       case Var(x)       => s"'$x"
       case Global(x, _) => s"$x"
       case IntLit(n)    => s"$n"
+      case StringLit(v) => s"\"$v\""
 
       case Let(x, t, v, b) => s"(let $x : $t = $v; $b)"
 

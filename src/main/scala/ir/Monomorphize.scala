@@ -24,7 +24,8 @@ object Monomorphize:
 
   private def go(t: S.Tm0)(implicit ref: Ref[LName], ctx: Ctx): (Tm, TDef) =
     t match
-      case S.IntLit(v) => (IntLit(v), TDef(TPrim(Name("Int"))))
+      case S.IntLit(v)    => (IntLit(v), TDef(TPrim(Name("Int"))))
+      case S.StringLit(v) => (StringLit(v), TDef(TClass("java.lang.String")))
       case S.Var0(ix) =>
         val (x, ty) = ctx(ix.expose)
         (Var(x, ty), ty)

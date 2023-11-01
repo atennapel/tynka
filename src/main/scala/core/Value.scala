@@ -64,6 +64,7 @@ object Value:
     case VGlobal0(name: Name)
     case VPrim0(name: Name)
     case VIntLit(value: Int)
+    case VStringLit(value: String)
     case VLet0(
         name: Name,
         ty: VTy,

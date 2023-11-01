@@ -114,7 +114,8 @@ object Compile:
         if arg then J.Arg(x) else J.Var(x)
       case Global(x, ty) => J.Global(x, go(ty.ty))
 
-      case IntLit(v) => J.IntLit(v)
+      case IntLit(v)    => J.IntLit(v)
+      case StringLit(v) => J.StringLit(v)
 
       case Con(dx, cx, as) =>
         val info = monomorphizedDatatype(dx)

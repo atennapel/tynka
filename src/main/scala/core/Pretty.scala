@@ -58,6 +58,7 @@ object Pretty:
       case Global0(_)          => pretty0(tm)
       case Prim0(_)            => pretty0(tm)
       case IntLit(_)           => pretty0(tm)
+      case StringLit(_)        => pretty0(tm)
       case Splice(_)           => pretty0(tm)
       case Impossible(_)       => pretty0(tm)
       case Con(_, _, Nil)      => pretty0(tm)
@@ -106,9 +107,10 @@ object Pretty:
         case DoBind(x) if ns.take(ix.expose).contains(DoBind(x)) =>
           s"$x@${ns.size - ix.expose - 1}"
         case DoBind(x) => s"$x"
-    case Global0(x) => s"$x"
-    case Prim0(x)   => s"$x"
-    case IntLit(v)  => s"$v"
+    case Global0(x)   => s"$x"
+    case Prim0(x)     => s"$x"
+    case IntLit(v)    => s"$v"
+    case StringLit(v) => s"\"$v\""
     case Let0(x, t, v, b) =>
       s"let $x : ${pretty1(t)} := ${pretty0(v)}; ${prettyLift0(x.toBind, b)}"
     case LetRec(x, t, v, b) =>

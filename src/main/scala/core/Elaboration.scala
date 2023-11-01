@@ -733,6 +733,17 @@ object Elaboration extends RetryPostponed:
 
       case S.Splice(t) => splice(check1(t, VLift(cv, ty)))
 
+      case S.StringLit(v) =>
+        unify1(cv, VVal)
+        unify1(
+          ty,
+          VRigid(
+            HPrim(Name("Class")),
+            SApp(SId, VLabelLit("java.lang.String"), Expl)
+          )
+        )
+        StringLit(v)
+
       case tm =>
         infer(tm) match
           case Infer0(etm, vty, vcv) =>
@@ -890,6 +901,16 @@ object Elaboration extends RetryPostponed:
     if !tm.isPos then debug(s"infer0 $tm")
     tm match
       case S.Pos(pos, tm) => infer0(tm)(ctx.enter(pos))
+
+      case S.StringLit(v) =>
+        (
+          StringLit(v),
+          VRigid(
+            HPrim(Name("Class")),
+            SApp(SId, VLabelLit("java.lang.String"), Expl)
+          ),
+          VVal
+        )
 
       case S.Lam(x, i, mty, b) =>
         i match
