@@ -703,7 +703,7 @@ object Elaboration extends RetryPostponed:
             val ety = tyAnnot(ma, VU0(vcv2))
             (ety, cv2, vcv2)
         val vty = ctx.eval1(ety)
-        if rec then ensureFun(vty, vcv2)
+        // if rec then ensureFun(vty, vcv2)
         val nctx = ctx.bind0(DoBind(x), ety, vty, cv2, vcv2)
         val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
         val eb = check0(b, ty, cv)(nctx)
@@ -822,12 +822,12 @@ object Elaboration extends RetryPostponed:
         val qt1 = ctx.quote1(t1)
         Lam1(x, i2, qt1, check1(b, t2(VVar1(ctx.lvl)))(ctx.bind1(x, qt1, t1)))
 
-      case (S.Var(x), VPi(_, Impl, _, _)) if varHasUnknownType1(x) =>
+      case (S.Var(x, _), VPi(_, Impl, _, _)) if varHasUnknownType1(x) =>
         val Some(Name1(lvl, ty2)) = ctx.lookup(x): @unchecked
         unify1(ty2, ty)
         Var1(lvl.toIx(ctx.lvl))
 
-      case (S.Var(x), VU1) if varHasUnknownType1(x) =>
+      case (S.Var(x, _), VU1) if varHasUnknownType1(x) =>
         val Some(Name1(_, ty2)) = ctx.lookup(x): @unchecked
         val VFlex(m, _) = forceAll1(ty2): @unchecked
         val placeholder = freshMetaId(ty)
@@ -968,8 +968,8 @@ object Elaboration extends RetryPostponed:
       case S.IntLit(v)    => Infer0(IntLit(v), VPrim1(Name("Int")), VVal)
       case S.StringLit(v) => Infer1(LabelLit(v), VPrim1(Name("Label")))
 
-      case S.Var(x @ Name("Label")) => Infer1(Prim1(x), VU1)
-      case S.Var(x @ Name("Class")) =>
+      case S.Var(x @ Name("Label"), _) => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("Class"), _) =>
         val label = Name("Label")
         Infer1(
           Lam1(
@@ -981,14 +981,121 @@ object Elaboration extends RetryPostponed:
           VPi(DontBind, Expl, VPrim1(label), Clos(EEmpty, U0(Val)))
         )
 
-      case S.Var(x @ Name("Byte"))   => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Short"))  => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Int"))    => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Long"))   => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Float"))  => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Double")) => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Char"))   => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Array")) =>
+      case S.Var(x @ Name("IO"), _) =>
+        Infer1(
+          Lam1(
+            DoBind(Name("A")),
+            Expl,
+            U0(Val),
+            App1(Prim1(x), Var1(ix0), Expl)
+          ),
+          VPi(DontBind, Expl, VU0(VVal), Clos(EEmpty, U0(Comp)))
+        )
+      case S.Var(rIO @ Name("returnIO"), _) =>
+        val a = Name("A")
+        val x = Name("x")
+        Infer1(
+          Lam1(
+            DoBind(a),
+            Impl,
+            U0(Val),
+            Lam1(
+              DoBind(x),
+              Expl,
+              Lift(Val, Var1(ix0)),
+              App1(App1(Prim1(rIO), Var1(mkIx(1)), Impl), Var1(ix0), Expl)
+            )
+          ),
+          ctx.eval1(
+            Pi(
+              DoBind(a),
+              Impl,
+              U0(Val),
+              Pi(
+                DontBind,
+                Expl,
+                Lift(Val, Var1(ix0)),
+                Lift(Comp, App1(Prim1(Name("IO")), Var1(mkIx(1)), Expl))
+              )
+            )
+          )
+        )
+      case S.Var(rIO @ Name("bindIO"), _) =>
+        val a = Name("A")
+        val b = Name("B")
+        val c = Name("c")
+        val k = Name("k")
+        // {A : Ty Val} {B : Ty Val} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
+        // \{A} {B} c k => bindIO {A} {B} c k
+        inline def io(ix: Int) =
+          Lift(Comp, App1(Prim1(Name("IO")), Var1(mkIx(ix)), Expl))
+        Infer1(
+          Lam1(
+            DoBind(a),
+            Impl,
+            U0(Val),
+            Lam1(
+              DoBind(b),
+              Impl,
+              U0(Val),
+              Lam1(
+                DoBind(c),
+                Expl,
+                io(1),
+                Lam1(
+                  DoBind(k),
+                  Expl,
+                  Pi(DontBind, Expl, Lift(Val, Var1(mkIx(2))), io(2)),
+                  App1(
+                    App1(
+                      App1(
+                        App1(Prim1(rIO), Var1(mkIx(3)), Impl),
+                        Var1(mkIx(2)),
+                        Impl
+                      ),
+                      Var1(mkIx(1)),
+                      Expl
+                    ),
+                    Var1(mkIx(0)),
+                    Expl
+                  )
+                )
+              )
+            )
+          ),
+          ctx.eval1(
+            Pi(
+              DoBind(a),
+              Impl,
+              U0(Val),
+              Pi(
+                DoBind(b),
+                Impl,
+                U0(Val),
+                Pi(
+                  DontBind,
+                  Expl,
+                  io(1),
+                  Pi(
+                    DontBind,
+                    Expl,
+                    Pi(DontBind, Expl, Lift(Val, Var1(mkIx(2))), io(2)),
+                    io(2)
+                  )
+                )
+              )
+            )
+          )
+        )
+
+      case S.Var(x @ Name("Byte"), _)   => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Short"), _)  => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Int"), _)    => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Long"), _)   => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Float"), _)  => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Double"), _) => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Char"), _)   => Infer1(Prim1(x), VU0(VVal))
+      case S.Var(x @ Name("Array"), _) =>
         Infer1(
           Lam1(
             DoBind(Name("A")),
@@ -999,7 +1106,7 @@ object Elaboration extends RetryPostponed:
           VPi(DontBind, Expl, VU0(VVal), Clos(EEmpty, U0(Val)))
         )
 
-      case S.Var(x) =>
+      case S.Var(x, _) =>
         ctx.lookup(x) match
           case Some(Name0(x, ty, cv)) =>
             Infer0(Var0(x.toIx(ctx.lvl)), ty, cv)
@@ -1070,7 +1177,7 @@ object Elaboration extends RetryPostponed:
             val ety = tyAnnot(mty, VU0(vcv2))
             (ety, cv2, vcv2)
         val vty = ctx.eval1(ety)
-        if rec then ensureFun(vty, vcv2)
+        // if rec then ensureFun(vty, vcv2)
         val nctx = ctx.bind0(DoBind(x), ety, vty, cv2, vcv2)
         val ev = check0(v, vty, vcv2)(if rec then nctx else ctx)
         val (eb, rty, rcv) = infer0(b)(nctx)
@@ -1181,13 +1288,16 @@ object Elaboration extends RetryPostponed:
         val etm = checkMatch(Right(scruts), ps, ty, cv)
         Infer0(etm, ty, cv)
 
-      case S.Foreign(ty, code, args) =>
+      case S.Foreign(io, ty, code, args) =>
         val ety = check1(ty, VU0(VVal))
         val ecode = check1(code, VPrim1(Name("Label")))
         val eargs = args.map { t =>
           check0(t, ctx.eval1(freshMeta(VU0(VVal))), VVal)
         }
-        Infer0(Foreign(ety, ecode, eargs), ctx.eval1(ety), VVal)
+        val vt = ctx.eval1(ety)
+        val rt =
+          if io then VRigid(HPrim(Name("IO")), SApp(SId, vt, Expl)) else vt
+        Infer0(Foreign(io, ety, ecode, eargs), rt, if io then VComp else VVal)
 
   // elaboration
   def elaborate(d: S.Def): Unit =
@@ -1242,7 +1352,7 @@ object Elaboration extends RetryPostponed:
                 case None      => freshMeta(VU0(vcv))
                 case Some(sty) => check1(sty, VU0(vcv))
               val vty = ctx.eval1(ety)
-              if rec then ensureFun(vty, vcv)
+              // if rec then ensureFun(vty, vcv)
               val ev = check0(v, vty, vcv)(
                 if rec then ctx.bind0(DoBind(x), ety, vty, cv, vcv) else ctx
               )

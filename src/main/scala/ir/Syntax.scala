@@ -10,35 +10,35 @@ object Syntax:
     case TPrim(name: Name)
     case TArray(ty: Ty)
     case TClass(name: String)
+    case TWorld
+    case TIOResult(ty: Ty)
 
     override def toString: String = this match
-      case TCon(name)   => s"$name"
-      case TPrim(name)  => s"$name"
-      case TArray(ty)   => s"(Array $ty)"
-      case TClass(name) => s"$name"
+      case TCon(name)    => s"$name"
+      case TPrim(name)   => s"$name"
+      case TArray(ty)    => s"(Array $ty)"
+      case TClass(name)  => s"$name"
+      case TWorld        => s"World"
+      case TIOResult(ty) => s"(IOResult $ty)"
   export Ty.*
 
-  final case class TDef(ps: List[Ty], io: Boolean, rt: Ty):
+  final case class TDef(ps: List[Ty], rt: Ty):
     override def toString: String = ps match
-      case Nil if !io => s"$rt"
-      case ps =>
-        s"${ps.mkString("(", ", ", ")")} ->${if io then " IO" else ""} $rt"
-    def tail: TDef = TDef(ps.tail, io, rt)
+      case Nil => s"$rt"
+      case ps  => s"${ps.mkString("(", ", ", ")")} -> $rt"
+    def tail: TDef = TDef(ps.tail, rt)
     def ty: Ty = ps match
-      case Nil if !io => rt
-      case _          => impossible()
+      case Nil => rt
+      case _   => impossible()
     def head: Ty = ps.head
-    def returnType = TDef(Nil, io, rt)
-    def isFunction: Boolean = ps.nonEmpty && !io
-    def drop(n: Int): TDef = TDef(ps.drop(n), io, rt)
-    def returnIO: TDef = if io then impossible() else TDef(ps, true, rt)
-    def runIO: Ty = if !io || ps.nonEmpty then impossible() else rt
+    def returnType = TDef(Nil, rt)
+    def isFunction: Boolean = ps.nonEmpty
+    def drop(n: Int): TDef = TDef(ps.drop(n), rt)
   object TDef:
-    def apply(rt: Ty): TDef = TDef(Nil, false, rt)
-    def apply(io: Boolean, rt: Ty): TDef = TDef(Nil, io, rt)
-    def apply(t: Ty, rt: TDef): TDef = TDef(t :: rt.ps, rt.io, rt.rt)
-    def apply(t: Ty, rt: Ty): TDef = TDef(List(t), false, rt)
-    def apply(ts: List[Ty], t: TDef): TDef = TDef(ts ++ t.ps, t.io, t.rt)
+    def apply(rt: Ty): TDef = TDef(Nil, rt)
+    def apply(t: Ty, rt: TDef): TDef = TDef(t :: rt.ps, rt.rt)
+    def apply(t: Ty, rt: Ty): TDef = TDef(List(t), rt)
+    def apply(ts: List[Ty], t: TDef): TDef = TDef(ts ++ t.ps, t.rt)
 
   enum Tm:
     case Var(name: LName, ty: TDef)
@@ -76,10 +76,7 @@ object Syntax:
     )
     case Impossible(ty: TDef)
     case Field(dx: Name, cx: Name, value: Tm, rt: Ty, ix: Int)
-    case ReturnIO(value: Tm)
-    case BindIO(x: LName, t1: Ty, t2: Ty, value: Tm, body: Tm)
-    case RunIO(value: Tm)
-    case Foreign(ty: Ty, code: String, args: List[(Tm, Ty)])
+    case Foreign(io: Boolean, ty: Ty, code: String, args: List[(Tm, Ty)])
 
     override def toString: String = this match
       case Var(x, _)              => s"'$x"
@@ -111,12 +108,10 @@ object Syntax:
         s"(match $scrut | $c as '$x => $b | _ => $e)"
       case Impossible(_)             => "impossible"
       case Field(_, _, value, _, ix) => s"(#$ix $value)"
-      case ReturnIO(v)               => s"(returnIO $v)"
-      case BindIO(x, _, _, v, b)     => s"($x <- $v; $b)"
-      case RunIO(v)                  => s"(unsafePerformIO $v)"
-      case Foreign(ty, code, Nil)    => s"(unsafeJVM $ty $code)"
-      case Foreign(ty, code, args) =>
-        s"(unsafeJVM $ty $code ${args.map(_._1).mkString(" ")})"
+      case Foreign(io, ty, code, Nil) =>
+        s"(unsafeJVM${if io then "IO" else ""} $ty $code)"
+      case Foreign(io, ty, code, args) =>
+        s"(unsafeJVM${if io then "IO" else ""} $ty $code ${args.map(_._1).mkString(" ")})"
 
     def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
 
@@ -158,12 +153,8 @@ object Syntax:
         case Lam(ps, bty, body) => Lam(ps, bty, go(body))
         case Match(dx, s, bty, c, x, b, o) =>
           Match(dx, go(s), bty, c, x, go(b), go(o))
-        case ReturnIO(v) => ReturnIO(go(v))
-        case BindIO(x, t1, t2, v, b) =>
-          BindIO(x, t1, t2, go(v), go(b))
-        case RunIO(v) => RunIO(go(v))
-        case Foreign(ty, code, args) =>
-          Foreign(ty, code, args.map((t, ty) => (go(t), ty)))
+        case Foreign(io, ty, code, args) =>
+          Foreign(io, ty, code, args.map((t, ty) => (go(t), ty)))
 
     def free: List[(LName, TDef)] = this match
       case Var(x, t)            => List((x, t))
@@ -185,8 +176,5 @@ object Syntax:
         b.free.filterNot((y, _) => ps.exists((x, _) => x == y))
       case Match(_, s, _, _, x, b, o) =>
         s.free ++ b.free.filterNot((y, _) => x == y) ++ o.free
-      case ReturnIO(v)           => v.free
-      case BindIO(x, _, _, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
-      case RunIO(v)              => v.free
-      case Foreign(_, _, args)   => args.flatMap((t, _) => t.free)
+      case Foreign(_, _, _, args) => args.flatMap((t, _) => t.free)
   export Tm.*

@@ -25,7 +25,7 @@ object Syntax:
     )
     case Impossible(ty: Ty)
     case Splice(tm: Tm1)
-    case Foreign(ty: Ty, code: Tm1, args: List[Tm0])
+    case Foreign(io: Boolean, ty: Ty, code: Tm1, args: List[Tm0])
     case Wk10(tm: Tm0)
     case Wk00(tm: Tm0)
 
@@ -43,11 +43,12 @@ object Syntax:
       case Con(x, _, as)       => s"($x ${as.mkString(" ")})"
       case Match(scrut, t, c, _, b, e) =>
         s"(match ($scrut : $t) | $c => $b | _ => $e)"
-      case Impossible(_)          => "impossible"
-      case Splice(tm)             => s"$$$tm"
-      case Foreign(ty, code, Nil) => s"(unsafeJVM $ty $code)"
-      case Foreign(ty, code, args) =>
-        s"(unsafeJVM $ty $code ${args.mkString(" ")})"
+      case Impossible(_) => "impossible"
+      case Splice(tm)    => s"$$$tm"
+      case Foreign(io, ty, code, Nil) =>
+        s"(unsafeJVM${if io then "IO" else ""} $ty $code)"
+      case Foreign(io, ty, code, args) =>
+        s"(unsafeJVM${if io then "IO" else ""} $ty $code ${args.mkString(" ")})"
       case Wk10(tm) => s"$tm"
       case Wk00(tm) => s"$tm"
 

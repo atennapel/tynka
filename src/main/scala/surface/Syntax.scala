@@ -77,7 +77,7 @@ object Syntax:
 
   type Ty = Tm
   enum Tm:
-    case Var(name: Name)
+    case Var(name: Name, rigid: Boolean = false)
     case Let(
         name: Name,
         rec: Boolean,
@@ -109,7 +109,7 @@ object Syntax:
     case Quote(tm: Tm)
     case Splice(tm: Tm)
 
-    case Foreign(ty: Ty, code: Tm, args: List[Tm])
+    case Foreign(io: Boolean, ty: Ty, code: Tm, args: List[Tm])
 
     case Hole(name: Option[Name])
 
@@ -120,7 +120,7 @@ object Syntax:
       case _         => false
 
     override def toString: String = this match
-      case Var(x) => s"$x"
+      case Var(x, _) => s"$x"
       case Let(x, rec, m, ty, v, b) =>
         s"(let ${if rec then "rec " else ""}$x${ty
             .map(t => s" : $t")
@@ -147,13 +147,14 @@ object Syntax:
             .mkString(", ")}${if pats.isEmpty then "" else " "}${pats
             .map((_, ps, guard, b) => s"| ${ps.mkString(", ")}${guard.map(g => s" if ${g}").getOrElse("")} => $b")
             .mkString(" ")})"
-      case Lift(ty)               => s"^$ty"
-      case Quote(tm)              => s"`$tm"
-      case Splice(tm)             => s"$$$tm"
-      case Hole(None)             => s"_"
-      case Hole(Some(x))          => s"_$x"
-      case Foreign(ty, code, Nil) => s"(unsafeJVM $ty $code)"
-      case Foreign(ty, code, args) =>
-        s"(unsafeJVM $ty $code ${args.mkString(" ")})"
+      case Lift(ty)      => s"^$ty"
+      case Quote(tm)     => s"`$tm"
+      case Splice(tm)    => s"$$$tm"
+      case Hole(None)    => s"_"
+      case Hole(Some(x)) => s"_$x"
+      case Foreign(io, ty, code, Nil) =>
+        s"(unsafeJVM${if io then "IO" else ""} $ty $code)"
+      case Foreign(io, ty, code, args) =>
+        s"(unsafeJVM${if io then "IO" else ""} $ty $code ${args.mkString(" ")})"
       case Pos(_, tm) => s"$tm"
   export Tm.*

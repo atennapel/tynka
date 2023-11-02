@@ -91,7 +91,9 @@ object Syntax:
           .mkString(" | ")
         s"data $x = $scs"
       case DDef(g, x, t, v) =>
-        val sps = t.ps.map(_.mkString(" ")).getOrElse("")
+        val sps = t.ps
+          .map(ps => if ps.isEmpty then "()" else ps.mkString(" "))
+          .getOrElse("")
         s"def${if g then "[gen]" else ""} $x${if t.ps.isEmpty then "" else " "}$sps : ${t.rt} = $v"
   export Def.*
 

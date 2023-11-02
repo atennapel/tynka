@@ -20,14 +20,16 @@ object Compile:
         val mty = monomorphize(ty)
         implicit val ref = Ref(0)
         val mtm = monomorphize(stage(tm))
+        // println(s"def $x : $mty = $mtm")
         simplify(x, mtm, mty).map { (g, x, t, v) =>
           // println(s"def${if g then "[gen]" else ""} $x : $t = $v")
           implicit val rename: LocalRename = LocalRename()
           v.flattenLams match
             case (None, v) => J.DDef(g, x, go(t), go(v))
             case (Some(ps, _), v) =>
-              ps.zipWithIndex.foreach { case ((x, _), i) =>
-                rename.set(x, i, true)
+              ps.filterNot((_, t) => t == TWorld).zipWithIndex.foreach {
+                case ((x, _), i) =>
+                  rename.set(x, i, true)
               }
               J.DDef(g, x, go(t), go(v))
         }
@@ -80,9 +82,8 @@ object Compile:
     loop(ds)
 
   private def go(t: TDef): J.TDef = t match
-    case TDef(Nil, false, rt) => J.TDef(None, go(rt))
-    case TDef(Nil, true, rt)  => J.TDef(Some(Nil), go(rt))
-    case TDef(ps, _, rt)      => J.TDef(ps.map(go), go(rt))
+    case TDef(Nil, rt) => J.TDef(None, go(rt))
+    case TDef(ps, rt)  => J.TDef(ps.filterNot(_ == TWorld).map(go), go(rt))
 
   private def go(t: Ty): J.Ty = t match
     case TPrim(Name("Byte"))   => J.TByte
@@ -105,24 +106,30 @@ object Compile:
             case n if n <= 128   => J.TByte
             case n if n <= 32768 => J.TShort
             case _               => J.TInt
-    case _ => impossible()
+    case TIOResult(ty) => go(ty)
+    case _             => impossible()
 
   private def go(t: Tm)(implicit localrename: LocalRename): J.Tm =
     t match
       case Var(x0, _) =>
         val (x, arg) = localrename.get(x0)
         if arg then J.Arg(x) else J.Var(x)
-      case Global(x, ty) => J.Global(x, go(ty.ty))
+      case Global(x, TDef(Nil, ty)) => J.Global(x, go(ty))
+      case Global(x, _)             => impossible()
 
       case IntLit(v)    => J.IntLit(v)
       case StringLit(v) => J.StringLit(v)
 
+      case Con(Name("IOResult"), _, List(_, r)) => go(r)
       case Con(dx, cx, as) =>
         val info = monomorphizedDatatype(dx)
         info._2 match
           case Boxed   => J.Con(cx, as.map(go))
           case Newtype => go(as.head)
           case Unboxed => J.IntLit(info._3.indexWhere((cx2, _) => cx == cx2))
+
+      case Field(Name("IOResult"), _, p, _, 0) => J.IntLit(0)
+      case Field(Name("IOResult"), _, p, _, 1) => go(p)
       case Field(dx, cx, s, ty, i) =>
         val info = monomorphizedDatatype(dx)
         info._2 match
@@ -130,15 +137,18 @@ object Compile:
           case Newtype => go(s)
           case Unboxed => impossible()
 
-      case Let(x0, t, rt, v, b) =>
+      case Let(x0, TDef(Nil, TWorld), rt, v, b) => go(b)
+      case l @ Let(x0, t, rt, v, b) =>
         val x = localrename.fresh(x0, false)
         J.Let(x, go(t.ty), go(v), go(b))
 
       case app @ App(_, _) =>
         val (f, as) = app.flattenApps
         f match
-          case Global(x, t) => J.GlobalApp(x, go(t), as.map(go))
-          case _            => impossible()
+          case Global(x, t) =>
+            val ps = as.zip(t.ps).filterNot((_, t) => t == TWorld)
+            J.GlobalApp(x, go(t), ps.map(_._1).map(go))
+          case _ => impossible()
 
       case Match(dx, s, bty, c, x0, b, o) =>
         val info = monomorphizedDatatype(dx)
@@ -155,16 +165,20 @@ object Compile:
               case Impossible(_) => J.FinMatch(go(s), ix, go(b), None)
               case _             => J.FinMatch(go(s), ix, go(b), Some(go(o)))
 
-      case Join(x0, ps, rty, v, b) =>
+      case Join(_, _, TWorld, _, b) => go(b)
+      case Join(x0, ps0, rty, v, b) =>
         val x = localrename.fresh(x0, false)
+        val ps = ps0.filterNot((_, t) => t == TWorld)
         J.Join(
           x,
           ps.map((y, t) => (localrename.fresh(y, false), go(t))),
           go(v),
           go(b)
         )
-      case JoinRec(x0, ps, rty, v, b) =>
+      case JoinRec(_, _, TWorld, _, b) => go(b)
+      case JoinRec(x0, ps0, rty, v, b) =>
         val x = localrename.fresh(x0, false)
+        val ps = ps0.filterNot((_, t) => t == TWorld)
         J.JoinRec(
           x,
           ps.map((y, t) => (localrename.fresh(y, false), go(t))),
@@ -173,16 +187,13 @@ object Compile:
         )
       case Jump(x0, ty, args) =>
         val (x, arg) = localrename.get(x0)
-        J.Jump(x, args.map(go))
+        val ps = args.zip(ty.ps).filterNot((_, t) => t == TWorld)
+        J.Jump(x, ps.map(_._1).map(go))
 
-      case ReturnIO(v) => go(v)
-      case BindIO(x0, t1, t2, v, b) =>
-        val x = localrename.fresh(x0, false)
-        J.Let(x, go(t1), go(v), go(b))
-      case RunIO(v) => go(v) // TODO: is this correct?
-
-      case Foreign(ty, code, args) =>
+      case Foreign(false, ty, code, args) =>
         J.Foreign(go(ty), code, args.map((t, ty) => (go(t), go(ty))))
+      case Foreign(true, ty, code, args) =>
+        go(Foreign(false, ty, code, args.tail))
 
       case Lam(ps, bty, b)          => impossible()
       case LetRec(x, ty, bty, v, b) => impossible()

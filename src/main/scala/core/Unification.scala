@@ -247,9 +247,10 @@ class Unification(retryPostponed: RetryPostponed):
       case VCon(x, t, args) => Con(x, go1(t), args.map(a => go0(a)))
       case VMatch(scrut, ty, c, params, b, o) =>
         Match(go0(scrut), go1(ty), c, params.map(p => go1(p)), go0(b), go0(o))
-      case VImpossible(ty)   => Impossible(go1(ty))
-      case VSplice(v)        => splice(go1(v))
-      case VForeign(t, c, a) => Foreign(go1(t), go1(c), a.map(x => go0(x)))
+      case VImpossible(ty) => Impossible(go1(ty))
+      case VSplice(v)      => splice(go1(v))
+      case VForeign(io, t, c, a) =>
+        Foreign(io, go1(t), go1(c), a.map(x => go0(x)))
 
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
@@ -347,7 +348,8 @@ class Unification(retryPostponed: RetryPostponed):
         unify0(b1, b2)
         unify0(o1, o2)
       case (VImpossible(_), VImpossible(_)) => ()
-      case (VForeign(t1, c1, a1), VForeign(t2, c2, a2)) if a1.size == a2.size =>
+      case (VForeign(io1, t1, c1, a1), VForeign(io2, t2, c2, a2))
+          if io1 == io2 && a1.size == a2.size =>
         unify1(t1, t2)
         unify1(c1, c2)
         a1.zip(a2).foreach(unify0)

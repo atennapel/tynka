@@ -45,7 +45,8 @@ TODO:
   - [x] Class types
   - [x] String literals
   - [x] JVM interop calls
-  - [ ] IO monad
+  - [x] IO monad
+  - [ ] Simplify IO setup (World token? Non-inlinable lets?)
   - [ ] Array literals
   - [ ] Non-Int primitive literals
 - [ ] Recursive meta definitions (?)

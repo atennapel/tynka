@@ -30,6 +30,11 @@ object Value:
     inline def wk0: Env = this match
       case E0(env, _) => env
       case _          => impossible()
+
+    inline def tail: Env = this match
+      case E0(env, _) => env
+      case E1(env, _) => env
+      case _          => impossible()
   export Env.*
   object Env:
     def apply(vs: List[Val1]): Env = vs.foldLeft(EEmpty)(E1.apply)
@@ -90,7 +95,7 @@ object Value:
     )
     case VImpossible(ty: VTy)
     case VSplice(tm: Val1)
-    case VForeign(ty: VTy, code: Val1, args: List[Val0])
+    case VForeign(io: Boolean, ty: VTy, code: Val1, args: List[Val0])
   export Val0.*
 
   enum Head:

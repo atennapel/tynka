@@ -238,11 +238,11 @@ object Parser:
       )
 
     private lazy val foreignP: Parsley[Tm] = positioned(
-      ("unsafeJVM" *> projAtom <~> projAtom <~> many(
+      (("unsafeJVM" #> false <|> "unsafeJVMIO" #> true) <~> projAtom <~> projAtom <~> many(
         projAtom
       ))
-        .map { case ((rt, l), as) =>
-          Foreign(rt, l, as)
+        .map { case (((io, rt), l), as) =>
+          Foreign(io, rt, l, as)
         }
     )
 
@@ -315,7 +315,7 @@ object Parser:
             monad match
               case None => body
               case Some(m) =>
-                Let(Name(">>="), false, true, None, Var(m), body)
+                Let(Name(">>="), false, true, None, Var(m, true), body)
           }
       )
     private lazy val doEntry: Parsley[DoEntry] =

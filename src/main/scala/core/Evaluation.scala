@@ -109,8 +109,8 @@ object Evaluation:
         VMatch(eval0(scrut), eval1(t), c, ps.map(eval1), eval0(b), eval0(o))
       case Impossible(ty) => VImpossible(eval1(ty))
       case Splice(t)      => vsplice(eval1(t))
-      case Foreign(ty, code, args) =>
-        VForeign(eval1(ty), eval1(code), args.map(eval0))
+      case Foreign(io, ty, code, args) =>
+        VForeign(io, eval1(ty), eval1(code), args.map(eval0))
       case Wk10(t) => eval0(t)(env.wk1)
       case Wk00(t) => eval0(t)(env.wk0)
 
@@ -193,6 +193,15 @@ object Evaluation:
         case _         => top
     case v => v
 
+  @tailrec
+  def forceStage1(v: Val1): Val1 = v match
+    case top @ VFlex(id, sp) =>
+      getMeta(id) match
+        case Unsolved(_, _) => top
+        case Solved(v, _)   => forceStage1(vspine(v, sp))
+    case VUnfold(_, _, v) => forceStage1(v())
+    case v                => v
+
   // quoting
   enum QuoteOption:
     case UnfoldAll
@@ -222,7 +231,7 @@ object Evaluation:
       case UnfoldAll   => forceAll1(v)
       case UnfoldMetas => forceMetas1(v)
       case UnfoldNone  => force1(v)
-      case UnfoldStage => forceMetas1(v)
+      case UnfoldStage => forceStage1(v)
     force(v) match
       case VRigid(hd, sp) =>
         hd match
@@ -273,9 +282,11 @@ object Evaluation:
         Match(go0(scrut), go1(t), c, ps.map(p => go1(p)), go0(b), go0(o))
       case VImpossible(ty) => Impossible(go1(ty))
       case VSplice(tm)     => splice(go1(tm))
-      case VForeign(ty, code, args) =>
-        Foreign(go1(ty), go1(code), args.map(x => go0(x)))
+      case VForeign(io, ty, code, args) =>
+        Foreign(io, go1(ty), go1(code), args.map(x => go0(x)))
 
   def nf(tm: Tm1, q: QuoteOption = UnfoldAll): Tm1 =
     quote1(eval1(tm)(EEmpty), q)(lvl0)
   def stage(tm: Tm0): Tm0 = quote0(eval0(tm)(EEmpty), UnfoldStage)(lvl0)
+  def stageUnder(tm: Tm0, env: Env): Tm0 =
+    quote0(eval0(tm)(env), UnfoldStage)(mkLvl(env.size))

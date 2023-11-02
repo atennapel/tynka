@@ -33,8 +33,8 @@ object Simplify:
       case StringLit(_)  => t
 
       case Jump(x, t, args) => Jump(x, t, args.map(go))
-      case Foreign(ty, code, args) =>
-        Foreign(ty, code, args.map((t, ty) => (go(t), ty)))
+      case Foreign(io, ty, code, args) =>
+        Foreign(io, ty, code, args.map((t, ty) => (go(t), ty)))
 
       case l @ Let(x, ty, bty, v0, b) =>
         go(v0) match
@@ -53,9 +53,10 @@ object Simplify:
               case (_, _, Impossible(_)) => Impossible(TDef(bty))
               case (_, v, b) =>
                 val count = b.free.count((y, _) => x == y)
-                if count == 0 then b
-                else if count == 1 || isSmall(v) then go(b.subst(x, v))
-                else if isSmall(v0) then go(b.subst(x, v0))
+                if !isIOResult(ty) && count == 0 then b
+                else if !isIOResult(ty) && (count == 1 || isSmall(v)) then
+                  go(b.subst(x, v))
+                else if !isIOResult(ty) && isSmall(v0) then go(b.subst(x, v0))
                 else if tailPos(x, v, b) then
                   v.flattenLams match
                     case (None, v) =>
@@ -267,54 +268,12 @@ object Simplify:
             )
           case v => Field(dx, cx, v, ty, ix)
 
-      /*
-      case ReturnIO(v) =>
-        go(v) match
-          case Impossible(ty)    => Impossible(ty.returnIO)
-          case j @ Jump(_, _, _) => j
-          case Let(x, t, bt, v2, b) =>
-            go(Let(x, t, bt.returnIO, v2, ReturnIO(b)))
-          case LetRec(x, t, bt, v2, b) =>
-            go(LetRec(x, t, bt.returnIO, v2, ReturnIO(b)))
-          case Join(x, ps, rt, v2, b) =>
-            go(Join(x, ps, rt.returnIO, ReturnIO(v2), ReturnIO(b)))
-          case JoinRec(x, ps, rt, v2, b) =>
-            go(JoinRec(x, ps, rt.returnIO, ReturnIO(v2), ReturnIO(b)))
-          case Match(s, t, bt, c, x, b, o) =>
-            go(Match(s, t, bt.returnIO, c, x, ReturnIO(b), ReturnIO(o)))
-          case v => ReturnIO(v)
-      case BindIO(x, t1, t2, v, b) =>
-        go(v) match
-          case BindIO(y, t3, t4, v2, b2) =>
-            go(BindIO(y, t3, t2, v2, BindIO(x, t4, t2, b2, b)))
-          case ReturnIO(v) => go(Let(x, TDef(t1), TDef(t2).returnIO, v, b))
-          case Let(y, t, bt, v2, b2) =>
-            go(Let(y, t, TDef(t2).returnIO, v2, BindIO(x, t1, t2, b2, b)))
-          case LetRec(y, t, bt, v2, b2) =>
-            go(LetRec(y, t, TDef(t2).returnIO, v2, BindIO(x, t1, t2, b2, b)))
-          // TODO: join and match
-          case v => BindIO(x, t1, t2, v, go(b))
-      case RunIO(c) =>
-        go(c) match
-          case Impossible(ty)    => Impossible(TDef(ty.runIO))
-          case j @ Jump(_, _, _) => j
-          case ReturnIO(v)       => v
-          case Let(x, t, bt, v2, b) =>
-            go(Let(x, t, bt.runIO, v2, RunIO(b)))
-          case LetRec(x, t, bt, v2, b) =>
-            go(LetRec(x, t, bt.runIO, v2, RunIO(b)))
-          case Join(x, ps, rt, v2, b) =>
-            go(Join(x, ps, rt.runIO, RunIO(v2), RunIO(b)))
-          case JoinRec(x, ps, rt, v2, b) =>
-            go(JoinRec(x, ps, rt.runIO, RunIO(v2), RunIO(b)))
-          case Match(s, t, bt, c, x, b, o) =>
-            go(Match(s, t, bt.runIO, c, x, RunIO(b), RunIO(o)))
-          case c => RunIO(c)*/
-
-      case t => println(s"add case: $t"); impossible() // TODO: remove
-
   private inline def fresh()(implicit ref: Ref[LName]): LName =
     ref.updateGetOld(_ + 1)
+
+  private def isIOResult(t: TDef): Boolean = t match
+    case TDef(Nil, TIOResult(_)) => true
+    case _                       => false
 
   private def eta(ty: TDef)(implicit
       ref: Ref[LName]
@@ -331,8 +290,6 @@ object Simplify:
     case Global(_, _)   => true
     case Con(_, _, Nil) => true
     case Impossible(_)  => true
-    case ReturnIO(v)    => isSmall(v)
-    case RunIO(v)       => isSmall(v)
     case _              => false
 
   private def arity(t: Tm): Int = t match
@@ -346,19 +303,16 @@ object Simplify:
       t.flatMap(_.free).forall((y, _) => x != y)
     inline def inTail(t: Tm): Boolean = tailPos(x, arity, t)
     b match
-      case Var(y, _)                => x != y || arity == 0
-      case Impossible(_)            => true
-      case IntLit(_)                => true
-      case StringLit(_)             => true
-      case Field(_, _, value, _, _) => notContains(value)
-      case Global(_, _)             => true
-      case Jump(_, _, args)         => notAnyContains(args)
-      case Con(_, _, args)          => notAnyContains(args)
-      case Lam(_, bty, body)        => notContains(body)
-      case Foreign(ty, code, args)  => notAnyContains(args.map(_._1))
-
-      case ReturnIO(v) => inTail(v)
-      case RunIO(c)    => inTail(c)
+      case Var(y, _)                  => x != y || arity == 0
+      case Impossible(_)              => true
+      case IntLit(_)                  => true
+      case StringLit(_)               => true
+      case Field(_, _, value, _, _)   => notContains(value)
+      case Global(_, _)               => true
+      case Jump(_, _, args)           => notAnyContains(args)
+      case Con(_, _, args)            => notAnyContains(args)
+      case Lam(_, bty, body)          => notContains(body)
+      case Foreign(_, ty, code, args) => notAnyContains(args.map(_._1))
 
       case t @ App(_, _) =>
         val (f, args) = t.flattenApps
@@ -373,4 +327,3 @@ object Simplify:
       case JoinRec(_, _, _, v, b) => inTail(v) && inTail(b)
       case Match(_, s, _, _, _, b, o) =>
         notContains(s) && inTail(b) && inTail(o)
-      case BindIO(_, _, _, v, b) => notContains(v) && inTail(b)
