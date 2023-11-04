@@ -1020,6 +1020,38 @@ object Elaboration extends RetryPostponed:
             )
           )
         )
+      case S.Var(rRunIO @ Name("unsafePerformIO"), _) =>
+        // {A : Ty Val} -> ^(IO A) -> ^A
+        // \{A : Ty Val} (io : ^(IO A)) => unsafePerformIO {A} io
+        inline def io(ix: Int) =
+          Lift(Comp, App1(Prim1(Name("IO")), Var1(mkIx(ix)), Expl))
+        val a = Name("A")
+        val xio = Name("io")
+        Infer1(
+          Lam1(
+            DoBind(a),
+            Impl,
+            U0(Val),
+            Lam1(
+              DoBind(xio),
+              Expl,
+              io(0),
+              App1(
+                App1(Prim1(rRunIO), Var1(mkIx(1)), Impl),
+                Var1(mkIx(0)),
+                Expl
+              )
+            )
+          ),
+          ctx.eval1(
+            Pi(
+              DoBind(a),
+              Impl,
+              U0(Val),
+              Pi(DontBind, Expl, io(0), Lift(Val, Var1(mkIx(1))))
+            )
+          )
+        )
       case S.Var(rIO @ Name("bindIO"), _) =>
         val a = Name("A")
         val b = Name("B")

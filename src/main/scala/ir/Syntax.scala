@@ -10,16 +10,14 @@ object Syntax:
     case TPrim(name: Name)
     case TArray(ty: Ty)
     case TClass(name: String)
-    case TWorld
-    case TIOResult(ty: Ty)
+    case TDummy
 
     override def toString: String = this match
-      case TCon(name)    => s"$name"
-      case TPrim(name)   => s"$name"
-      case TArray(ty)    => s"(Array $ty)"
-      case TClass(name)  => s"$name"
-      case TWorld        => s"World"
-      case TIOResult(ty) => s"(IOResult $ty)"
+      case TCon(name)   => s"$name"
+      case TPrim(name)  => s"$name"
+      case TArray(ty)   => s"(Array $ty)"
+      case TClass(name) => s"$name"
+      case TDummy       => s"Dummy"
   export Ty.*
 
   final case class TDef(ps: List[Ty], rt: Ty):
@@ -45,8 +43,21 @@ object Syntax:
     case Global(name: Name, ty: TDef)
     case IntLit(value: Int)
     case StringLit(value: String)
-    case Let(name: LName, ty: TDef, bty: Ty, value: Tm, body: Tm)
-    case LetRec(name: LName, ty: TDef, bty: Ty, value: Tm, body: Tm)
+    case Let(
+        noinline: Boolean,
+        name: LName,
+        ty: TDef,
+        bty: Ty,
+        value: Tm,
+        body: Tm
+    )
+    case LetRec(
+        name: LName,
+        ty: TDef,
+        bty: Ty,
+        value: Tm,
+        body: Tm
+    )
     case Join(
         name: LName,
         ps: List[(LName, Ty)],
@@ -76,14 +87,17 @@ object Syntax:
     )
     case Impossible(ty: TDef)
     case Field(dx: Name, cx: Name, value: Tm, rt: Ty, ix: Int)
-    case Foreign(io: Boolean, ty: Ty, code: String, args: List[(Tm, Ty)])
+    case Foreign(ty: Ty, code: String, args: List[(Tm, Ty)])
+    case DummyValue
 
     override def toString: String = this match
-      case Var(x, _)              => s"'$x"
-      case Global(x, _)           => s"$x"
-      case IntLit(v)              => s"$v"
-      case StringLit(v)           => s"\"$v\""
-      case Let(x, ty, _, v, b)    => s"(let '$x : $ty = $v; $b)"
+      case DummyValue   => "dummy"
+      case Var(x, _)    => s"'$x"
+      case Global(x, _) => s"$x"
+      case IntLit(v)    => s"$v"
+      case StringLit(v) => s"\"$v\""
+      case Let(ni, x, ty, _, v, b) =>
+        s"(let${if ni then " noinline" else ""} '$x : $ty = $v; $b)"
       case LetRec(x, ty, _, v, b) => s"(let rec '$x : $ty = $v; $b)"
       case Join(x, ps, ty, v, b) =>
         val sps = ps match
@@ -108,10 +122,10 @@ object Syntax:
         s"(match $scrut | $c as '$x => $b | _ => $e)"
       case Impossible(_)             => "impossible"
       case Field(_, _, value, _, ix) => s"(#$ix $value)"
-      case Foreign(io, ty, code, Nil) =>
-        s"(unsafeJVM${if io then "IO" else ""} $ty $code)"
-      case Foreign(io, ty, code, args) =>
-        s"(unsafeJVM${if io then "IO" else ""} $ty $code ${args.map(_._1).mkString(" ")})"
+      case Foreign(ty, code, Nil) =>
+        s"(unsafeJVM $ty $code)"
+      case Foreign(ty, code, args) =>
+        s"(unsafeJVM $ty $code ${args.map(_._1).mkString(" ")})"
 
     def apps(args: List[Tm]) = args.foldLeft(this)(App.apply)
 
@@ -134,6 +148,7 @@ object Syntax:
       inline def go(t: Tm) = t.subst(ss)
       this match
         case Var(x, _)                    => ss.get(x).getOrElse(this)
+        case DummyValue                   => this
         case Global(x, _)                 => this
         case Impossible(_)                => this
         case IntLit(_)                    => this
@@ -141,7 +156,7 @@ object Syntax:
         case Field(dx, cx, value, ty, ix) => Field(dx, cx, go(value), ty, ix)
         case App(fn, arg)                 => App(go(fn), go(arg))
         case Con(dx, x, args)             => Con(dx, x, args.map(go(_)))
-        case Let(x, ty, bty, v, b)        => Let(x, ty, bty, go(v), go(b))
+        case Let(ni, x, ty, bty, v, b)    => Let(ni, x, ty, bty, go(v), go(b))
         case LetRec(x, ty, bty, v, b) =>
           LetRec(x, ty, bty, go(v), go(b))
         case Join(x, ps, ty, v, b) => Join(x, ps, ty, go(v), go(b))
@@ -153,11 +168,12 @@ object Syntax:
         case Lam(ps, bty, body) => Lam(ps, bty, go(body))
         case Match(dx, s, bty, c, x, b, o) =>
           Match(dx, go(s), bty, c, x, go(b), go(o))
-        case Foreign(io, ty, code, args) =>
-          Foreign(io, ty, code, args.map((t, ty) => (go(t), ty)))
+        case Foreign(ty, code, args) =>
+          Foreign(ty, code, args.map((t, ty) => (go(t), ty)))
 
     def free: List[(LName, TDef)] = this match
       case Var(x, t)            => List((x, t))
+      case DummyValue           => Nil
       case Global(x, _)         => Nil
       case IntLit(_)            => Nil
       case StringLit(_)         => Nil
@@ -165,10 +181,12 @@ object Syntax:
       case App(f, a)            => f.free ++ a.free
       case Impossible(_)        => Nil
       case Field(_, _, v, _, _) => v.free
-      case Let(x, ty, _, v, b)  => v.free ++ b.free.filterNot((y, _) => x == y)
+      case Let(_, x, ty, _, v, b) =>
+        v.free ++ b.free.filterNot((y, _) => x == y)
       case LetRec(x, ty, _, v, b) =>
         v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
-      case Join(x, ps, ty, v, b) => v.free ++ b.free.filterNot((y, _) => x == y)
+      case Join(x, ps, ty, v, b) =>
+        v.free ++ b.free.filterNot((y, _) => x == y)
       case JoinRec(x, ps, ty, v, b) =>
         v.free.filterNot((y, _) => x == y) ++ b.free.filterNot((y, _) => x == y)
       case Jump(x, t, args) => List((x, t)) ++ args.flatMap(_.free)
@@ -176,5 +194,5 @@ object Syntax:
         b.free.filterNot((y, _) => ps.exists((x, _) => x == y))
       case Match(_, s, _, _, x, b, o) =>
         s.free ++ b.free.filterNot((y, _) => x == y) ++ o.free
-      case Foreign(_, _, _, args) => args.flatMap((t, _) => t.free)
+      case Foreign(_, _, args) => args.flatMap((t, _) => t.free)
   export Tm.*

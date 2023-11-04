@@ -26,6 +26,7 @@ object Simplify:
 
   private def go(t: Tm)(implicit ref: Ref[LName], gendef: GenDef[Tm]): Tm =
     t match
+      case DummyValue    => t
       case Var(_, _)     => t
       case Global(_, _)  => t
       case Impossible(_) => t
@@ -33,19 +34,19 @@ object Simplify:
       case StringLit(_)  => t
 
       case Jump(x, t, args) => Jump(x, t, args.map(go))
-      case Foreign(io, ty, code, args) =>
-        Foreign(io, ty, code, args.map((t, ty) => (go(t), ty)))
+      case Foreign(ty, code, args) =>
+        Foreign(ty, code, args.map((t, ty) => (go(t), ty)))
 
-      case l @ Let(x, ty, bty, v0, b) =>
+      case l @ Let(ni, x, ty, bty, v0, b) =>
         go(v0) match
-          case Let(y, ty2, bty2, v2, b2) =>
-            go(Let(y, ty2, bty, v2, Let(x, ty, bty, b2, b)))
+          case Let(ni2, y, ty2, bty2, v2, b2) =>
+            go(Let(ni2, y, ty2, bty, v2, Let(ni, x, ty, bty, b2, b)))
           case LetRec(y, ty2, bty2, v2, b2) =>
-            go(LetRec(y, ty2, bty, v2, Let(x, ty, bty, b2, b)))
+            go(LetRec(y, ty2, bty, v2, Let(ni, x, ty, bty, b2, b)))
           case Join(y, ps, bty2, v2, b2) =>
-            go(Join(y, ps, bty, v2, Let(x, ty, bty, b2, b)))
+            go(Join(y, ps, bty, v2, Let(ni, x, ty, bty, b2, b)))
           case JoinRec(y, ps, bty2, v2, b2) =>
-            go(JoinRec(y, ps, bty, v2, Let(x, ty, bty, b2, b)))
+            go(JoinRec(y, ps, bty, v2, Let(ni, x, ty, bty, b2, b)))
           case v =>
             (v0, v, go(b)) match
               case (Impossible(_), _, _) => Impossible(TDef(bty))
@@ -53,11 +54,10 @@ object Simplify:
               case (_, _, Impossible(_)) => Impossible(TDef(bty))
               case (_, v, b) =>
                 val count = b.free.count((y, _) => x == y)
-                if !isIOResult(ty) && count == 0 then b
-                else if !isIOResult(ty) && (count == 1 || isSmall(v)) then
-                  go(b.subst(x, v))
-                else if !isIOResult(ty) && isSmall(v0) then go(b.subst(x, v0))
-                else if tailPos(x, v, b) then
+                if !ni && count == 0 then b
+                else if !ni && (count == 1 || isSmall(v)) then go(b.subst(x, v))
+                else if !ni && isSmall(v0) then go(b.subst(x, v0))
+                else if !ni && tailPos(x, v, b) then
                   v.flattenLams match
                     case (None, v) =>
                       val nb = b.subst(x, Jump(x, ty, Nil))
@@ -79,12 +79,12 @@ object Simplify:
                     val r = go(b.subst(x, gl))
                     ((nty, nv), r)
                   }
-                else Let(x, ty, bty, v, b)
+                else Let(ni, x, ty, bty, v, b)
 
       case LetRec(x, ty, bty, v0, b) =>
         go(v0) match
-          case Let(y, ty2, bty2, v2, b2) =>
-            go(Let(y, ty2, bty, v2, LetRec(x, ty, bty, b2, b)))
+          case Let(ni, y, ty2, bty2, v2, b2) =>
+            go(Let(ni, y, ty2, bty, v2, LetRec(x, ty, bty, b2, b)))
           case LetRec(y, ty2, bty2, v2, b2) =>
             go(LetRec(y, ty2, bty, v2, LetRec(x, ty, bty, b2, b)))
           case Join(y, ps, bty2, v2, b2) =>
@@ -167,7 +167,7 @@ object Simplify:
           case l @ Lam(ps, bt, b) =>
             if args.size != ps.size then impossible()
             val lets = ps.zip(args).foldRight(b) { case (((x, t), a), b) =>
-              Let(x, TDef(t), bt, a, b)
+              Let(false, x, TDef(t), bt, a, b)
             }
             go(lets)
           case f => f.apps(args.map(go))
@@ -178,11 +178,11 @@ object Simplify:
         go(s) match
           case Impossible(ty) => Impossible(TDef(bt))
           case s @ Con(_, c2, _) if c == c2 =>
-            go(Let(x, TDef(TCon(dx)), bt, s, b))
+            go(Let(false, x, TDef(TCon(dx)), bt, s, b))
           case Con(_, _, _)      => go(o)
           case j @ Jump(_, _, _) => j
-          case Let(y, t2, bt2, v, b2) =>
-            go(Let(y, t2, bt, v, Match(dx, b2, bt, c, x, b, o)))
+          case Let(ni, y, t2, bt2, v, b2) =>
+            go(Let(ni, y, t2, bt, v, Match(dx, b2, bt, c, x, b, o)))
           case LetRec(y, t2, bt2, v, b2) =>
             go(LetRec(y, t2, bt, v, Match(dx, b2, bt, c, x, b, o)))
           case Join(y, ps, t2, v, b2) =>
@@ -230,8 +230,8 @@ object Simplify:
           case Impossible(_)     => Impossible(TDef(ty))
           case Con(_, _, args)   => args(ix)
           case j @ Jump(_, _, _) => j
-          case Let(x, t, bt, v, b) =>
-            go(Let(x, t, ty, v, Field(dx, cx, b, ty, ix)))
+          case Let(ni, x, t, bt, v, b) =>
+            go(Let(ni, x, t, ty, v, Field(dx, cx, b, ty, ix)))
           case LetRec(x, t, bt, v, b) =>
             go(LetRec(x, t, ty, v, Field(dx, cx, b, ty, ix)))
           case Join(x, ps, rt, v, b) =>
@@ -271,10 +271,6 @@ object Simplify:
   private inline def fresh()(implicit ref: Ref[LName]): LName =
     ref.updateGetOld(_ + 1)
 
-  private def isIOResult(t: TDef): Boolean = t match
-    case TDef(Nil, TIOResult(_)) => true
-    case _                       => false
-
   private def eta(ty: TDef)(implicit
       ref: Ref[LName]
   ): (List[(LName, Ty)], Ty, List[Tm]) =
@@ -303,16 +299,17 @@ object Simplify:
       t.flatMap(_.free).forall((y, _) => x != y)
     inline def inTail(t: Tm): Boolean = tailPos(x, arity, t)
     b match
-      case Var(y, _)                  => x != y || arity == 0
-      case Impossible(_)              => true
-      case IntLit(_)                  => true
-      case StringLit(_)               => true
-      case Field(_, _, value, _, _)   => notContains(value)
-      case Global(_, _)               => true
-      case Jump(_, _, args)           => notAnyContains(args)
-      case Con(_, _, args)            => notAnyContains(args)
-      case Lam(_, bty, body)          => notContains(body)
-      case Foreign(_, ty, code, args) => notAnyContains(args.map(_._1))
+      case Var(y, _)                => x != y || arity == 0
+      case DummyValue               => true
+      case Impossible(_)            => true
+      case IntLit(_)                => true
+      case StringLit(_)             => true
+      case Field(_, _, value, _, _) => notContains(value)
+      case Global(_, _)             => true
+      case Jump(_, _, args)         => notAnyContains(args)
+      case Con(_, _, args)          => notAnyContains(args)
+      case Lam(_, bty, body)        => notContains(body)
+      case Foreign(ty, code, args)  => notAnyContains(args.map(_._1))
 
       case t @ App(_, _) =>
         val (f, args) = t.flattenApps
@@ -321,7 +318,7 @@ object Simplify:
             notAnyContains(args)
           case tm => notAnyContains(tm :: args)
 
-      case Let(_, _, _, v, b)     => notContains(v) && inTail(b)
+      case Let(_, _, _, _, v, b)  => notContains(v) && inTail(b)
       case LetRec(_, _, _, v, b)  => notContains(v) && inTail(b)
       case Join(_, _, _, v, b)    => inTail(v) && inTail(b)
       case JoinRec(_, _, _, v, b) => inTail(v) && inTail(b)

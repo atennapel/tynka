@@ -37,7 +37,7 @@ TODO:
   - [x] Multi-match check against pi type
 - [x] Join points
 - [x] Unboxed and newtypes
-- [ ] JVM interop
+- [x] JVM interop
   - [x] Primitive datatypes
   - [x] Array datatype
   - [x] Int literals
@@ -46,9 +46,10 @@ TODO:
   - [x] String literals
   - [x] JVM interop calls
   - [x] IO monad
-  - [ ] Simplify IO setup (World token? Non-inlinable lets?)
-  - [ ] Array literals
-  - [ ] Non-Int primitive literals
+- [ ] Fix bug with postponed Universe metas
+- [ ] Array literals
+- [ ] Non-Int primitive literals
+- [ ] Boxing
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] Or-patterns

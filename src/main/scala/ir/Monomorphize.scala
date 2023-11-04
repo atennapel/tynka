@@ -71,7 +71,7 @@ object Monomorphize:
         val (eb, tb) = go(b)(ref, (x, tv) :: ctx, nextEnv)
         val (vs, rt, spine) = eta(tb)
         (
-          Let(x, tv, rt, ev.apps(vspine).lams(vvs, vrt), eb.apps(spine))
+          Let(false, x, tv, rt, ev.apps(vspine).lams(vvs, vrt), eb.apps(spine))
             .lams(vs, rt),
           tb
         )
@@ -83,7 +83,13 @@ object Monomorphize:
         val (eb, tb) = go(b)(ref, (x, tv) :: ctx, nextEnv)
         val (vs, rt, spine) = eta(tb)
         (
-          LetRec(x, tv, rt, ev.apps(vspine).lams(vvs, vrt), eb.apps(spine))
+          LetRec(
+            x,
+            tv,
+            rt,
+            ev.apps(vspine).lams(vvs, vrt),
+            eb.apps(spine)
+          )
             .lams(vs, rt),
           tb
         )
@@ -111,26 +117,14 @@ object Monomorphize:
           val (et, ty) = go(t)
           (et, ty.ty)
         }
-        val x = fresh()
+        val inner = Foreign(rt, goLabel(code), eargs)
         if io then
+          val x = fresh()
           (
-            Lam(
-              List((x, TWorld)),
-              TIOResult(rt),
-              Foreign(
-                true,
-                rt,
-                goLabel(code),
-                List((Var(x, TDef(TWorld)), TWorld)) ++ eargs
-              )
-            ),
-            TDef(List(TWorld), TIOResult(rt))
+            Lam(List((x, TDummy)), rt, inner),
+            TDef(List(TDummy), rt)
           )
-        else
-          (
-            Foreign(false, rt, goLabel(code), eargs),
-            TDef(rt)
-          )
+        else (inner, TDef(rt))
 
       case S.Splice(tm) =>
         def flatten(tm: S.Tm1): (String, List[S.Tm1]) = tm match
@@ -144,25 +138,15 @@ object Monomorphize:
             val x = fresh()
             val rt = goTy(t)
             val ev = go1(v)
-            (
-              Lam(
-                List((x, TWorld)),
-                TIOResult(rt),
-                Con(
-                  Name("IOResult"),
-                  Name("MkIOResult"),
-                  List(Var(x, TDef(TWorld)), ev)
-                )
-              ),
-              TDef(TWorld, TIOResult(rt))
-            )
+            (Lam(List((x, TDummy)), rt, ev), TDef(TDummy, rt))
+          case ("unsafePerformIO", List(t, v)) =>
+            (App(go1(v), DummyValue), TDef(goTy(t)))
           case ("bindIO", List(a, b, c, k)) =>
-            // bindIO {a} {b} c k ~> \(w : World) => let r = c w; k r.1 r.0
+            // bindIO {a} {b} c k ~> \(w : Dummy) => let noinline r = c w; k r w
             val x = fresh()
             val t1 = goTy(a)
             val t2 = goTy(b)
             val ec = go1(c)
-            val r = fresh()
             val ek =
               go(
                 S.Lam0(
@@ -174,25 +158,23 @@ object Monomorphize:
                   )
                 )
               )._1
-            val vr = Var(r, TDef(TIOResult(t1)))
-            val tm = Lam(
-              List((x, TWorld)),
-              TIOResult(t2),
-              Let(
-                r,
-                TDef(TIOResult(t1)),
-                TIOResult(t2),
-                App(ec, Var(x, TDef(TWorld))),
-                App(
-                  App(
-                    ek,
-                    Field(Name("IOResult"), Name("MkIOResult"), vr, t1, 1)
-                  ),
-                  Field(Name("IOResult"), Name("MkIOResult"), vr, TWorld, 0)
+            val r = fresh()
+            val vx = Var(x, TDef(TDummy))
+            (
+              Lam(
+                List((x, TDummy)),
+                t2,
+                Let(
+                  true,
+                  r,
+                  TDef(t1),
+                  t2,
+                  App(ec, vx),
+                  App(App(ek, Var(r, TDef(t1))), vx)
                 )
-              )
+              ),
+              TDef(TDummy, t2)
             )
-            (tm, TDef(TWorld, TIOResult(t2)))
           case _ => impossible()
       case S.Prim0(name) => impossible()
 
@@ -221,7 +203,7 @@ object Monomorphize:
   private def goVTDef(t: VTy): TDef = forceAll1(t) match
     case VFun(pty, _, rty) => TDef(goVTy(pty), goVTDef(rty))
     case VRigid(HPrim(Name("IO")), SApp(SId, ty, Expl)) =>
-      TDef(TWorld, TIOResult(goVTy(ty)))
+      TDef(TDummy, goVTy(ty))
     case t => TDef(goVTy(t))
 
   private inline def goTy(t: S.Ty, env: Env = EEmpty): Ty = goVTy(eval1(t)(env))
@@ -244,12 +226,11 @@ object Monomorphize:
       val gps = ps.map(genName).mkString("_")
       Name(s"${dx}_$gps")
   private def genName(t: Ty): Name = t match
-    case TCon(dx)      => dx
-    case TPrim(x)      => x
-    case TArray(ty)    => Name(s"Array$$${genName(ty)}")
-    case TClass(x)     => Name(x.replace(".", "$"))
-    case TWorld        => Name("World")
-    case TIOResult(ty) => Name(s"IOResult$$${genName(ty)}")
+    case TCon(dx)   => dx
+    case TPrim(x)   => x
+    case TArray(ty) => Name(s"Array$$${genName(ty)}")
+    case TClass(x)  => Name(x.replace(".", "$"))
+    case TDummy     => impossible()
 
   private def mono(dx: Name, ps: List[VTy]): Name =
     val mps = ps.map(goVTy)
