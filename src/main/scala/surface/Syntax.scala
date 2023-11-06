@@ -41,7 +41,7 @@ object Syntax:
         pos: PosInfo,
         kind: SDataKind,
         name: Name,
-        ps: List[Name],
+        ps: List[(Icit, Bind, Ty)],
         cs: List[DataCon]
     )
 
@@ -51,9 +51,15 @@ object Syntax:
       case DDef(_, x, rec, m, None, v) =>
         s"def ${if rec then "rec " else ""}$x ${if m then "" else ":"}= $v"
       case DData(_, k, x, ps, Nil) =>
-        s"data($k) $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"}"
+        s"data($k) $x${
+            if ps.isEmpty then ""
+            else s" ${ps.map((i, x, t) => i.wrap(s"$x : $t")).mkString(" ")}"
+          }"
       case DData(_, k, x, ps, cs) =>
-        s"data($k) $x${if ps.isEmpty then "" else s" ${ps.mkString(" ")}"} := ${cs.mkString(" | ")}"
+        s"data($k) $x${
+            if ps.isEmpty then ""
+            else s" ${ps.map((i, x, t) => i.wrap(s"$x : $t")).mkString(" ")}"
+          } := ${cs.mkString(" | ")}"
   export Def.*
 
   enum ArgInfo:
@@ -94,7 +100,6 @@ object Syntax:
     case U1
     case CV
     case Comp
-    case Val
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
@@ -131,7 +136,6 @@ object Syntax:
       case U1                             => "Meta"
       case CV                             => "CV"
       case Comp                           => "Comp"
-      case Val                            => "Val"
       case Pi(DontBind, Expl, ty, b)      => s"($ty -> $b)"
       case Pi(x, i, ty, b)                => s"(${i.wrap(s"$x : $ty")} -> $b)"
       case Lam(x, ArgIcit(Expl), None, b) => s"(\\$x => $b)"

@@ -33,7 +33,6 @@ metals.sbt
 
 *.txt
 *.class
-test.tynka
-test2.tynka
+test*.tynka
 *.jar
 log.java

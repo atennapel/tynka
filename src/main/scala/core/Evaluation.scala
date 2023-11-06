@@ -125,11 +125,10 @@ object Evaluation:
       case Pi(x, i, ty, b)      => VPi(x, i, eval1(ty), Clos(b))
       case Lam1(x, i, ty, b)    => VLam1(x, i, eval1(ty), Clos(b))
       case App1(f, a, i)        => vapp1(eval1(f), eval1(a), i)
-      case TCon(x, ps)          => VTCon(x, ps.map(eval1))
-      case Fun(p, cv, r)        => VFun(eval1(p), eval1(cv), eval1(r))
+      case TCon(x)              => VTCon(x)
+      case Fun(l, p, cv, r)     => VFun(eval1(l), eval1(p), eval1(cv), eval1(r))
       case CV1                  => VCV1
       case Comp                 => VComp
-      case Val                  => VVal
       case LabelLit(v)          => VLabelLit(v)
       case Lift(cv, ty)         => VLift(eval1(cv), eval1(ty))
       case Quote(tm)            => vquote(eval0(tm))
@@ -237,21 +236,20 @@ object Evaluation:
         hd match
           case HVar(lvl) => goSp(Var1(lvl.toIx), sp)
           case HPrim(x)  => goSp(Prim1(x), sp)
+          case HTCon(x)  => goSp(TCon(x), sp)
       case VFlex(id, sp)              => goSp(Meta(id), sp)
       case VUnfold(UMeta(id), sp, _)  => goSp(Meta(id), sp)
       case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
       case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
-      case VTCon(x, ps)               => TCon(x, ps.map(x => go1(x)))
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
-      case VFun(pty, cv, rty)         => Fun(go1(pty), go1(cv), go1(rty))
-      case VCV1                       => CV1
-      case VComp                      => Comp
-      case VVal                       => Val
-      case VLabelLit(v)               => LabelLit(v)
-      case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
-      case VQuote(tm)                 => quote(go0(tm))
+      case VFun(l, pty, cv, rty) => Fun(go1(l), go1(pty), go1(cv), go1(rty))
+      case VCV1                  => CV1
+      case VComp                 => Comp
+      case VLabelLit(v)          => LabelLit(v)
+      case VLift(cv, ty)         => Lift(go1(cv), go1(ty))
+      case VQuote(tm)            => quote(go0(tm))
       case VMetaPi(m, t, b) =>
         MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
       case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))

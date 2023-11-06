@@ -22,7 +22,6 @@ object Parser:
       nestedComments = true,
       keywords = Set(
         "CV",
-        "Val",
         "Comp",
         "def",
         "let",
@@ -126,7 +125,6 @@ object Parser:
         <|> ("Ty" *> projAtom).map(cv => U0(cv))
         <|> ("CV" #> CV)
         <|> ("Comp" #> Comp)
-        <|> ("Val" #> Val)
         <|> ident.map(x => Var(x))
     )
 
@@ -482,9 +480,16 @@ object Parser:
     private lazy val datakindP: Parsley[SDataKind] =
       "(" *> (("boxed" #> SBoxed) <|> ("unboxed" #> SUnboxed) <|> ("newtype" #> SNewtype)) <* ")"
 
+    private lazy val dataDefParamP: Parsley[(Icit, Bind, Ty)] =
+      ("{" *> bind <~> option(":" *> tm) <* "}").map((x, t) =>
+        (Impl, x, t.getOrElse(hole))
+      ) <|>
+        ("(" *> bind <~> ":" *> tm <* ")").map((x, t) => (Expl, x, t))
+        <|> bind.map(x => (Expl, x, hole))
+
     private lazy val dataDefP: Parsley[Def] =
       (pos <~> "data" *> option(datakindP) <~> identOrOp <~> many(
-        identOrOp
+        dataDefParamP
       ) <~> option(
         (":=" <|> "|") *> sepBy(
           pos <~> identOrOp <~> many(

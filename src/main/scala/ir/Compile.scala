@@ -119,7 +119,6 @@ object Compile:
       case IntLit(v)    => J.IntLit(v)
       case StringLit(v) => J.StringLit(v)
 
-      case Con(Name("IOResult"), _, List(_, r)) => go(r)
       case Con(dx, cx, as) =>
         val info = monomorphizedDatatype(dx)
         info._2 match
@@ -127,8 +126,6 @@ object Compile:
           case Newtype => go(as.head)
           case Unboxed => J.IntLit(info._3.indexWhere((cx2, _) => cx == cx2))
 
-      case Field(Name("IOResult"), _, p, _, 0) => J.IntLit(0)
-      case Field(Name("IOResult"), _, p, _, 1) => go(p)
       case Field(dx, cx, s, ty, i) =>
         val info = monomorphizedDatatype(dx)
         info._2 match

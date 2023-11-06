@@ -106,20 +106,24 @@ object Elaboration extends RetryPostponed:
       Infer1(t1, a1)
 
   // coercion lifting helpers
-  private def liftFun(a: VTy, b: VTy, bcv: VCV)(implicit ctx: Ctx): VTy =
+  private def liftFun(lev: VTy, a: VTy, b: VTy, bcv: VCV)(implicit
+      ctx: Ctx
+  ): VTy =
     implicit val l = ctx.lvl + 1
     val qbcv = quote1(bcv, UnfoldNone)
     val qb = quote1(b, UnfoldNone)
-    VPi(DontBind, Expl, VLift(VVal, a), Clos(ctx.env, Lift(qbcv, qb)))
+    VPi(DontBind, Expl, VLift(VVal(lev), a), Clos(ctx.env, Lift(qbcv, qb)))
 
-  private def quoteFun(x: Bind, a: VTy, t: Tm1)(implicit ctx: Ctx): Tm1 =
+  private def quoteFun(x: Bind, lev: VTy, a: VTy, t: Tm1)(implicit
+      ctx: Ctx
+  ): Tm1 =
     val y = x match
       case DontBind  => Name("x")
       case DoBind(x) => x
     Lam1(
       DoBind(y),
       Expl,
-      Lift(Val, ctx.quote1(a)),
+      Lift(Val(ctx.quote1(lev)), ctx.quote1(a)),
       Quote(App0(Wk10(splice(t)), Splice(Var1(ix0))))
     )
 
@@ -173,31 +177,33 @@ object Elaboration extends RetryPostponed:
                 )
               )
 
-        case (VLift(_, VFun(a, cv, b)), VPi(x, _, _, _)) =>
-          Some(coe(quoteFun(x, a, t), liftFun(a, b, cv), a2))
-        case (VLift(_, VFun(a, cv, b)), _) =>
-          Some(coe(quoteFun(DontBind, a, t), liftFun(a, b, cv), a2))
-        case (VPi(x, _, _, _), VLift(_, VFun(t1, cv, t2))) =>
-          Some(spliceFun(x, t1, coe(t, a1, liftFun(t1, t2, cv))))
-        case (_, VLift(_, VFun(t1, cv, t2))) =>
-          Some(spliceFun(DontBind, t1, coe(t, a1, liftFun(t1, t2, cv))))
+        case (VLift(_, VFun(lev, a, cv, b)), VPi(x, _, _, _)) =>
+          Some(coe(quoteFun(x, lev, a, t), liftFun(lev, a, b, cv), a2))
+        case (VLift(_, VFun(lev, a, cv, b)), _) =>
+          Some(coe(quoteFun(DontBind, lev, a, t), liftFun(lev, a, b, cv), a2))
+        case (VPi(x, _, _, _), VLift(_, VFun(lev, t1, cv, t2))) =>
+          Some(spliceFun(x, t1, coe(t, a1, liftFun(lev, t1, t2, cv))))
+        case (_, VLift(_, VFun(lev, t1, cv, t2))) =>
+          Some(spliceFun(DontBind, t1, coe(t, a1, liftFun(lev, t1, t2, cv))))
 
         case (pi @ VPi(x, Expl, a, b), VLift(cv, a2)) =>
           unify1(cv, VComp)
-          val a1 = ctx.eval1(freshMeta(VU0(VVal)))
+          val lev = ctx.eval1(freshMeta(VLevity))
+          val a1 = ctx.eval1(freshMeta(VU0(VVal(lev))))
           val a2cv = freshCV()
           val va2cv = ctx.eval1(a2cv)
           val a2_ = ctx.eval1(freshMeta(VU0(va2cv)))
-          val fun = VFun(a1, va2cv, a2_)
+          val fun = VFun(lev, a1, va2cv, a2_)
           unify1(a2, fun)
           go(t, pi, VLift(VComp, fun))
         case (VLift(cv, a), pi @ VPi(x, Expl, t1, t2)) =>
           unify1(cv, VComp)
-          val a1 = ctx.eval1(freshMeta(VU0(VVal)))
+          val lev = ctx.eval1(freshMeta(VLevity))
+          val a1 = ctx.eval1(freshMeta(VU0(VVal(lev))))
           val a2cv = freshCV()
           val va2cv = ctx.eval1(a2cv)
           val a2 = ctx.eval1(freshMeta(VU0(va2cv)))
-          val fun = VFun(a1, va2cv, a2)
+          val fun = VFun(lev, a1, va2cv, a2)
           unify1(a, fun)
           go(t, VLift(VComp, fun), pi)
 
@@ -209,25 +215,28 @@ object Elaboration extends RetryPostponed:
   private def tyAnnot(ma: Option[S.Tm], ty: VTy)(implicit ctx: Ctx): Ty =
     ma.fold(freshMeta(ty))(a => check1(a, ty))
 
-  private def ensureFun(a: VTy, acv: VCV)(implicit ctx: Ctx): (VTy, VCV, VTy) =
+  private def ensureFun(a: VTy, acv: VCV)(implicit
+      ctx: Ctx
+  ): (VTy, VTy, VCV, VTy) =
     forceAll1(a) match
-      case VFun(a, bcv, b) => (a, bcv, b)
+      case VFun(l, a, bcv, b) => (l, a, bcv, b)
       case _ =>
         unify1(acv, VComp)
-        val a2 = ctx.eval1(freshMeta(VU0(VVal)))
+        val lev = ctx.eval1(freshMeta(VLevity))
+        val a2 = ctx.eval1(freshMeta(VU0(VVal(lev))))
         val vbcv2 = ctx.eval1(freshCV())
         val b2 = ctx.eval1(freshMeta(VU0(vbcv2)))
-        unify1(a, VFun(a2, vbcv2, b2))
-        (a2, vbcv2, b2)
+        unify1(a, VFun(lev, a2, vbcv2, b2))
+        (lev, a2, vbcv2, b2)
 
   private def ensureFunN(n: Int, a: VTy, acv: VCV)(implicit
       ctx: Ctx
-  ): (List[VTy], VCV, VTy) =
+  ): (List[(VTy, VTy)], VCV, VTy) =
     if n == 0 then (Nil, acv, a)
     else
-      val (t1, cv, t2) = ensureFun(a, acv)
+      val (lev, t1, cv, t2) = ensureFun(a, acv)
       val (ps, rcv, rt) = ensureFunN(n - 1, t2, cv)
-      (t1 :: ps, rcv, rt)
+      ((lev, t1) :: ps, rcv, rt)
 
   private def ensureLift(t: VTy)(implicit ctx: Ctx): (VCV, VTy) =
     forceAll1(t) match
@@ -247,9 +256,9 @@ object Elaboration extends RetryPostponed:
         if i != i2 then error(s"icit mismatch in apply1")
         val u2 = check1(u, a)
         Infer1(App1(t, u2, i), b(ctx.eval1(u2)))
-      case VLift(_, VFun(a, bcv, b)) =>
+      case VLift(_, VFun(lev, a, bcv, b)) =>
         if i != Expl then error(s"icit mismatch in apply1")
-        val u2 = check0(u, a, VVal)
+        val u2 = check0(u, a, VVal(lev))
         Infer0(App0(splice(t), u2), b, bcv)
       case _ =>
         val a2 = freshMeta(VU1)
@@ -339,7 +348,7 @@ object Elaboration extends RetryPostponed:
   private final case class Clause(
       pos: PosInfo,
       vars: Map[Lvl, S.Pat],
-      lets: List[(Name, VTy, Lvl)],
+      lets: List[(Name, VTy, VTy, Lvl)],
       guard: Option[S.Tm],
       body: Either[Lvl, S.Tm]
   ):
@@ -348,14 +357,15 @@ object Elaboration extends RetryPostponed:
       val g = guard.map(g => s" if $g").getOrElse("")
       val ls = lets match
         case Nil => ""
-        case _ => s"let ${lets.map((x, _, l) => s"$x = '$l").mkString("; ")}; "
+        case _ =>
+          s"let ${lets.map((x, _, _, l) => s"$x = '$l").mkString("; ")}; "
       val b = body match
         case Left(l)  => s"'$l"
         case Right(t) => s"$t"
       s"($m)$g => $ls$b"
 
-  private final case class VarInfo(ty: VTy, matchedCons: Set[Name]):
-    def matchOn(cx: Name): VarInfo = VarInfo(ty, matchedCons + cx)
+  private final case class VarInfo(lev: VTy, ty: VTy, matchedCons: Set[Name]):
+    def matchOn(cx: Name): VarInfo = VarInfo(lev, ty, matchedCons + cx)
   private enum CaseTree:
     case Test(
         x: Lvl,
@@ -414,12 +424,12 @@ object Elaboration extends RetryPostponed:
       case S.PVar(b @ DoBind(x)) =>
         getGlobal(x) match
           case Some(GlobalCon0(_, _, _)) => S.PCon(x, DontBind, Nil)
-          case Some(GlobalData0(_, _, _, _)) =>
+          case Some(GlobalData0(_, _, _, _, _)) =>
             error(s"datatype in pattern: $x")
           case _ => S.PVar(b)
 
   private def checkMatch(
-      scrut: Either[List[(Tm0, VTy)], List[S.Tm]],
+      scrut: Either[List[(Tm0, VTy, VTy, VCV)], List[S.Tm]],
       pats: List[(PosInfo, List[S.Pat], Option[S.Tm], S.Tm)],
       vrty: VTy,
       vrcv: VTy
@@ -429,12 +439,14 @@ object Elaboration extends RetryPostponed:
       case Left(p) => p
       case Right(ss) =>
         ss.map { scrut =>
-          val vscrutty = ctx.eval1(freshMeta(VU0(VVal)))
-          val escrut = check0(scrut, vscrutty, VVal)
-          (escrut, vscrutty)
+          val lev = ctx.eval1(freshMeta(VLevity))
+          val cv = VVal(lev)
+          val vscrutty = ctx.eval1(freshMeta(VU0(cv)))
+          val escrut = check0(scrut, vscrutty, cv)
+          (escrut, lev, vscrutty, cv)
         }
 
-    escruts.foreach { (_, ty) =>
+    escruts.foreach { (_, _, ty, _) =>
       forceAll1(ty) match
         case VFlex(_, _) =>
           // TODO: postpone check
@@ -444,10 +456,10 @@ object Elaboration extends RetryPostponed:
 
     if escruts.isEmpty then impossible()
     if pats.isEmpty then
-      escruts.foreach { (escrut, vscrutty) =>
+      escruts.foreach { (escrut, _, vscrutty, vcv) =>
         forceAll1(vscrutty) match
-          case VTCon(x, ps) =>
-            val GlobalData0(_, _, _, cs) = getGlobalData0(x)
+          case VTConApp(x, _) =>
+            val GlobalData0(_, _, _, _, cs) = getGlobalData0(x)
             if cs.isEmpty then ()
             else
               error(
@@ -461,13 +473,13 @@ object Elaboration extends RetryPostponed:
     val (nctx, varInfo, lets) =
       escruts.zipWithIndex.foldLeft(
         (ctx, Map.empty[Lvl, VarInfo], List.empty[(Name, Ty, Tm0)])
-      ) { case ((ctx, varInfo, lets), ((escrut, vscrutty), i)) =>
+      ) { case ((ctx, varInfo, lets), ((escrut, lev, vscrutty, vcv), i)) =>
         val x = Name(s"scrut$i")
         val scrutty = ctx.quote1(vscrutty)
         val qescrut = escrut.wk0N(i)
         (
-          ctx.insert0(DoBind(x), scrutty, Val),
-          varInfo + (ctx.lvl -> VarInfo(vscrutty, Set.empty)),
+          ctx.insert0(DoBind(x), scrutty, ctx.quote1(vcv)),
+          varInfo + (ctx.lvl -> VarInfo(lev, vscrutty, Set.empty)),
           lets ++ List((x, scrutty, qescrut))
         )
       }
@@ -476,8 +488,9 @@ object Elaboration extends RetryPostponed:
         if ps.size != escruts.size then
           error(s"pattern amount mismatch")(nctx.enter(pos))
         val norm =
-          escruts.zip(ps).zipWithIndex.map { case (((_, vscrutty), pat), i) =>
-            (ctx.lvl + i, normalizePat(pat)(ctx.enter(pos)))
+          escruts.zip(ps).zipWithIndex.map {
+            case (((_, _, vscrutty, _), pat), i) =>
+              (ctx.lvl + i, normalizePat(pat)(ctx.enter(pos)))
           }
         Clause(
           pos,
@@ -502,16 +515,18 @@ object Elaboration extends RetryPostponed:
   ): Clause =
     c match
       case Clause(pos, vars, lets, guard, tm) =>
-        val nlets = mutable.ArrayBuffer.empty[(Name, VTy, Lvl)]
+        val nlets = mutable.ArrayBuffer.empty[(Name, VTy, VTy, Lvl)]
         val rest = vars.flatMap { (lvl, p) =>
           p match
             case S.PVar(DontBind) => None
             case S.PVar(DoBind(x)) =>
-              nlets += ((x, varInfo(lvl).ty, lvl))
+              val info = varInfo(lvl)
+              nlets += ((x, info.lev, info.ty, lvl))
               None
             case S.PCon(cx, DontBind, args) => Some(lvl -> p)
             case S.PCon(cx, DoBind(x), args) =>
-              nlets += ((x, varInfo(lvl).ty, lvl))
+              val info = varInfo(lvl)
+              nlets += ((x, info.lev, info.ty, lvl))
               Some(lvl -> S.PCon(cx, DontBind, args))
         }
         Clause(
@@ -531,7 +546,7 @@ object Elaboration extends RetryPostponed:
     )
 
   private def checkMatchBody(
-      lets: List[(Name, VTy, Lvl)],
+      lets: List[(Name, VTy, VTy, Lvl)],
       body: Either[Lvl, S.Tm],
       vrty: VTy,
       vrcv: VCV
@@ -540,26 +555,30 @@ object Elaboration extends RetryPostponed:
   ): Tm0 =
     debug(
       s"checkMatchBody ${lets
-          .map((x, t, l) => s"($x : ${ctx.pretty1(t)} = $l)")
+          .map((x, _, t, l) => s"($x : ${ctx.pretty1(t)} = $l)")
           .mkString(" ")} $body : ${ctx.pretty1(vrty)}"
     )
-    val (innerctx, ts) = lets.foldLeft((ctx, List.empty[Ty])) {
-      case ((ctx, ts), (x, vty, lvl)) =>
-        val vlty = VLift(VVal, vty)
+    val (innerctx, ts) = lets.foldLeft((ctx, List.empty[(Ty, Ty)])) {
+      case ((ctx, ts), (x, lev, vty, lvl)) =>
+        val vlty = VLift(VVal(lev), vty)
         val ty = ctx.quote1(vty)
+        val qlev = ctx.quote1(lev)
         val v = vquote(VVar0(lvl))
-        (ctx.define(x, ctx.quote1(vlty), vlty, ctx.quote1(v), v), ty :: ts)
+        (
+          ctx.define(x, ctx.quote1(vlty), vlty, ctx.quote1(v), v),
+          (qlev, ty) :: ts
+        )
     }
     val ebody = body match
       case Left(lvl)   => innerctx.quote0(VVar0(lvl))
       case Right(body) => check0(body, vrty, vrcv)(innerctx)
     splice(lets.zip(ts.reverse).zipWithIndex.foldRight(quote(ebody)) {
-      case ((((x, _, lvl), ty), i), b) =>
-        Let1(x, Lift(Val, ty), Quote(Var0(lvl.toIx(ctx.lvl + i))), b)
+      case ((((x, _, _, lvl), (lev, ty)), i), b) =>
+        Let1(x, Lift(Val(lev), ty), Quote(Var0(lvl.toIx(ctx.lvl + i))), b)
     })
 
-  private val tbool = TCon(Name("Bool"), Nil)
-  private val vbool = VTCon(Name("Bool"), Nil)
+  private val tbool = TCon(Name("Bool"))
+  private val vbool = VTCon(Name("Bool"))
 
   private def genMatch(
       clauses0: List[Clause],
@@ -578,7 +597,12 @@ object Elaboration extends RetryPostponed:
         case _ if clauses.tail.isEmpty =>
           error("non-exhaustive pattern match")(nctx)
         case Some(g) =>
-          val cond = checkMatchBody(lets, Right(g), vbool, VVal)(nctx)
+          val cond = checkMatchBody(
+            lets,
+            Right(g),
+            vbool,
+            VVal(VPrim1(Name("BoolRep")))
+          )(nctx)
           val ifTrue = checkMatchBody(lets, body, vrty, vrcv)(nctx)
           val ifFalse = genMatch(clauses.tail, vrty, vrcv)
           return Guard(cond, ifTrue, ifFalse)
@@ -586,8 +610,8 @@ object Elaboration extends RetryPostponed:
     val info = varInfo(branchVar)
     val dty = info.ty
     forceAll1(dty) match
-      case VTCon(dx, dpas) =>
-        val GlobalData0(_, _, dps, csl) = getGlobalData0(dx)
+      case VTConApp(dx, dpas) =>
+        val GlobalData0(_, _, dps, _, csl) = getGlobalData0(dx)
         val cons = csl.toSet
         val S.PCon(cx, _, args) = pats(branchVar): @unchecked
         if info.matchedCons.contains(cx) then
@@ -596,7 +620,11 @@ object Elaboration extends RetryPostponed:
           error(s"pattern $cx does not match type ${ctx.pretty1(dty)}")
         val GlobalCon0(_, _, dts) = getGlobalCon0(cx)
         if dts.size != args.size then error(s"pattern $cx arity mismatch")
-        val ts = dts.map((_, t) => eval1(t)(Env(dpas)))
+        val ts = dts.map { (_, lev, t) =>
+          val qlev = eval1(lev)(Env(dpas.map(_._1)))
+          val ty = eval1(t)(Env(dpas.map(_._1)))
+          (qlev, ty)
+        }
         val nargs = args.map(normalizePat)
         val yes = mutable.ArrayBuffer.empty[Either[(Clause, List[Pat]), Clause]]
         val no = mutable.ArrayBuffer.empty[Clause]
@@ -632,8 +660,8 @@ object Elaboration extends RetryPostponed:
 
         val vars = (0 until args.size).map(i => nextctx.lvl + i).toList
         val newVarInfo =
-          vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, ty)) =>
-            vars + (lvl -> VarInfo(ty, Set.empty))
+          vars.zip(ts).foldLeft(varInfo) { case (vars, (lvl, (lev, ty))) =>
+            vars + (lvl -> VarInfo(lev, ty, Set.empty))
           }
         val yes2 = yes.map {
           case Right(c) => c
@@ -653,12 +681,13 @@ object Elaboration extends RetryPostponed:
             .zip(ts)
             .zipWithIndex
             .foldLeft((nextctx, List.empty[(Bind, Ty)])) {
-              case ((ctx, lams), ((p, ty), i)) =>
+              case ((ctx, lams), ((p, (lev, ty)), i)) =>
                 val x = p match
                   case S.PVar(b @ DoBind(x)) => b
                   case _                     => DoBind(Name(s"x$i"))
                 val qty = ctx.quote1(ty)
-                (ctx.insert0(x, qty, Val), lams ++ List((x, qty)))
+                val qlev = ctx.quote1(lev)
+                (ctx.insert0(x, qty, Val(qlev)), lams ++ List((x, qty)))
             }
         val yesResult =
           if yes.isEmpty then impossible()
@@ -677,7 +706,16 @@ object Elaboration extends RetryPostponed:
               nextctx,
               varInfo + (branchVar -> info.matchOn(cx))
             )
-        Test(branchVar, dty, cx, joins.toList, lams, ts, yesResult, noResult)
+        Test(
+          branchVar,
+          dty,
+          cx,
+          joins.toList,
+          lams,
+          ts.map(_._2),
+          yesResult,
+          noResult
+        )
       case _ => error(s"expected a datatype but got ${ctx.pretty1(dty)}")
 
   // checking
@@ -689,10 +727,15 @@ object Elaboration extends RetryPostponed:
 
       case S.Lam(x, i, ma, b) =>
         if i != S.ArgIcit(Expl) then error(s"implicit lambda in Ty")
-        val (t1, fcv, t2) = ensureFun(ty, cv)
-        ma.foreach { sty => unify1(ctx.eval1(check1(sty, VU0(VVal))), t1) }
+        val (lev, t1, fcv, t2) = ensureFun(ty, cv)
+        val qlev = ctx.quote1(lev)
+        ma.foreach { sty => unify1(ctx.eval1(check1(sty, VU0(VVal(lev)))), t1) }
         val qt1 = ctx.quote1(t1)
-        Lam0(x, qt1, check0(b, t2, fcv)(ctx.bind0(x, qt1, t1, Val, VVal)))
+        Lam0(
+          x,
+          qt1,
+          check0(b, t2, fcv)(ctx.bind0(x, qt1, t1, Val(qlev), VVal(lev)))
+        )
 
       case S.Let(x, rec, false, ma, v, b) =>
         val (ety, cv2, vcv2) =
@@ -717,12 +760,13 @@ object Elaboration extends RetryPostponed:
         val scruts =
           (0 until size).reverse
             .zip(ts)
-            .map((i, t) => (Var0(mkIx(i)), t))
+            .map { case (i, (lev, t)) => (Var0(mkIx(i)), lev, t, VVal(lev)) }
             .toList
         val (innerctx, qts) = xs.zip(ts).foldLeft((ctx, List.empty[Ty])) {
-          case ((ctx, qts), (x, t)) =>
+          case ((ctx, qts), (x, (lev, t))) =>
+            val qlev = ctx.quote1(lev)
             val qt = ctx.quote1(t)
-            (ctx.insert0(x, qt, Val), qts ++ List(qt))
+            (ctx.insert0(x, qt, Val(qlev)), qts ++ List(qt))
         }
         val etm = checkMatch(Left(scruts), ps, rt, rcv)(innerctx)
         xs.zip(qts).foldRight(etm) { case ((x, t), b) => Lam0(x, t, b) }
@@ -734,7 +778,7 @@ object Elaboration extends RetryPostponed:
       case S.Splice(t) => splice(check1(t, VLift(cv, ty)))
 
       case S.StringLit(v) =>
-        unify1(cv, VVal)
+        unify1(cv, VVal(VPrim1(Name("Boxed"))))
         unify1(
           ty,
           VRigid(
@@ -778,18 +822,18 @@ object Elaboration extends RetryPostponed:
   ): Either[MetaId, Tm1] =
     debug(s"checkLambdaMatch1 $scrutCount : ${ctx.pretty1(ty)}")
     @tailrec
-    def go(i: Int, ty: VTy, args: List[(Bind, VTy, Ty)])(implicit
+    def go(i: Int, ty: VTy, args: List[(Bind, VTy, VTy, Ty)])(implicit
         ctx: Ctx
     ): Either[MetaId, Tm1] =
       if i == 0 then
         val ixs = 0 until scrutCount
-        val scruts = args.zip(ixs.reverse).map { case ((_, vt, _), i) =>
-          (Splice(Var1(mkIx(i))), vt)
+        val scruts = args.zip(ixs.reverse).map { case ((_, vt, lev, _), i) =>
+          (Splice(Var1(mkIx(i))), lev, vt, VVal(lev))
         }
         val (vrcv, vrty) = ensureLift(ty)
         val ematch = checkMatch(Left(scruts), ps, vrty, vrcv)
         val lams = args.zip(ixs).foldRight(quote(ematch)) {
-          case (((x, _, qt), i), b) => Lam1(x, Expl, qt, b)
+          case (((x, _, _, qt), i), b) => Lam1(x, Expl, qt, b)
         }
         Right(lams)
       else
@@ -804,8 +848,13 @@ object Elaboration extends RetryPostponed:
                   case DontBind => DoBind(Name(s"x${scrutCount - i}"))
                   case x        => x
                 val nctx = ctx.insert1(y, qt1)
-                unify1(vscrutcv, VVal)
-                go(i - 1, t2(VVar1(ctx.lvl)), args ++ List((y, vscrutty, qt1)))(
+                val lev = ctx.eval1(freshMeta(VLevity))
+                unify1(vscrutcv, VVal(lev))
+                go(
+                  i - 1,
+                  t2(VVar1(ctx.lvl)),
+                  args ++ List((y, vscrutty, lev, qt1))
+                )(
                   nctx
                 )
           case VFlex(m, _) => Left(m)
@@ -856,11 +905,13 @@ object Elaboration extends RetryPostponed:
 
       case (S.Pi(DontBind, Expl, t1, t2), VU0(cv)) =>
         unify1(cv, VComp)
-        val et1 = check1(t1, VU0(VVal))
+        val lev = freshMeta(VLevity)
+        val vlev = ctx.eval1(lev)
+        val et1 = check1(t1, VU0(VVal(vlev)))
         val fcv = freshCV()
         val vfcv = ctx.eval1(fcv)
         val et2 = check1(t2, VU0(vfcv))
-        Fun(et1, fcv, et2)
+        Fun(lev, et1, fcv, et2)
       case (S.Pi(x, i, t1, t2), VU1) =>
         val et1 = check1(t1, VU1)
         val et2 = check1(t2, VU1)(ctx.bind1(x, et1, ctx.eval1(et1)))
@@ -909,7 +960,7 @@ object Elaboration extends RetryPostponed:
             HPrim(Name("Class")),
             SApp(SId, VLabelLit("java.lang.String"), Expl)
           ),
-          VVal
+          VVal(VPrim1(Name("Boxed")))
         )
 
       case S.Lam(x, i, mty, b) =>
@@ -917,14 +968,17 @@ object Elaboration extends RetryPostponed:
           case S.ArgNamed(_)   => error(s"implicit lambda in Ty")
           case S.ArgIcit(Impl) => error(s"implicit lambda in Ty")
           case S.ArgIcit(Expl) =>
-            val ety = tyAnnot(mty, VU0(VVal))
+            val alev = freshMeta(VLevity)
+            val acv = Val(alev)
+            val avcv = ctx.eval1(acv)
+            val ety = tyAnnot(mty, VU0(avcv))
             val cv = freshCV()
             val vcv = ctx.eval1(cv)
             val rt = freshMeta(VU0(vcv))
             val vrt = ctx.eval1(rt)
             val vty = ctx.eval1(ety)
-            val eb = check0(b, vrt, vcv)(ctx.bind0(x, ety, vty, Val, VVal))
-            (Lam0(x, ety, eb), VFun(vty, vcv, vrt), VComp)
+            val eb = check0(b, vrt, vcv)(ctx.bind0(x, ety, vty, acv, avcv))
+            (Lam0(x, ety, eb), VFun(ctx.eval1(alev), vty, vcv, vrt), VComp)
 
       case tm =>
         insert(infer(tm)) match
@@ -965,154 +1019,164 @@ object Elaboration extends RetryPostponed:
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
 
-      case S.IntLit(v)    => Infer0(IntLit(v), VPrim1(Name("Int")), VVal)
+      case S.IntLit(v) =>
+        Infer0(
+          IntLit(v),
+          VPrim1(Name("Int")),
+          VVal(VUnboxed(VPrim1(Name("IntRep"))))
+        )
       case S.StringLit(v) => Infer1(LabelLit(v), VPrim1(Name("Label")))
 
       case S.Var(x @ Name("Label"), _) => Infer1(Prim1(x), VU1)
       case S.Var(x @ Name("Class"), _) =>
-        val label = Name("Label")
+        // Label -> Ty (Val Boxed)
         Infer1(
-          Lam1(
-            DoBind(Name("A")),
-            Expl,
-            Prim1(label),
-            App1(Prim1(x), Var1(ix0), Expl)
-          ),
-          VPi(DontBind, Expl, VPrim1(label), Clos(EEmpty, U0(Val)))
+          Prim1(x),
+          ctx.eval1(
+            Pi(
+              DontBind,
+              Expl,
+              Prim1(Name("Label")),
+              U0(Val(Prim1(Name("Boxed"))))
+            )
+          )
         )
 
       case S.Var(x @ Name("IO"), _) =>
+        // {l : Levity} -> Ty (Val l) -> Ty Comp
         Infer1(
-          Lam1(
-            DoBind(Name("A")),
-            Expl,
-            U0(Val),
-            App1(Prim1(x), Var1(ix0), Expl)
-          ),
-          VPi(DontBind, Expl, VU0(VVal), Clos(EEmpty, U0(Comp)))
-        )
-      case S.Var(rIO @ Name("returnIO"), _) =>
-        val a = Name("A")
-        val x = Name("x")
-        Infer1(
-          Lam1(
-            DoBind(a),
-            Impl,
-            U0(Val),
-            Lam1(
-              DoBind(x),
-              Expl,
-              Lift(Val, Var1(ix0)),
-              App1(App1(Prim1(rIO), Var1(mkIx(1)), Impl), Var1(ix0), Expl)
-            )
-          ),
+          Prim1(x),
           ctx.eval1(
             Pi(
-              DoBind(a),
+              DoBind(Name("l")),
               Impl,
-              U0(Val),
+              Prim1(Name("Levity")),
               Pi(
                 DontBind,
                 Expl,
-                Lift(Val, Var1(ix0)),
-                Lift(Comp, App1(Prim1(Name("IO")), Var1(mkIx(1)), Expl))
+                U0(Val(Var1(mkIx(0)))),
+                U0(Comp)
+              )
+            )
+          )
+        )
+      case S.Var(rIO @ Name("returnIO"), _) =>
+        // {l : Levity} {A : Ty (Val l)} -> ^A -> ^(IO {l} A)
+        Infer1(
+          Prim1(rIO),
+          ctx.eval1(
+            Pi(
+              DoBind(Name("l")),
+              Impl,
+              Prim1(Name("Levity")),
+              Pi(
+                DoBind(Name("A")),
+                Impl,
+                U0(Val(Var1(mkIx(0)))),
+                Pi(
+                  DontBind,
+                  Expl,
+                  Lift(
+                    Val(Var1(mkIx(1))),
+                    Var1(ix0)
+                  ),
+                  Lift(
+                    Comp,
+                    App1(
+                      App1(Prim1(Name("IO")), Var1(mkIx(2)), Impl),
+                      Var1(mkIx(1)),
+                      Expl
+                    )
+                  )
+                )
               )
             )
           )
         )
       case S.Var(rRunIO @ Name("unsafePerformIO"), _) =>
-        // {A : Ty Val} -> ^(IO A) -> ^A
-        // \{A : Ty Val} (io : ^(IO A)) => unsafePerformIO {A} io
-        inline def io(ix: Int) =
-          Lift(Comp, App1(Prim1(Name("IO")), Var1(mkIx(ix)), Expl))
-        val a = Name("A")
-        val xio = Name("io")
-        Infer1(
-          Lam1(
-            DoBind(a),
-            Impl,
-            U0(Val),
-            Lam1(
-              DoBind(xio),
-              Expl,
-              io(0),
-              App1(
-                App1(Prim1(rRunIO), Var1(mkIx(1)), Impl),
-                Var1(mkIx(0)),
-                Expl
-              )
-            )
-          ),
-          ctx.eval1(
-            Pi(
-              DoBind(a),
-              Impl,
-              U0(Val),
-              Pi(DontBind, Expl, io(0), Lift(Val, Var1(mkIx(1))))
+        // {l : Levity} {A : Ty (Val l)} -> ^(IO {l} A) -> ^A
+        inline def io(ixl: Int, ix: Int) =
+          Lift(
+            Comp,
+            App1(
+              App1(Prim1(Name("IO")), Var1(mkIx(ixl)), Impl),
+              Var1(mkIx(ix)),
+              Expl
             )
           )
-        )
-      case S.Var(rIO @ Name("bindIO"), _) =>
-        val a = Name("A")
-        val b = Name("B")
-        val c = Name("c")
-        val k = Name("k")
-        // {A : Ty Val} {B : Ty Val} -> ^(IO A) -> (^A -> ^(IO B)) -> ^(IO B)
-        // \{A} {B} c k => bindIO {A} {B} c k
-        inline def io(ix: Int) =
-          Lift(Comp, App1(Prim1(Name("IO")), Var1(mkIx(ix)), Expl))
         Infer1(
-          Lam1(
-            DoBind(a),
-            Impl,
-            U0(Val),
-            Lam1(
-              DoBind(b),
+          Prim1(rRunIO),
+          ctx.eval1(
+            Pi(
+              DoBind(Name("l")),
               Impl,
-              U0(Val),
-              Lam1(
-                DoBind(c),
-                Expl,
-                io(1),
-                Lam1(
-                  DoBind(k),
+              Prim1(Name("Levity")),
+              Pi(
+                DoBind(Name("A")),
+                Impl,
+                U0(Val(Var1(mkIx(0)))),
+                Pi(
+                  DontBind,
                   Expl,
-                  Pi(DontBind, Expl, Lift(Val, Var1(mkIx(2))), io(2)),
-                  App1(
-                    App1(
-                      App1(
-                        App1(Prim1(rIO), Var1(mkIx(3)), Impl),
-                        Var1(mkIx(2)),
-                        Impl
-                      ),
-                      Var1(mkIx(1)),
-                      Expl
-                    ),
-                    Var1(mkIx(0)),
-                    Expl
+                  io(1, 0),
+                  Lift(
+                    Val(Var1(mkIx(2))),
+                    Var1(mkIx(1))
                   )
                 )
               )
             )
-          ),
+          )
+        )
+      case S.Var(rIO @ Name("bindIO"), _) =>
+        // {l1 l2 : Levity} {A : Ty (Val l1)} {B : Ty (Val l2)} -> ^(IO {l1} A) -> (^A -> ^(IO {l2} B)) -> ^(IO {l2} B)
+        inline def io(lix: Int, ix: Int) =
+          Lift(
+            Comp,
+            App1(
+              App1(Prim1(Name("IO")), Var1(mkIx(lix)), Impl),
+              Var1(mkIx(ix)),
+              Expl
+            )
+          )
+        Infer1(
+          Prim1(rIO),
           ctx.eval1(
             Pi(
-              DoBind(a),
+              DoBind(Name("l1")),
               Impl,
-              U0(Val),
+              Prim1(Name("Levity")),
               Pi(
-                DoBind(b),
+                DoBind(Name("l2")),
                 Impl,
-                U0(Val),
+                Prim1(Name("Levity")),
                 Pi(
-                  DontBind,
-                  Expl,
-                  io(1),
+                  DoBind(Name("A")),
+                  Impl,
+                  U0(Val(Var1(mkIx(1)))),
                   Pi(
-                    DontBind,
-                    Expl,
-                    Pi(DontBind, Expl, Lift(Val, Var1(mkIx(2))), io(2)),
-                    io(2)
+                    DoBind(Name("B")),
+                    Impl,
+                    U0(Val(Var1(mkIx(1)))),
+                    Pi(
+                      DontBind,
+                      Expl,
+                      io(3, 1),
+                      Pi(
+                        DontBind,
+                        Expl,
+                        Pi(
+                          DontBind,
+                          Expl,
+                          Lift(
+                            Val(Var1(mkIx(4))),
+                            Var1(mkIx(2))
+                          ),
+                          io(4, 2)
+                        ),
+                        io(4, 2)
+                      )
+                    )
                   )
                 )
               )
@@ -1120,22 +1184,77 @@ object Elaboration extends RetryPostponed:
           )
         )
 
-      case S.Var(x @ Name("Byte"), _)   => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Short"), _)  => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Int"), _)    => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Long"), _)   => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Float"), _)  => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Double"), _) => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Char"), _)   => Infer1(Prim1(x), VU0(VVal))
-      case S.Var(x @ Name("Array"), _) =>
+      case S.Var(x @ Name("Rep"), _) => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("ByteRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("ShortRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("IntRep"), _) => Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("LongRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("FloatRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("DoubleRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("CharRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+
+      case S.Var(x @ Name("Levity"), _) => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("Boxed"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Levity")))
+      case S.Var(x @ Name("Unboxed"), _) =>
         Infer1(
-          Lam1(
-            DoBind(Name("A")),
+          Prim1(x),
+          VPi(
+            DontBind,
             Expl,
-            U0(Val),
-            App1(Prim1(x), Var1(ix0), Expl)
-          ),
-          VPi(DontBind, Expl, VU0(VVal), Clos(EEmpty, U0(Val)))
+            VPrim1(Name("Rep")),
+            Clos(EEmpty, Prim1(Name("Levity")))
+          )
+        )
+
+      case S.Var(x @ Name("Val"), _) =>
+        Infer1(
+          Prim1(x),
+          VPi(
+            DontBind,
+            Expl,
+            VPrim1(Name("Levity")),
+            Clos(EEmpty, CV1)
+          )
+        )
+
+      case S.Var(x @ Name("Byte"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("ByteRep"))))))
+      case S.Var(x @ Name("Short"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("ShortRep"))))))
+      case S.Var(x @ Name("Int"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("IntRep"))))))
+      case S.Var(x @ Name("Long"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("LongRep"))))))
+      case S.Var(x @ Name("Float"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("FloatRep"))))))
+      case S.Var(x @ Name("Double"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("DoubleRep"))))))
+      case S.Var(x @ Name("Char"), _) =>
+        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("CharRep"))))))
+      case S.Var(x @ Name("Array"), _) =>
+        // {l : Levity} -> Ty (Val l) -> Ty (Val Boxed)
+        Infer1(
+          Prim1(x),
+          ctx.eval1(
+            Pi(
+              DoBind(Name("l")),
+              Impl,
+              Prim1(Name("Levity")),
+              Pi(
+                DontBind,
+                Expl,
+                U0(Val(Var1(mkIx(0)))),
+                U0(Val(Prim1(Name("Boxed"))))
+              )
+            )
+          )
         )
 
       case S.Var(x, _) =>
@@ -1150,37 +1269,43 @@ object Elaboration extends RetryPostponed:
                 Infer0(Global0(x), ty, cv)
               case Some(GlobalEntry1(_, _, _, _, ty)) =>
                 Infer1(Global1(x), ty)
-              case Some(GlobalData0(_, _, ps, _)) =>
-                val vty = U0(Val)
-                val lam =
-                  ps.foldRight(
-                    TCon(
-                      x,
-                      (0 until ps.size).reverse.map(i => Var1(mkIx(i))).toList
-                    )
-                  )((x, b) => Lam1(DoBind(x), Expl, vty, b))
-                val ty = ps.foldRight(vty)((_, b) => Pi(DontBind, Expl, vty, b))
-                Infer1(lam, ctx.eval1(ty))
+              case Some(GlobalData0(_, _, ps, lev, _)) =>
+                val ty = ps.zipWithIndex.foldRight(
+                  U0(Val(lev.wk1N(ps.size)))
+                ) { case (((icit, x, ty), i), b) =>
+                  Pi(x, icit, ty, b)
+                }
+                val vty = ctx.eval1(ctx.quote1(eval1(ty)(EEmpty)))
+                Infer1(TCon(x), vty)
               case Some(GlobalCon0(_, dx, cps)) =>
-                val GlobalData0(_, _, ps, _) = getGlobalData0(dx)
-                val metas = ps.map(_ => freshMeta(VU0(VVal)))
+                val GlobalData0(_, _, ps, lev, _) = getGlobalData0(dx)
+                val (dargsrev, env) = ps
+                  .foldLeft((List.empty[(Ty, Icit)], EEmpty)) {
+                    case ((args, env), (i, x, t)) =>
+                      val vty = eval1(t)(env)
+                      val m = freshMeta(vty)
+                      val vm = ctx.eval1(m)
+                      ((m, i) :: args, E1(env, vm))
+                  }
+                val dargs = dargsrev.reverse
                 val ts = cps
                   .foldLeft((ctx, List.empty[(Bind, Ty)])) {
-                    case ((innerctx, res), (x, t)) =>
-                      val qt =
-                        innerctx.quote1(
-                          eval1(t)(Env(metas.map(ctx.eval1)))
-                        )
-                      val lty = Lift(Val, qt)
+                    case ((innerctx, res), (x, lev, t)) =>
+                      val qt = innerctx.quote1(eval1(t)(env))
+                      val qlev = innerctx.quote1(eval1(lev)(env))
+                      val lty = Lift(Val(qlev), qt)
                       (innerctx.insert1(x, lty), (x, lty) :: res)
                   }
                   ._2
                   .reverse
-                val tycon = TCon(dx, metas).wk1N(ts.size)
+                val tycon = dargs
+                  .foldLeft(TCon(dx)) { case (f, (a, i)) => App1(f, a, i) }
+                  .wk1N(ts.size)
                 val ty =
-                  ts.foldRight(Lift(Val, tycon)) { case ((x, t), b) =>
+                  ts.foldRight(Lift(Val(lev), tycon)) { case ((x, t), b) =>
                     Pi(x, Expl, t, b)
                   }
+                println(ty)
                 val vty = ctx.eval1(ty)
                 val lam = ts.zipWithIndex.foldRight(
                   Quote(
@@ -1232,11 +1357,13 @@ object Elaboration extends RetryPostponed:
         val (ea, vta) = insert(infer1(a))
         forceAll1(vta) match
           case VU0(cv) =>
-            unify1(cv, VVal)
+            val lev = freshMeta(VLevity)
+            val vlev = ctx.eval1(lev)
+            unify1(cv, VVal(vlev))
             val bcv = freshCV()
             val vbcv = ctx.eval1(bcv)
             val eb = check1(b, VU0(vbcv))
-            Infer1(Fun(ea, bcv, eb), VU0(VComp))
+            Infer1(Fun(lev, ea, bcv, eb), VU0(VComp))
           case VU1 =>
             val eb = check1(b, VU1)(ctx.bind1(DontBind, ea, ctx.eval1(ea)))
             Infer1(Pi(DontBind, Expl, ea, eb), VU1)
@@ -1272,8 +1399,8 @@ object Elaboration extends RetryPostponed:
           case S.ArgIcit(Expl) =>
             insertPi(infer(f)) match
               case Infer0(ef, fty, fcv) =>
-                val (t1, rcv, t2) = ensureFun(fty, fcv)
-                val ea = check0(a, t1, VVal)
+                val (lev, t1, rcv, t2) = ensureFun(fty, fcv)
+                val ea = check0(a, t1, VVal(lev))
                 Infer0(App0(ef, ea), t2, rcv)
               case Infer1(ef, fty) => apply1(fty, Expl, ef, a)
 
@@ -1299,7 +1426,6 @@ object Elaboration extends RetryPostponed:
       case S.U1     => Infer1(U1, VU1)
       case S.CV     => Infer1(CV1, VU1)
       case S.Comp   => Infer1(Comp, VCV1)
-      case S.Val    => Infer1(Val, VCV1)
 
       case S.Hole(_) => error("cannot infer hole")
 
@@ -1321,42 +1447,70 @@ object Elaboration extends RetryPostponed:
         Infer0(etm, ty, cv)
 
       case S.Foreign(io, ty, code, args) =>
-        val ety = check1(ty, VU0(VVal))
+        inline def freshVVal()(implicit ctx: Ctx): Val1 =
+          ctx.eval1(Val(freshMeta(VPrim1(Name("Levity")))))
+        val vcv = freshVVal()
+        val ety = check1(ty, VU0(vcv))
         val ecode = check1(code, VPrim1(Name("Label")))
         val eargs = args.map { t =>
-          check0(t, ctx.eval1(freshMeta(VU0(VVal))), VVal)
+          val cv = freshVVal()
+          check0(t, ctx.eval1(freshMeta(VU0(cv))), cv)
         }
         val vt = ctx.eval1(ety)
         val rt =
           if io then VRigid(HPrim(Name("IO")), SApp(SId, vt, Expl)) else vt
-        Infer0(Foreign(io, ety, ecode, eargs), rt, if io then VComp else VVal)
+        Infer0(Foreign(io, ety, ecode, eargs), rt, if io then VComp else vcv)
 
   // elaboration
   def elaborate(d: S.Def): Unit =
     debug(s"elaborate $d")
     d match
-      case S.DData(pos, k, dx, ps, cs) =>
+      case S.DData(pos, k, dx, psx, cs) =>
         implicit val ctx: Ctx = Ctx.empty(pos)
         if getGlobal(dx).isDefined then error(s"duplicated definition $dx")
-        val ek = k match
-          case S.SBoxed => Boxed
+        val (ek, lev) = k match
+          case S.SBoxed => (Boxed, Prim1(Name("Boxed")))
           case S.SUnboxed =>
             if cs.exists(c => c.args.nonEmpty) then
               error(s"unboxed datatype constructors cannot have parameters")
-            Unboxed
+            val lev = cs.size match
+              case n if n <= 2 =>
+                App1(Prim1(Name("Unboxed")), Prim1(Name("BoolRep")), Expl)
+              case n if n <= 128 =>
+                App1(Prim1(Name("Unboxed")), Prim1(Name("ByteRep")), Expl)
+              case n if n <= 32768 =>
+                App1(Prim1(Name("Unboxed")), Prim1(Name("ShortRep")), Expl)
+              case _ =>
+                App1(Prim1(Name("Unboxed")), Prim1(Name("IntRep")), Expl)
+            (Unboxed, lev)
           case S.SNewtype =>
             if cs.size != 1 || cs.head.args.size != 1 then
               error(
                 s"newtype datatype must have exactly 1 constructor with 1 parameter"
               )
-            Newtype
-        setGlobal(GlobalData0(dx, ek, ps, cs.map(_.name)))
+            impossible() // TODO
+        val (innerctx, ps) = psx.foldLeft((ctx, List.empty[(Icit, Bind, Ty)])) {
+          case ((ctx, res), (i, x, t)) =>
+            val et = check1(t, VU1)(ctx)
+            (ctx.bind1(x, et, ctx.eval1(et)), (i, x, et) :: res)
+        }
+        setGlobal(GlobalData0(dx, ek, ps.reverse, lev, cs.map(_.name)))
         cs.foreach { case DataCon(pos, cx, cps) =>
-          implicit val nctx = ctx.enter(pos).bindDataParams(ps)
+          implicit val ctx: Ctx = innerctx
           // TODO: check for simple recursion
-          val ecps = cps.map { (x, ty) => (x, check1(ty, VU0(VVal))) }
+          val ecps = cps.map { (x, ty) =>
+            val lev = freshMeta(VLevity)
+            val vlev = ctx.eval1(lev)
+            (x, lev, check1(ty, VU0(VVal(vlev))))
+          }
           setGlobal(GlobalCon0(cx, dx, ecps))
         }
+        retryAllPostponed()
+        val ums = unsolvedMetas()
+        if ums.nonEmpty then
+          val str =
+            ums.map((id, ty) => s"?$id : ${ctx.pretty1(ty)}").mkString("\n")
+          error(s"there are unsolved metas:\n$str")
       case S.DDef(pos, x, rec, m, mty, v) =>
         implicit val ctx: Ctx = Ctx.empty(pos)
         if getGlobal(x).isDefined then error(s"duplicated definition $x")

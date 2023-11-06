@@ -101,6 +101,7 @@ object Value:
   enum Head:
     case HVar(lvl: Lvl)
     case HPrim(name: Name)
+    case HTCon(name: Name)
   export Head.*
 
   enum UHead:
@@ -119,15 +120,12 @@ object Value:
     case VMetaPi(meta: Boolean, ty: VTy, body: Clos[S.Ty])
     case VMetaLam(meta: Boolean, body: Clos[S.Tm1])
 
-    case VTCon(name: Name, ps: List[Val1])
-
     case VU0(cv: VCV)
     case VU1
 
-    case VFun(pty: VTy, cv: VCV, rty: VTy)
+    case VFun(levity: VTy, pty: VTy, cv: VCV, rty: VTy)
     case VCV1
     case VComp
-    case VVal
     case VLift(cv: VCV, ty: VTy)
 
     case VQuote(tm: Val0)
@@ -146,3 +144,40 @@ object Value:
     def unapply(value: Val1): Option[Name] = value match
       case VRigid(HPrim(name), SId) => Some(name)
       case _                        => None
+
+  object VTCon:
+    def apply(name: Name): Val1 = VRigid(HTCon(name), SId)
+    def unapply(value: Val1): Option[Name] = value match
+      case VRigid(HTCon(name), SId) => Some(name)
+      case _                        => None
+
+  object VTConApp:
+    def apply(name: Name, sp: List[(VTy, Icit)]): Val1 = VRigid(
+      HTCon(name),
+      sp.foldLeft(SId) { case (sp, (t, i)) => SApp(sp, t, i) }
+    )
+    def unapply(value: Val1): Option[(Name, List[(VTy, Icit)])] = value match
+      case VRigid(HTCon(name), sp) =>
+        def go(sp: Spine): List[(VTy, Icit)] = sp match
+          case SId            => Nil
+          case SApp(sp, t, i) => (t, i) :: go(sp)
+          case _              => impossible()
+        Some((name, go(sp).reverse))
+      case _ => None
+
+  object VVal:
+    def apply(levity: Val1): Val1 =
+      VRigid(HPrim(Name("Val")), SApp(SId, levity, Expl))
+    def unapply(value: Val1): Option[Val1] = value match
+      case VRigid(HPrim(Name("Val")), SApp(SId, levity, Expl)) => Some(levity)
+      case _                                                   => None
+
+  object VUnboxed:
+    def apply(rep: Val1): Val1 =
+      VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl))
+    def unapply(value: Val1): Option[Val1] = value match
+      case VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl)) => Some(rep)
+      case _                                                    => None
+
+  val VLevity = VPrim1(Name("Levity"))
+  val VBoxed = VPrim1(Name("Boxed"))

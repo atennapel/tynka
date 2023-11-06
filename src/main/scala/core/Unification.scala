@@ -268,6 +268,7 @@ class Unification(retryPostponed: RetryPostponed):
     inline def goClos(c: Clos[Tm1]) = psubst1(c(VVar1(psub.cod)))(psub.lift1)
     inline def goClos0(c: Clos[Tm1]) = psubst1(c(VVar0(psub.cod)))(psub.lift1)
     forceMetas1(v) match
+      case VRigid(HTCon(x), sp) => goSp(TCon(x), sp)
       case VRigid(HPrim(x), sp) => goSp(Prim1(x), sp)
       case VRigid(HVar(x), sp) =>
         psub.sub.get(x.expose) match
@@ -281,16 +282,14 @@ class Unification(retryPostponed: RetryPostponed):
       case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
       case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
-      case VTCon(x, ps)               => TCon(x, ps.map(x => go1(x)))
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
-      case VFun(pty, cv, rty)         => Fun(go1(pty), go1(cv), go1(rty))
-      case VCV1                       => CV1
-      case VComp                      => Comp
-      case VVal                       => Val
-      case VLabelLit(v)               => LabelLit(v)
-      case VLift(cv, ty)              => Lift(go1(cv), go1(ty))
-      case VQuote(tm)                 => quote(go0(tm))
+      case VFun(l, pty, cv, rty) => Fun(go1(l), go1(pty), go1(cv), go1(rty))
+      case VCV1                  => CV1
+      case VComp                 => Comp
+      case VLabelLit(v)          => LabelLit(v)
+      case VLift(cv, ty)         => Lift(go1(cv), go1(ty))
+      case VQuote(tm)            => quote(go0(tm))
       case VMetaPi(m, t, b) =>
         MetaPi(m, go1(t), if m then goClos(b) else goClos0(b))
       case VMetaLam(m, b) => MetaLam(m, if m then goClos(b) else goClos0(b))
@@ -438,13 +437,10 @@ class Unification(retryPostponed: RetryPostponed):
         unify1(ty1, ty2); goClos(b1, b2)
       case (VMetaPi(false, ty1, b1), VMetaPi(false, ty2, b2)) =>
         unify1(ty1, ty2); goClos0(b1, b2)
-      case (VFun(t1, cv1, r1), VFun(t2, cv2, r2)) =>
-        unify1(t1, t2); unify1(cv1, cv2); unify1(r1, r2)
-      case (VTCon(x, ps1), VTCon(y, ps2)) if x == y && ps1.size == ps2.size =>
-        ps1.zip(ps2).foreach((x, y) => unify1(x, y))
+      case (VFun(l1, t1, cv1, r1), VFun(l2, t2, cv2, r2)) =>
+        unify1(l1, l2); unify1(t1, t2); unify1(cv1, cv2); unify1(r1, r2)
       case (VCV1, VCV1)         => ()
       case (VComp, VComp)       => ()
-      case (VVal, VVal)         => ()
       case (VU1, VU1)           => ()
       case (VU0(cv1), VU0(cv2)) => unify1(cv1, cv2)
 

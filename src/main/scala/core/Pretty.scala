@@ -18,7 +18,7 @@ object Pretty:
     case f                    => prettyParen1(f)
 
   private def prettyPi(tm: Ty)(implicit ns: List[Bind]): String = tm match
-    case Fun(a, _, b) => s"${prettyParen1(a, true)} -> ${prettyPi(b)}"
+    case Fun(_, a, _, b) => s"${prettyParen1(a, true)} -> ${prettyPi(b)}"
     case Pi(DontBind, Expl, t, b) =>
       s"${prettyParen1(t, true)} -> ${prettyPi(b)(DontBind :: ns)}"
     case Pi(bx @ DoBind(x), Expl, t, b) =>
@@ -81,15 +81,13 @@ object Pretty:
       case Lift(_, _)           => pretty1(tm)
       case Quote(_)             => pretty1(tm)
       case AppPruning(_, _)     => pretty1(tm)
-      case TCon(_, Nil)         => pretty1(tm)
       case App1(_, _, _) if app => pretty1(tm)
       case MetaApp(_, _) if app => pretty1(tm)
-      case TCon(_, _) if app    => pretty1(tm)
+      case TCon(_)              => pretty1(tm)
       case U0(_)                => pretty1(tm)
       case U1                   => pretty1(tm)
       case CV1                  => pretty1(tm)
       case Comp                 => pretty1(tm)
-      case Val                  => pretty1(tm)
       case Wk01(tm)             => prettyParen1(tm, app)(ns.tail)
       case Wk11(tm)             => prettyParen1(tm, app)(ns.tail)
       case _                    => s"(${pretty1(tm)})"
@@ -146,6 +144,7 @@ object Pretty:
         case DoBind(x) => s"$x"
     case Global1(x)  => s"$x"
     case Prim1(x)    => s"$x"
+    case TCon(x)     => s"$x"
     case LabelLit(v) => s"\"$v\""
     case Let1(x, t, v, b) =>
       s"let $x : ${pretty1(t)} = ${pretty1(v)}; ${prettyLift1(x.toBind, b)}"
@@ -154,18 +153,14 @@ object Pretty:
     case U1    => "Meta"
     case CV1   => "CV"
     case Comp  => "Comp"
-    case Val   => "Val"
 
     case Pi(_, _, _, _)   => prettyPi(tm)
-    case Fun(_, _, _)     => prettyPi(tm)
+    case Fun(_, _, _, _)  => prettyPi(tm)
     case MetaPi(_, _, _)  => prettyPi(tm)
     case Lam1(_, _, _, _) => prettyLam1(tm)
     case MetaLam(_, _)    => prettyLam1(tm)
     case App1(_, _, _)    => prettyApp1(tm)
     case MetaApp(_, _)    => prettyApp1(tm)
-
-    case TCon(x, Nil) => s"$x"
-    case TCon(x, ps)  => s"$x ${ps.map(a => prettyParen1(a)).mkString(" ")}"
 
     case Lift(_, t) => s"^${prettyParen1(t)}"
     case Quote(t)   => s"`${prettyParen0(t)}"

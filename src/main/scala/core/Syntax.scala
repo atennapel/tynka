@@ -65,6 +65,7 @@ object Syntax:
     case Var1(ix: Ix)
     case Global1(name: Name)
     case Prim1(name: Name)
+    case TCon(name: Name)
     case LabelLit(value: String)
     case Let1(name: Name, ty: Ty, value: Tm1, body: Tm1)
 
@@ -75,13 +76,10 @@ object Syntax:
     case Lam1(name: Bind, icit: Icit, ty: Ty, body: Tm1)
     case App1(fn: Tm1, arg: Tm1, icit: Icit)
 
-    case Fun(pty: Ty, cv: CV, rty: Ty)
+    case Fun(levity: Ty, pty: Ty, cv: CV, rty: Ty)
     case CV1
     case Comp
-    case Val
     case Lift(cv: CV, ty: Ty)
-
-    case TCon(name: Name, ps: List[Tm1])
 
     case Quote(tm: Tm0)
 
@@ -117,15 +115,13 @@ object Syntax:
       case Lam1(x, i, ty, b)    => s"(\\${i.wrap(s"$x : $ty")} => $b)"
       case App1(fn, arg, Expl)  => s"($fn $arg)"
       case App1(fn, arg, i)     => s"($fn ${i.wrap(arg)})"
-      case Fun(pty, _, rty)     => s"($pty -> $rty)"
-      case TCon(x, Nil)         => s"$x"
-      case TCon(x, ps)          => s"($x ${ps.mkString(" ")})"
+      case Fun(_, pty, _, rty)  => s"($pty -> $rty)"
+      case TCon(x)              => s"$x"
       case CV1                  => "CV"
       case Comp                 => "Comp"
-      case Val                  => "Val"
       case Lift(_, ty)          => s"^$ty"
       case Quote(tm)            => s"`$tm"
-      case AppPruning(id, _)    => s"(?$id ...)"
+      case AppPruning(id, p)    => s"(?$id ...(${p.size}))"
       case Wk01(tm)             => s"$tm"
       case Wk11(tm)             => s"$tm"
       case Meta(id)             => s"?$id"
@@ -150,3 +146,5 @@ object Syntax:
     case LBind0(locs: Locals, ty: Ty, cv: CV)
     case LBind1(locs: Locals, ty: Ty)
   export Locals.*
+
+  def Val(lev: Ty) = App1(Prim1(Name("Val")), lev, Expl)

@@ -11,6 +11,7 @@ import core.Globals.*
 import core.Elaboration.{elaborate, ElaborateError}
 import ir.Compile.compile
 import jvmir.Generator.generate
+import core.Pretty.*
 
 import java.io.File
 import scala.io.Source
@@ -19,7 +20,7 @@ import scala.util.Using
 
 object Main:
   @main def run(filename: String): Unit =
-    setDebug(false)
+    setDebug(true)
     try
       implicit val ctx: Ctx = Ctx.empty((0, 0))
 
@@ -34,7 +35,6 @@ object Main:
 
       println()
 
-      /*
       getMetas().foreach((m, t, v) =>
         v match
           case None => println(s"?$m : ${ctx.pretty1(t)}")
@@ -56,25 +56,34 @@ object Main:
       )
 
       println()
-       */
 
       allGlobals.foreach {
         case GlobalEntry0(x, tm, ty, cv, vv, vty, vcv) =>
-          println(s"$x : ${ctx.pretty1(vty)} := ${ctx.pretty0(stage(tm))}")
+          println(s"def $x : ${ctx.pretty1(vty)} := ${ctx.pretty0(stage(tm))}")
         case GlobalEntry1(x, tm, ty, vv, vty) =>
           // println(tm)
           println(
-            s"$x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
+            s"def $x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
           )
-        case GlobalData0(x, k, Nil, _) => println(s"data($k) $x")
-        case GlobalData0(x, k, ps, _) =>
-          println(s"data($k) $x ${ps.mkString(" ")}")
+        case GlobalData0(x, k, Nil, lev, _) =>
+          println(s"data($k) $x : ${ctx.pretty1(U0(Val(lev)))}")
+        case GlobalData0(x, k, ps, lev, _) =>
+          val sps = ps
+            .foldLeft((List.empty[String], List.empty[Bind])) {
+              case ((res, binds), (i, x, t)) =>
+                (i.wrap(s"$x : ${pretty1(t)(binds)}") :: res, x :: binds)
+            }
+            ._1
+            .reverse
+          println(
+            s"data($k) $x ${sps.mkString(" ")} : ${ctx.pretty1(U0(Val(lev)))}"
+          )
         case GlobalCon0(x, dx, Nil) => println(s"| $x")
         case GlobalCon0(x, dx, ps) =>
-          val nctx = ctx.bindDataParams(getGlobalData0(dx).params)
-          def showParam(x: Bind, t: Tm1) = x match
-            case DontBind  => nctx.prettyParen1(t)
-            case DoBind(x) => s"($x : ${nctx.pretty1(t)})"
+          val binds = getGlobalData0(dx).params.map(_._2).reverse
+          def showParam(x: Bind, lev: Tm1, t: Tm1) = x match
+            case DontBind  => prettyParen1(t)(binds)
+            case DoBind(x) => s"($x : ${pretty1(t)(binds)})"
           println(
             s"| $x ${ps.map(showParam).mkString(" ")}"
           )

@@ -82,9 +82,6 @@ final case class Ctx(
       pos
     )
 
-  def bindDataParams(ps: List[Name]): Ctx =
-    ps.foldLeft(this)((ctx, x) => ctx.bind1(DoBind(x), U0(Val), VU0(VVal)))
-
   def define(x: Name, ty: Ty, vty: VTy, v: Tm1, vv: Val1): Ctx =
     Ctx(
       lvl + 1,

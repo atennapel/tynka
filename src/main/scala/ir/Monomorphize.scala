@@ -201,18 +201,24 @@ object Monomorphize:
 
   private inline def goTDef(t: S.Ty): TDef = goVTDef(eval1(t)(EEmpty))
   private def goVTDef(t: VTy): TDef = forceAll1(t) match
-    case VFun(pty, _, rty) => TDef(goVTy(pty), goVTDef(rty))
-    case VRigid(HPrim(Name("IO")), SApp(SId, ty, Expl)) =>
+    case VFun(_, pty, _, rty) => TDef(goVTy(pty), goVTDef(rty))
+    case VRigid(HPrim(Name("IO")), SApp(SApp(SId, _, Impl), ty, Expl)) =>
       TDef(TDummy, goVTy(ty))
     case t => TDef(goVTy(t))
 
   private inline def goTy(t: S.Ty, env: Env = EEmpty): Ty = goVTy(eval1(t)(env))
   private def goVTy(t: VTy): Ty = forceAll1(t) match
-    case VTCon(dx, ps)                                     => TCon(mono(dx, ps))
-    case VPrim1(x)                                         => TPrim(x)
+    case VTConApp(dx, ps)           => TCon(mono(dx, ps.map(_._1)))
+    case VPrim1(x @ Name("Byte"))   => TPrim(x)
+    case VPrim1(x @ Name("Short"))  => TPrim(x)
+    case VPrim1(x @ Name("Int"))    => TPrim(x)
+    case VPrim1(x @ Name("Long"))   => TPrim(x)
+    case VPrim1(x @ Name("Float"))  => TPrim(x)
+    case VPrim1(x @ Name("Double")) => TPrim(x)
+    case VPrim1(x @ Name("Char"))   => TPrim(x)
     case VRigid(HPrim(Name("Array")), SApp(SId, ty, Expl)) => TArray(goVTy(ty))
     case VRigid(HPrim(Name("Class")), SApp(SId, l, Expl)) => TClass(goVLabel(l))
-    case _                                                => impossible()
+    case _                                                => TDummy
 
   private def goLabel(l: S.Tm1): String = goVLabel(eval1(l)(EEmpty))
   private def goVLabel(l: Val1): String =
@@ -223,7 +229,7 @@ object Monomorphize:
   private def genName(dx: Name, ps: List[Ty]): Name =
     if ps.isEmpty then dx
     else
-      val gps = ps.map(genName).mkString("_")
+      val gps = ps.filterNot(_ == TDummy).map(genName).mkString("_")
       Name(s"${dx}_$gps")
   private def genName(t: Ty): Name = t match
     case TCon(dx)   => dx
@@ -245,7 +251,7 @@ object Monomorphize:
   private def monoCons(dx: Name, ps: List[VTy]): DatatypeCons =
     val env = ps.foldLeft(EEmpty)(E1.apply)
     getGlobalData0(dx).cons.map { cx =>
-      val ps = getGlobalCon0(cx).params.map((x, t) => (x, goTy(t, env)))
+      val ps = getGlobalCon0(cx).params.map((x, _, t) => (x, goTy(t, env)))
       (cx, ps)
     }
 
