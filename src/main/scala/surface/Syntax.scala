@@ -51,12 +51,20 @@ object Syntax:
       case DDef(_, x, rec, m, None, v) =>
         s"def ${if rec then "rec " else ""}$x ${if m then "" else ":"}= $v"
       case DData(_, k, x, ps, Nil) =>
-        s"data($k) $x${
+        val begin = k match
+          case SBoxed   => "data"
+          case SUnboxed => "enum"
+          case SNewtype => "newtype"
+        s"$begin $x${
             if ps.isEmpty then ""
             else s" ${ps.map((i, x, t) => i.wrap(s"$x : $t")).mkString(" ")}"
           }"
       case DData(_, k, x, ps, cs) =>
-        s"data($k) $x${
+        val begin = k match
+          case SBoxed   => "data"
+          case SUnboxed => "enum"
+          case SNewtype => "newtype"
+        s"$begin $x${
             if ps.isEmpty then ""
             else s" ${ps.map((i, x, t) => i.wrap(s"$x : $t")).mkString(" ")}"
           } := ${cs.mkString(" | ")}"

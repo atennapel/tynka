@@ -424,7 +424,7 @@ object Elaboration extends RetryPostponed:
       case S.PVar(b @ DoBind(x)) =>
         getGlobal(x) match
           case Some(GlobalCon0(_, _, _)) => S.PCon(x, DontBind, Nil)
-          case Some(GlobalData0(_, _, _, _, _)) =>
+          case Some(GlobalData0(_, _, _, _)) =>
             error(s"datatype in pattern: $x")
           case _ => S.PVar(b)
 
@@ -459,7 +459,7 @@ object Elaboration extends RetryPostponed:
       escruts.foreach { (escrut, _, vscrutty, vcv) =>
         forceAll1(vscrutty) match
           case VTConApp(x, _) =>
-            val GlobalData0(_, _, _, _, cs) = getGlobalData0(x)
+            val GlobalData0(_, _, _, cs) = getGlobalData0(x)
             if cs.isEmpty then ()
             else
               error(
@@ -611,7 +611,7 @@ object Elaboration extends RetryPostponed:
     val dty = info.ty
     forceAll1(dty) match
       case VTConApp(dx, dpas) =>
-        val GlobalData0(_, _, dps, _, csl) = getGlobalData0(dx)
+        val GlobalData0(_, dps, _, csl) = getGlobalData0(dx)
         val cons = csl.toSet
         val S.PCon(cx, _, args) = pats(branchVar): @unchecked
         if info.matchedCons.contains(cx) then
@@ -1198,6 +1198,8 @@ object Elaboration extends RetryPostponed:
         Infer1(Prim1(x), VPrim1(Name("Rep")))
       case S.Var(x @ Name("CharRep"), _) =>
         Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("BoolRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("BoolRep")))
 
       case S.Var(x @ Name("Levity"), _) => Infer1(Prim1(x), VU1)
       case S.Var(x @ Name("Boxed"), _) =>
@@ -1269,7 +1271,7 @@ object Elaboration extends RetryPostponed:
                 Infer0(Global0(x), ty, cv)
               case Some(GlobalEntry1(_, _, _, _, ty)) =>
                 Infer1(Global1(x), ty)
-              case Some(GlobalData0(_, _, ps, lev, _)) =>
+              case Some(GlobalData0(_, ps, lev, _)) =>
                 val ty = ps.zipWithIndex.foldRight(
                   U0(Val(lev.wk1N(ps.size)))
                 ) { case (((icit, x, ty), i), b) =>
@@ -1278,7 +1280,7 @@ object Elaboration extends RetryPostponed:
                 val vty = ctx.eval1(ctx.quote1(eval1(ty)(EEmpty)))
                 Infer1(TCon(x), vty)
               case Some(GlobalCon0(_, dx, cps)) =>
-                val GlobalData0(_, _, ps, lev, _) = getGlobalData0(dx)
+                val GlobalData0(_, ps, lev, _) = getGlobalData0(dx)
                 val (dargsrev, env) = ps
                   .foldLeft((List.empty[(Ty, Icit)], EEmpty)) {
                     case ((args, env), (i, x, t)) =>
@@ -1468,8 +1470,8 @@ object Elaboration extends RetryPostponed:
       case S.DData(pos, k, dx, psx, cs) =>
         implicit val ctx: Ctx = Ctx.empty(pos)
         if getGlobal(dx).isDefined then error(s"duplicated definition $dx")
-        val (ek, lev) = k match
-          case S.SBoxed => (Boxed, Prim1(Name("Boxed")))
+        val lev = k match
+          case S.SBoxed => Prim1(Name("Boxed"))
           case S.SUnboxed =>
             if cs.exists(c => c.args.nonEmpty) then
               error(s"unboxed datatype constructors cannot have parameters")
@@ -1482,7 +1484,7 @@ object Elaboration extends RetryPostponed:
                 App1(Prim1(Name("Unboxed")), Prim1(Name("ShortRep")), Expl)
               case _ =>
                 App1(Prim1(Name("Unboxed")), Prim1(Name("IntRep")), Expl)
-            (Unboxed, lev)
+            lev
           case S.SNewtype =>
             if cs.size != 1 || cs.head.args.size != 1 then
               error(
@@ -1494,7 +1496,7 @@ object Elaboration extends RetryPostponed:
             val et = check1(t, VU1)(ctx)
             (ctx.bind1(x, et, ctx.eval1(et)), (i, x, et) :: res)
         }
-        setGlobal(GlobalData0(dx, ek, ps.reverse, lev, cs.map(_.name)))
+        setGlobal(GlobalData0(dx, ps.reverse, lev, cs.map(_.name)))
         cs.foreach { case DataCon(pos, cx, cps) =>
           implicit val ctx: Ctx = innerctx
           // TODO: check for simple recursion

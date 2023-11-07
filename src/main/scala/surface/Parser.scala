@@ -27,6 +27,8 @@ object Parser:
         "let",
         "rec",
         "data",
+        "enum",
+        "newtype",
         "con",
         "match",
         "Meta",
@@ -477,9 +479,6 @@ object Parser:
           )
         }
 
-    private lazy val datakindP: Parsley[SDataKind] =
-      "(" *> (("boxed" #> SBoxed) <|> ("unboxed" #> SUnboxed) <|> ("newtype" #> SNewtype)) <* ")"
-
     private lazy val dataDefParamP: Parsley[(Icit, Bind, Ty)] =
       ("{" *> bind <~> option(":" *> tm) <* "}").map((x, t) =>
         (Impl, x, t.getOrElse(hole))
@@ -488,7 +487,7 @@ object Parser:
         <|> bind.map(x => (Expl, x, hole))
 
     private lazy val dataDefP: Parsley[Def] =
-      (pos <~> "data" *> option(datakindP) <~> identOrOp <~> many(
+      (pos <~> ("data" #> SBoxed <|> "enum" #> SUnboxed <|> "newtype" #> SNewtype) <~> identOrOp <~> many(
         dataDefParamP
       ) <~> option(
         (":=" <|> "|") *> sepBy(
@@ -503,7 +502,7 @@ object Parser:
         .map { case ((((pos, k), x), ps), cs) =>
           DData(
             pos,
-            k.getOrElse(SBoxed),
+            k,
             x,
             ps,
             cs.map(cs => cs.map { case ((pos, x), ts) => DataCon(pos, x, ts) })

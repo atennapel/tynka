@@ -36,7 +36,7 @@ object Compile:
       case _ => Nil
     }
     val dataDefs = monomorphizedDatatypes.flatMap {
-      case (dx, Boxed, cs) =>
+      case (dx, Levity.Boxed, cs) =>
         Some(
           J.DData(dx, cs.map((cx, as) => (cx, as.map((x, t) => (x, go(t))))))
         )
@@ -98,14 +98,15 @@ object Compile:
     case TCon(dx) =>
       val info = monomorphizedDatatype(dx)
       info._2 match
-        case Boxed   => J.TCon(dx)
-        case Newtype => go(info._3.head._2.head._2)
-        case Unboxed =>
-          info._3.size match
-            case n if n <= 2     => J.TBool
-            case n if n <= 128   => J.TByte
-            case n if n <= 32768 => J.TShort
-            case _               => J.TInt
+        case Levity.Boxed       => J.TCon(dx)
+        case Unboxed(ByteRep)   => J.TByte
+        case Unboxed(ShortRep)  => J.TShort
+        case Unboxed(IntRep)    => J.TInt
+        case Unboxed(LongRep)   => J.TLong
+        case Unboxed(FloatRep)  => J.TFloat
+        case Unboxed(DoubleRep) => J.TDouble
+        case Unboxed(CharRep)   => J.TChar
+        case Unboxed(BoolRep)   => J.TBool
     case _ => impossible()
 
   private def go(t: Tm)(implicit localrename: LocalRename): J.Tm =
@@ -122,16 +123,14 @@ object Compile:
       case Con(dx, cx, as) =>
         val info = monomorphizedDatatype(dx)
         info._2 match
-          case Boxed   => J.Con(cx, as.map(go))
-          case Newtype => go(as.head)
-          case Unboxed => J.IntLit(info._3.indexWhere((cx2, _) => cx == cx2))
+          case Levity.Boxed => J.Con(cx, as.map(go))
+          case Unboxed(_) => J.IntLit(info._3.indexWhere((cx2, _) => cx == cx2))
 
       case Field(dx, cx, s, ty, i) =>
         val info = monomorphizedDatatype(dx)
         info._2 match
-          case Boxed   => J.Field(cx, go(s), i)
-          case Newtype => go(s)
-          case Unboxed => impossible()
+          case Levity.Boxed => J.Field(cx, go(s), i)
+          case Unboxed(_)   => impossible()
 
       case Let(_, x0, TDef(Nil, TDummy), rt, v, b) => go(b)
       case l @ Let(_, x0, t, rt, v, b) =>
@@ -149,13 +148,12 @@ object Compile:
       case Match(dx, s, bty, c, x0, b, o) =>
         val info = monomorphizedDatatype(dx)
         info._2 match
-          case Newtype => go(b.subst(x0, s))
-          case Boxed =>
+          case Levity.Boxed =>
             val x = localrename.fresh(x0, false)
             o match
               case Impossible(_) => J.Match(go(s), c, x, go(b), None)
               case _             => J.Match(go(s), c, x, go(b), Some(go(o)))
-          case Unboxed =>
+          case Unboxed(_) =>
             val ix = info._3.indexWhere((cx2, _) => c == cx2)
             o match
               case Impossible(_) => J.FinMatch(go(s), ix, go(b), None)
