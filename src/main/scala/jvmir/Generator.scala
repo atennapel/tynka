@@ -366,7 +366,7 @@ object Generator:
             mg.visitLabel(lElse)
             gen(f)
             mg.visitLabel(lEnd)
-          case (_, "cast", List((v, _)))       => gen(v)
+          case (_, "coerce", List((v, _)))     => gen(v)
           case (_, "returnVoid", List((v, _))) => gen(v); mg.pop()
           case (_, op, List((p, _), (c, _))) if op.startsWith("catch") =>
             val exc = op match
