@@ -46,10 +46,15 @@ TODO:
   - [x] String literals
   - [x] JVM interop calls
   - [x] IO monad
+- [x] Newtypes
+- [ ] Handle newtypes in monomorphization to enable more optimizations
+- [ ] Constant folding for primitives
+- [ ] Reduce duplication of compiled types with unboxed parameters
 - [ ] Fix bug with postponed Universe metas
+- [ ] Boxing
+- [ ] Null
 - [ ] Array literals
 - [ ] Non-Int primitive literals
-- [ ] Boxing
 - [ ] Recursive meta definitions (?)
 - [ ] Meta datatypes
 - [ ] Or-patterns

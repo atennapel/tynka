@@ -355,6 +355,17 @@ object Generator:
 
       case Foreign(ty, code, args) =>
         (ty, code, args) match
+          case (_, "null", List()) => mg.visitInsn(ACONST_NULL)
+          case (_, "ifNull", List((v, _), (t, _), (f, _))) =>
+            val lElse = mg.newLabel()
+            val lEnd = mg.newLabel()
+            gen(v)
+            mg.visitJumpInsn(IFNONNULL, lElse)
+            gen(t)
+            mg.visitJumpInsn(GOTO, lEnd)
+            mg.visitLabel(lElse)
+            gen(f)
+            mg.visitLabel(lEnd)
           case (_, "cast", List((v, _)))       => gen(v)
           case (_, "returnVoid", List((v, _))) => gen(v); mg.pop()
           case (_, op, List((p, _), (c, _))) if op.startsWith("catch") =>

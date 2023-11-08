@@ -20,7 +20,7 @@ import scala.util.Using
 
 object Main:
   @main def run(filename: String): Unit =
-    setDebug(true)
+    setDebug(false)
     try
       implicit val ctx: Ctx = Ctx.empty((0, 0))
 
@@ -65,9 +65,11 @@ object Main:
           println(
             s"def $x : ${ctx.pretty1(vty)} = ${ctx.pretty1(tm)}"
           )
-        case GlobalData0(x, Nil, lev, _) =>
-          println(s"data $x : ${ctx.pretty1(U0(Val(lev)))}")
-        case GlobalData0(x, ps, lev, _) =>
+        case GlobalData0(x, newtype, Nil, lev, _) =>
+          val begin = if newtype then "newtype" else "data"
+          println(s"$begin $x : ${ctx.pretty1(U0(Val(lev)))}")
+        case GlobalData0(x, newtype, ps, lev, _) =>
+          val begin = if newtype then "newtype" else "data"
           val sps = ps
             .foldLeft((List.empty[String], List.empty[Bind])) {
               case ((res, binds), (i, x, t)) =>
@@ -76,7 +78,7 @@ object Main:
             ._1
             .reverse
           println(
-            s"data $x ${sps.mkString(" ")} : ${ctx.pretty1(U0(Val(lev)))}"
+            s"$begin $x ${sps.mkString(" ")} : ${ctx.pretty1(U0(Val(lev)))}"
           )
         case GlobalCon0(x, dx, Nil) => println(s"| $x")
         case GlobalCon0(x, dx, ps) =>

@@ -208,7 +208,7 @@ object Monomorphize:
   export Rep.*
 
   type DatatypeCons = List[(Name, List[(Bind, Ty)])]
-  type Datatype = (Name, Levity, DatatypeCons)
+  type Datatype = (Name, Boolean, Levity, DatatypeCons)
   private val monoMap: mutable.Map[(Name, List[Ty]), Name] =
     mutable.Map.empty
   private val monoData: mutable.ArrayBuffer[Datatype] =
@@ -291,8 +291,9 @@ object Monomorphize:
       case None =>
         val x = genName(dx, mps)
         monoMap += (dx, mps) -> x
-        val levity = goLevity(eval1(getGlobalData0(dx).levity)(EEmpty))
-        monoData += ((x, levity, monoCons(dx, ps)))
+        val info = getGlobalData0(dx)
+        val levity = goLevity(eval1(info.levity)(EEmpty))
+        monoData += ((x, info.newtype, levity, monoCons(dx, ps)))
         monoLevities += (x -> levity)
         x
 
