@@ -36,7 +36,7 @@ object Compile:
       case _ => Nil
     }
     val dataDefs = monomorphizedDatatypes.flatMap {
-      case (dx, false, Levity.Boxed, cs) =>
+      case (dx, Boxed, cs) =>
         Some(
           J.DData(dx, cs.map((cx, as) => (cx, as.map((x, t) => (x, go(t))))))
         )
@@ -97,8 +97,8 @@ object Compile:
     case TClass(x)             => J.TClass(x)
     case TCon(dx) =>
       val info = monomorphizedDatatype(dx)
-      info._3 match
-        case Levity.Boxed       => J.TCon(dx)
+      info._2 match
+        case Boxed              => J.TCon(dx)
         case Unboxed(ByteRep)   => J.TByte
         case Unboxed(ShortRep)  => J.TShort
         case Unboxed(IntRep)    => J.TInt
@@ -135,36 +135,30 @@ object Compile:
 
       case Con(dx, cx, as) =>
         val info = monomorphizedDatatype(dx)
-        if info._2 then go(as.head)
-        else
-          info._3 match
-            case Levity.Boxed => J.Con(cx, as.map(go))
-            case Unboxed(_) =>
-              J.IntLit(info._4.indexWhere((cx2, _) => cx == cx2))
+        info._2 match
+          case Boxed => J.Con(cx, as.map(go))
+          case Unboxed(_) =>
+            J.IntLit(info._3.indexWhere((cx2, _) => cx == cx2))
 
       case Field(dx, cx, s, ty, i) =>
         val info = monomorphizedDatatype(dx)
-        if info._2 then go(s)
-        else
-          info._3 match
-            case Levity.Boxed => J.Field(cx, go(s), i)
-            case Unboxed(_)   => impossible()
+        info._2 match
+          case Boxed      => J.Field(cx, go(s), i)
+          case Unboxed(_) => impossible()
 
       case Match(dx, s, bty, c, x0, b, o) =>
         val info = monomorphizedDatatype(dx)
-        if info._2 then go(b.subst(x0, s))
-        else
-          info._3 match
-            case Levity.Boxed =>
-              val x = localrename.fresh(x0, false)
-              o match
-                case Impossible(_) => J.Match(go(s), c, x, go(b), None)
-                case _             => J.Match(go(s), c, x, go(b), Some(go(o)))
-            case Unboxed(_) =>
-              val ix = info._4.indexWhere((cx2, _) => c == cx2)
-              o match
-                case Impossible(_) => J.FinMatch(go(s), ix, go(b), None)
-                case _             => J.FinMatch(go(s), ix, go(b), Some(go(o)))
+        info._2 match
+          case Boxed =>
+            val x = localrename.fresh(x0, false)
+            o match
+              case Impossible(_) => J.Match(go(s), c, x, go(b), None)
+              case _             => J.Match(go(s), c, x, go(b), Some(go(o)))
+          case Unboxed(_) =>
+            val ix = info._3.indexWhere((cx2, _) => c == cx2)
+            o match
+              case Impossible(_) => J.FinMatch(go(s), ix, go(b), None)
+              case _             => J.FinMatch(go(s), ix, go(b), Some(go(o)))
 
       case Join(_, _, TDummy, _, b) => go(b)
       case Join(x0, ps0, rty, v, b) =>
