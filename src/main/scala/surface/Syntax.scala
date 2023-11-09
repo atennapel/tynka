@@ -117,6 +117,10 @@ object Syntax:
         scrut: List[Tm],
         pats: List[MatchCase]
     )
+    case Split(
+        scrut: Tm,
+        cases: List[(PosInfo, Bind, List[(Bind, ArgInfo, Option[Ty])], Tm)]
+    )
 
     case Lift(ty: Ty)
     case Quote(tm: Tm)
@@ -158,6 +162,18 @@ object Syntax:
         s"(match${if scrut.isEmpty then "" else " "}${scrut
             .mkString(", ")}${if pats.isEmpty then "" else " "}${pats
             .map((_, ps, guard, b) => s"| ${ps.mkString(", ")}${guard.map(g => s" if ${g}").getOrElse("")} => $b")
+            .mkString(" ")})"
+      case Split(scrut, Nil) => s"(split $scrut)"
+      case Split(scrut, cs) =>
+        def showParam(x: Bind, i: ArgInfo, t: Option[Tm]) =
+          (i, t) match
+            case (ArgIcit(Expl), None)  => s"$x"
+            case (ArgIcit(i), None)     => i.wrap(s"$x")
+            case (ArgIcit(i), Some(t))  => i.wrap(s"($x : $t)")
+            case (ArgNamed(y), None)    => s"{$x = $y}"
+            case (ArgNamed(y), Some(t)) => s"{$x : $t = $y}"
+        s"(split $scrut ${cs
+            .map((_, x, ps, b) => s"| $x${if ps.isEmpty then "" else " "}${ps.map(showParam).mkString(" ")} => $b")
             .mkString(" ")})"
       case Lift(ty)      => s"^$ty"
       case Quote(tm)     => s"`$tm"

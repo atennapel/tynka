@@ -1466,6 +1466,38 @@ object Elaboration extends RetryPostponed:
           if io then VRigid(HPrim(Name("IO")), SApp(SId, vt, Expl)) else vt
         Infer0(Foreign(io, ety, ecode, eargs), rt, if io then VComp else vcv)
 
+      case S.Split(scrut, cs) =>
+        val (escrut, ty) = insertPi(infer1(scrut))
+        def go(
+            t: VTy,
+            cs: List[
+              (PosInfo, Bind, List[(Bind, S.ArgInfo, Option[S.Tm])], S.Tm)
+            ],
+            tm: Tm1
+        ): Infer =
+          if cs.isEmpty then Infer1(tm, t)
+          else
+            forceAll1(t) match
+              case VPi(_, Impl, pt, rt) =>
+                val m = freshMeta(pt)
+                go(rt(ctx.eval1(m)), cs, App1(tm, m, Impl))
+              case VPi(x, _, pt, rt) =>
+                cs.indexWhere((_, y, _, _) => x == y) match
+                  case -1 => error(s"")
+                  case i =>
+                    val (pos, _, ps, b) = cs(i)
+                    val rem = cs.patch(i, Nil, 1)
+                    val lams = ps.foldRight(b) { case ((t, i, ot), b) =>
+                      S.Lam(t, i, ot, b)
+                    }
+                    val elams = check1(lams, pt)(ctx.enter(pos))
+                    go(rt(ctx.eval1(elams)), rem, App1(tm, elams, Expl))
+              case _ =>
+                if cs.nonEmpty then
+                  error(s"split case not used")(ctx.enter(cs.head._1))
+                Infer1(tm, t)
+        go(ty, cs, escrut)
+
   // elaboration
   def elaborate(d: S.Def): Unit =
     debug(s"elaborate $d")

@@ -31,6 +31,7 @@ object Parser:
         "newtype",
         "con",
         "match",
+        "split",
         "Meta",
         "Ty",
         "if",
@@ -136,7 +137,7 @@ object Parser:
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
-      ) <|> let <|> lam <|> doP <|> matchP <|> ifP <|> foreignP <|>
+      ) <|> let <|> lam <|> doP <|> matchP <|> splitP <|> ifP <|> foreignP <|>
         precedence[Tm](app)(
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
         )
@@ -220,6 +221,31 @@ object Parser:
 
     private lazy val matchP: Parsley[Tm] = positioned(
       ("match" *> sepBy(tm, ",") <~> many(clauseP)).map(Match.apply)
+    )
+
+    private lazy val splitPatP
+        : Parsley[(Bind, List[(Bind, ArgInfo, Option[Tm])])] =
+      attempt(
+        precedence[(Bind, List[Bind])](bind.map(x => (x, Nil)))(
+          defaultOps(
+            (op, t) => (DoBind(op), List(t._1)),
+            (op, l, r) => (DoBind(op), List(l._1, r._1))
+          )*
+        )
+      ).map((x, ps) =>
+        (x, ps.map(a => (a, ArgIcit(Expl), None)))
+      ) <|> (bind <~> many(lamParam)).map((x, ps) =>
+        (x, ps.flatMap((xs, i, t) => xs.map(x => (x, i, t))))
+      )
+
+    private lazy val splitClauseP
+        : Parsley[(PosInfo, Bind, List[(Bind, ArgInfo, Option[Tm])], Tm)] =
+      ("|" *> pos <~> splitPatP <~> "=>" *> tm).map {
+        case ((pos, (c, ps)), b) => (pos, c, ps, b)
+      }
+
+    private lazy val splitP: Parsley[Tm] = positioned(
+      ("split" *> tm <~> many(splitClauseP)).map(Split.apply)
     )
 
     private lazy val ifP: Parsley[Tm] =
@@ -344,7 +370,7 @@ object Parser:
 
     private lazy val lam: Parsley[Tm] =
       positioned(
-        ("\\" *> many(lamParam) <~> "=>" *> tm).map(lamFromLamParams _)
+        ("\\" *> many(lamParam) <~> "=>" *> tm).map(lamFromLamParams)
       )
 
     private lazy val app: Parsley[Tm] =
@@ -356,7 +382,9 @@ object Parser:
       )
 
     private lazy val appAtom: Parsley[Tm] = positioned(
-      (projAtom <~> many(arg) <~> option(lam <|> doP <|> matchP <|> ifP))
+      (projAtom <~> many(arg) <~> option(
+        lam <|> doP <|> matchP <|> splitP <|> ifP
+      ))
         .map { case ((fn, args), opt) =>
           (args.flatten ++ opt.map(t => (t, ArgIcit(Expl))))
             .foldLeft(fn) { case (fn, (arg, i)) => App(fn, arg, i) }
