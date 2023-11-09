@@ -10,13 +10,17 @@ import scala.annotation.tailrec
 
 object Evaluation:
   // closures
-  extension (c: Clos[Tm1])
-    inline def apply(v: Val1): Val1 = eval1(c.tm)(E1(c.env, v))
-    inline def apply(v: Val0): Val1 = eval1(c.tm)(E0(c.env, v))
-
-  extension (c: Clos[Tm0])
-    inline def apply(v: Val1): Val0 = eval0(c.tm)(E1(c.env, v))
-    inline def apply(v: Val0): Val0 = eval0(c.tm)(E0(c.env, v))
+  extension (c: Clos0)
+    inline def apply(v: Val0): Val0 = c match
+      case CClos0(env, tm) => eval0(tm)(E0(env, v))
+      case CFun0(f)        => f(v)
+  extension (c: Clos1)
+    inline def apply(v: Val1): Val1 = c match
+      case CClos1(env, tm) => eval1(tm)(E1(env, v))
+      case CFun1(f)        => f(v)
+    inline def apply(v: Val0): Val1 = c match
+      case CClos1(env, tm) => eval1(tm)(E0(env, v))
+      case CFun1(_)        => impossible()
 
   // evaluation
   @tailrec
@@ -75,10 +79,33 @@ object Evaluation:
       VUnfold(h, SMetaApp(sp, a), () => vmetaapp(v(), a))
     case _ => impossible()
 
+  def vprimelim(
+      x: Name,
+      scrut: Val1,
+      ix: Int,
+      i: Icit,
+      as: List[(Val1, Icit)]
+  ): Val1 = (x.expose, scrut) match
+    case ("elimRep", VPrim1(Name("BoolRep")))   => as(1)._1
+    case ("elimRep", VPrim1(Name("CharRep")))   => as(2)._1
+    case ("elimRep", VPrim1(Name("ByteRep")))   => as(3)._1
+    case ("elimRep", VPrim1(Name("ShortRep")))  => as(4)._1
+    case ("elimRep", VPrim1(Name("IntRep")))    => as(5)._1
+    case ("elimRep", VPrim1(Name("LongRep")))   => as(6)._1
+    case ("elimRep", VPrim1(Name("FloatRep")))  => as(7)._1
+    case ("elimRep", VPrim1(Name("DoubleRep"))) => as(8)._1
+
+    case (_, VFlex(id, sp)) => VFlex(id, SPrim(sp, ix, i, x, as))
+    case (_, VRigid(h, sp)) => VRigid(h, SPrim(sp, ix, i, x, as))
+    case (_, VUnfold(h, sp, v)) =>
+      VUnfold(h, SPrim(sp, ix, i, x, as), () => vprimelim(x, v(), ix, i, as))
+    case _ => impossible()
+
   def vspine(v: Val1, sp: Spine): Val1 = sp match
-    case SId             => v
-    case SApp(sp, a, i)  => vapp1(vspine(v, sp), a, i)
-    case SMetaApp(sp, a) => vmetaapp(vspine(v, sp), a)
+    case SId                     => v
+    case SApp(sp, a, i)          => vapp1(vspine(v, sp), a, i)
+    case SMetaApp(sp, a)         => vmetaapp(vspine(v, sp), a)
+    case SPrim(sp, ix, i, x, as) => vprimelim(x, vspine(v, sp), ix, i, as)
 
   def vappPruning(v: Val1, p: Pruning)(implicit env: Env): Val1 =
     (env, p) match
@@ -99,10 +126,10 @@ object Evaluation:
       case IntLit(v)    => VIntLit(v)
       case StringLit(v) => VStringLit(v)
       case Let0(x, ty, v, b) =>
-        VLet0(x, eval1(ty), eval0(v), Clos(b))
+        VLet0(x, eval1(ty), eval0(v), Clos0(b))
       case LetRec(x, ty, v, b) =>
-        VLetRec(x, eval1(ty), Clos(v), Clos(b))
-      case Lam0(x, ty, b)  => VLam0(x, eval1(ty), Clos(b))
+        VLetRec(x, eval1(ty), Clos0(v), Clos0(b))
+      case Lam0(x, ty, b)  => VLam0(x, eval1(ty), Clos0(b))
       case App0(f, a)      => VApp0(eval0(f), eval0(a))
       case Con(x, t, args) => VCon(x, eval1(t), args.map(eval0))
       case Match(scrut, t, c, ps, b, o) =>
@@ -114,16 +141,104 @@ object Evaluation:
       case Wk10(t) => eval0(t)(env.wk1)
       case Wk00(t) => eval0(t)(env.wk0)
 
+  def vprim1(x: Name): Val1 = x.expose match
+    case "elimRep" =>
+      val rep = VPrim1(Name("Rep"))
+      vlam1(
+        "P",
+        vfun1(rep, VU1),
+        p =>
+          vlam1(
+            "rep",
+            rep,
+            rep =>
+              vlam1(
+                "BoolRep",
+                vapp1(p, VPrim1(Name("BoolRep")), Expl),
+                boolRep =>
+                  vlam1(
+                    "CharRep",
+                    vapp1(p, VPrim1(Name("CharRep")), Expl),
+                    charRep =>
+                      vlam1(
+                        "ByteRep",
+                        vapp1(p, VPrim1(Name("ByteRep")), Expl),
+                        byteRep =>
+                          vlam1(
+                            "ShortRep",
+                            vapp1(p, VPrim1(Name("ShortRep")), Expl),
+                            shortRep =>
+                              vlam1(
+                                "IntRep",
+                                vapp1(
+                                  p,
+                                  VPrim1(Name("IntRep")),
+                                  Expl
+                                ),
+                                intRep =>
+                                  vlam1(
+                                    "LongRep",
+                                    vapp1(
+                                      p,
+                                      VPrim1(Name("LongRep")),
+                                      Expl
+                                    ),
+                                    longRep =>
+                                      vlam1(
+                                        "FloatRep",
+                                        vapp1(
+                                          p,
+                                          VPrim1(Name("FloatRep")),
+                                          Expl
+                                        ),
+                                        floatRep =>
+                                          vlam1(
+                                            "DoubleRep",
+                                            vapp1(
+                                              p,
+                                              VPrim1(Name("DoubleRep")),
+                                              Expl
+                                            ),
+                                            doubleRep =>
+                                              vprimelim(
+                                                x,
+                                                rep,
+                                                1,
+                                                Expl,
+                                                List(
+                                                  (p, Expl),
+                                                  (boolRep, Expl),
+                                                  (charRep, Expl),
+                                                  (byteRep, Expl),
+                                                  (shortRep, Expl),
+                                                  (intRep, Expl),
+                                                  (longRep, Expl),
+                                                  (floatRep, Expl),
+                                                  (longRep, Expl)
+                                                )
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+    case _ => VPrim1(x)
+
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
       case Var1(ix)             => vvar1(ix)
       case Global1(x)           => vglobal1(x)
-      case Prim1(x)             => VPrim1(x)
+      case Prim1(x)             => vprim1(x)
       case Let1(_, _, v, b)     => eval1(b)(E1(env, eval1(v)))
       case U0(cv)               => VU0(eval1(cv))
       case U1                   => VU1
-      case Pi(x, i, ty, b)      => VPi(x, i, eval1(ty), Clos(b))
-      case Lam1(x, i, ty, b)    => VLam1(x, i, eval1(ty), Clos(b))
+      case Pi(x, i, ty, b)      => VPi(x, i, eval1(ty), Clos1(b))
+      case Lam1(x, i, ty, b)    => VLam1(x, i, eval1(ty), Clos1(b))
       case App1(f, a, i)        => vapp1(eval1(f), eval1(a), i)
       case TCon(x)              => VTCon(x)
       case Fun(l, p, cv, r)     => VFun(eval1(l), eval1(p), eval1(cv), eval1(r))
@@ -136,8 +251,8 @@ object Evaluation:
       case Wk01(tm)             => eval1(tm)(env.wk0)
       case Wk11(tm)             => eval1(tm)(env.wk1)
       case Meta(id)             => vmeta(id)
-      case MetaPi(m, t, b)      => VMetaPi(m, eval1(t), Clos(b))
-      case MetaLam(m, b)        => VMetaLam(m, Clos(b))
+      case MetaPi(m, t, b)      => VMetaPi(m, eval1(t), Clos1(b))
+      case MetaLam(m, b)        => VMetaLam(m, Clos1(b))
       case MetaApp(f, Right(a)) => vmetaapp(eval1(f), Right(eval1(a)))
       case MetaApp(f, Left(a))  => vmetaapp(eval1(f), Left(eval0(a)))
       case PostponedCheck1(id)  => vpostponed(id)
@@ -219,13 +334,18 @@ object Evaluation:
         case Left(v)  => Left(quote0(v, q))
         case Right(v) => Right(quote1(v, q))
       MetaApp(quote1(h, sp, q), a)
+    case SPrim(sp, ix, i, x, as) =>
+      val args =
+        as.map((v, i) => (quote1(v, q), i))
+          .patch(ix, List((quote1(h, sp, q), i)), 0)
+      args.foldLeft(Prim1(x)) { case (f, (a, i)) => App1(f, a, i) }
 
   def quote1(v: Val1, q: QuoteOption)(implicit lvl: Lvl): Tm1 =
     inline def go0(v: Val0): Tm0 = quote0(v, q)
     inline def go1(v: Val1): Tm1 = quote1(v, q)
     inline def goSp(h: Tm1, sp: Spine): Tm1 = quote1(h, sp, q)
-    inline def goClos(c: Clos[Tm1]): Tm1 = quote1(c(VVar1(lvl)), q)(lvl + 1)
-    inline def goClos0(c: Clos[Tm1]): Tm1 = quote1(c(VVar0(lvl)), q)(lvl + 1)
+    inline def goClos(c: Clos1): Tm1 = quote1(c(VVar1(lvl)), q)(lvl + 1)
+    inline def goClos0(c: Clos1): Tm1 = quote1(c(VVar0(lvl)), q)(lvl + 1)
     inline def force(v: Val1): Val1 = q match
       case UnfoldAll   => forceAll1(v)
       case UnfoldMetas => forceMetas1(v)
@@ -257,7 +377,7 @@ object Evaluation:
   def quote0(v: Val0, q: QuoteOption)(implicit lvl: Lvl): Tm0 =
     inline def go0(v: Val0): Tm0 = quote0(v, q)
     inline def go1(v: Val1): Tm1 = quote1(v, q)
-    inline def goClos(c: Clos[Tm0]): Tm0 = quote0(c(VVar0(lvl)), q)(lvl + 1)
+    inline def goClos(c: Clos0): Tm0 = quote0(c(VVar0(lvl)), q)(lvl + 1)
     inline def force(v: Val0): Val0 = q match
       case UnfoldAll   => forceAll0(v)
       case UnfoldMetas => forceMetas0(v)

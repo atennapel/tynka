@@ -6,9 +6,19 @@ import Syntax as S
 import scala.annotation.tailrec
 
 object Value:
-  final case class Clos[A](env: Env, tm: A)
-  object Clos:
-    def apply[A](tm: A)(implicit env: Env): Clos[A] = Clos(env, tm)
+  enum Clos0:
+    case CClos0(env: Env, tm: S.Tm0)
+    case CFun0(fn: Val0 => Val0)
+  export Clos0.*
+  object Clos0:
+    def apply(tm: S.Tm0)(implicit env: Env): Clos0 = CClos0(env, tm)
+
+  enum Clos1:
+    case CClos1(env: Env, tm: S.Tm1)
+    case CFun1(fn: Val1 => Val1)
+  export Clos1.*
+  object Clos1:
+    def apply(tm: S.Tm1)(implicit env: Env): Clos1 = CClos1(env, tm)
 
   enum Env:
     case EEmpty
@@ -46,21 +56,30 @@ object Value:
     case SId
     case SApp(sp: Spine, arg: Val1, icit: Icit)
     case SMetaApp(sp: Spine, arg: Either[Val0, Val1])
+    case SPrim(
+        sp: Spine,
+        ix: Int,
+        i: Icit,
+        name: Name,
+        args: List[(Val1, Icit)]
+    )
 
     def size: Int =
       @tailrec
       def go(acc: Int, sp: Spine): Int = sp match
-        case SId             => acc
-        case SApp(sp, _, _)  => go(acc + 1, sp)
-        case SMetaApp(sp, _) => go(acc + 1, sp)
+        case SId                   => acc
+        case SApp(sp, _, _)        => go(acc + 1, sp)
+        case SMetaApp(sp, _)       => go(acc + 1, sp)
+        case SPrim(sp, _, _, _, _) => go(acc + 1, sp)
       go(0, this)
 
     def reverse: Spine =
       @tailrec
       def go(acc: Spine, sp: Spine): Spine = sp match
-        case SId             => acc
-        case SApp(sp, v, i)  => go(SApp(acc, v, i), sp)
-        case SMetaApp(sp, v) => go(SMetaApp(acc, v), sp)
+        case SId                     => acc
+        case SApp(sp, v, i)          => go(SApp(acc, v, i), sp)
+        case SMetaApp(sp, v)         => go(SMetaApp(acc, v), sp)
+        case SPrim(sp, ix, i, x, as) => go(SPrim(acc, ix, i, x, as), sp)
       go(SId, this)
   export Spine.*
 
@@ -74,15 +93,15 @@ object Value:
         name: Name,
         ty: VTy,
         value: Val0,
-        body: Clos[S.Tm0]
+        body: Clos0
     )
     case VLetRec(
         name: Name,
         ty: VTy,
-        value: Clos[S.Tm0],
-        body: Clos[S.Tm0]
+        value: Clos0,
+        body: Clos0
     )
-    case VLam0(name: Bind, ty: VTy, body: Clos[S.Tm0])
+    case VLam0(name: Bind, ty: VTy, body: Clos0)
     case VApp0(fn: Val0, arg: Val0)
     case VCon(name: Name, ty: VTy, args: List[Val0])
     case VMatch(
@@ -114,11 +133,11 @@ object Value:
     case VFlex(id: MetaId, spine: Spine)
     case VUnfold(head: UHead, spine: Spine, value: () => Val1)
 
-    case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos[S.Ty])
-    case VLam1(name: Bind, icit: Icit, ty: VTy, body: Clos[S.Tm1])
+    case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos1)
+    case VLam1(name: Bind, icit: Icit, ty: VTy, body: Clos1)
 
-    case VMetaPi(meta: Boolean, ty: VTy, body: Clos[S.Ty])
-    case VMetaLam(meta: Boolean, body: Clos[S.Tm1])
+    case VMetaPi(meta: Boolean, ty: VTy, body: Clos1)
+    case VMetaLam(meta: Boolean, body: Clos1)
 
     case VU0(cv: VCV)
     case VU1
@@ -132,6 +151,12 @@ object Value:
 
     case VLabelLit(value: String)
   export Val1.*
+
+  private inline def bind(x: String): Bind =
+    if x == "_" then DontBind else DoBind(Name(x))
+  def vlam1(x: String, ty: VTy, b: Val1 => Val1): Val1 =
+    VLam1(bind(x), Expl, ty, CFun1(b))
+  def vfun1(ty: VTy, rt: VTy): Val1 = VPi(DontBind, Expl, ty, CFun1(_ => rt))
 
   object VVar1:
     def apply(lvl: Lvl): Val1 = VRigid(HVar(lvl), SId)

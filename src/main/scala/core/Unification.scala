@@ -97,6 +97,7 @@ class Unification(retryPostponed: RetryPostponed):
         case SMetaApp(sp, Right(v)) =>
           val data = go(sp)
           invertVal1(v, VVar1(data._1), Expl, data)
+        case SPrim(_, _, _, _, _) => throw UnifyError("failed to invert")
     val (dom, _, sub, pr, isLinear) = go(sp)
     (PSub(None, dom, lvl, sub), if isLinear then None else Some(pr))
 
@@ -203,6 +204,7 @@ class Unification(retryPostponed: RetryPostponed):
               status match
                 case NeedsPruning => throw UnifyError("failed to prune")
                 case _ => (Some(PruneMeta0(psubst0(t))) :: sp2, OKNonRenaming)
+        case SPrim(_, _, _, _, _) => throw UnifyError(s"failed to prune")
     val (sp2, status) = go(sp)
     val m2 = status match
       case OKRenaming    => m
@@ -227,7 +229,7 @@ class Unification(retryPostponed: RetryPostponed):
   private def psubst0(v: Val0)(implicit psub: PSub): Tm0 =
     inline def go0(v: Val0) = psubst0(v)
     inline def go1(v: Val1) = psubst1(v)
-    inline def goClos(c: Clos[Tm0]) = psubst0(c(VVar0(psub.cod)))(psub.lift0)
+    inline def goClos(c: Clos0) = psubst0(c(VVar0(psub.cod)))(psub.lift0)
     forceMetas0(v) match
       case VVar0(x) =>
         psub.sub.get(x.expose) match
@@ -260,13 +262,18 @@ class Unification(retryPostponed: RetryPostponed):
         case Left(v)  => Left(psubst0(v))
         case Right(v) => Right(psubst1(v))
       MetaApp(psubstSp(h, sp), a)
+    case SPrim(sp, ix, i, x, as) =>
+      val args =
+        as.map((v, i) => (psubst1(v), i))
+          .patch(ix, List((psubstSp(h, sp), i)), 0)
+      args.foldLeft(Prim1(x)) { case (f, (a, i)) => App1(f, a, i) }
 
   private def psubst1(v: Val1)(implicit psub: PSub): Tm1 =
     inline def go0(v: Val0) = psubst0(v)
     inline def go1(v: Val1) = psubst1(v)
     inline def goSp(h: Tm1, sp: Spine) = psubstSp(h, sp)
-    inline def goClos(c: Clos[Tm1]) = psubst1(c(VVar1(psub.cod)))(psub.lift1)
-    inline def goClos0(c: Clos[Tm1]) = psubst1(c(VVar0(psub.cod)))(psub.lift1)
+    inline def goClos(c: Clos1) = psubst1(c(VVar1(psub.cod)))(psub.lift1)
+    inline def goClos0(c: Clos1) = psubst1(c(VVar0(psub.cod)))(psub.lift1)
     forceMetas1(v) match
       case VRigid(HTCon(x), sp) => goSp(TCon(x), sp)
       case VRigid(HPrim(x), sp) => goSp(Prim1(x), sp)
@@ -320,7 +327,7 @@ class Unification(retryPostponed: RetryPostponed):
 
   // unification
   def unify0(a: Val0, b: Val0)(implicit lvl: Lvl): Unit =
-    inline def goClos(a: Clos[Tm0], b: Clos[Tm0]) =
+    inline def goClos(a: Clos0, b: Clos0) =
       unify0(a(VVar0(lvl)), b(VVar0(lvl)))(lvl + 1)
     debug(s"unify0 ${quote0(a, UnfoldMetas)} ~ ${quote0(b, UnfoldMetas)}")
     (forceMetas0(a), forceMetas0(b)) match
@@ -411,16 +418,19 @@ class Unification(retryPostponed: RetryPostponed):
         unify1(top1, sp1, top2, sp2); unify0(a1, a2)
       case (SMetaApp(sp1, Right(a1)), SMetaApp(sp2, Right(a2))) =>
         unify1(top1, sp1, top2, sp2); unify1(a1, a2)
+      case (SPrim(sp1, _, _, x1, as1), SPrim(sp2, _, _, x2, as2)) if x1 == x2 =>
+        unify1(top1, sp1, top2, sp2);
+        as1.zip(as2).foreach { case ((v1, _), (v2, _)) => unify1(v1, v2) }
       case _ =>
         throw UnifyError(
           s"spine mismatch ${quote1(top1, UnfoldNone)} ~ ${quote1(top2, UnfoldNone)}"
         )
 
   def unify1(a: Val1, b: Val1)(implicit lvl: Lvl): Unit =
-    inline def goClos(a: Clos[Tm1], b: Clos[Tm1]) =
+    inline def goClos(a: Clos1, b: Clos1) =
       val v = VVar1(lvl)
       unify1(a(v), b(v))(lvl + 1)
-    inline def goClos0(a: Clos[Tm1], b: Clos[Tm1]) =
+    inline def goClos0(a: Clos1, b: Clos1) =
       val v = VVar0(lvl)
       unify1(a(v), b(v))(lvl + 1)
     debug(s"unify1 ${quote1(a, UnfoldMetas)} ~ ${quote1(b, UnfoldMetas)}")

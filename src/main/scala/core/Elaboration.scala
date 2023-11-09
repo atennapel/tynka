@@ -112,7 +112,7 @@ object Elaboration extends RetryPostponed:
     implicit val l = ctx.lvl + 1
     val qbcv = quote1(bcv, UnfoldNone)
     val qb = quote1(b, UnfoldNone)
-    VPi(DontBind, Expl, VLift(VVal(lev), a), Clos(ctx.env, Lift(qbcv, qb)))
+    VPi(DontBind, Expl, VLift(VVal(lev), a), CClos1(ctx.env, Lift(qbcv, qb)))
 
   private def quoteFun(x: Bind, lev: VTy, a: VTy, t: Tm1)(implicit
       ctx: Ctx
@@ -264,7 +264,7 @@ object Elaboration extends RetryPostponed:
         val a2 = freshMeta(VU1)
         val va2 = ctx.eval1(a2)
         val x = DoBind(Name("x"))
-        val b2 = Clos(ctx.env, freshMeta(VU1)(ctx.bind1(x, a2, va2)))
+        val b2 = CClos1(ctx.env, freshMeta(VU1)(ctx.bind1(x, a2, va2)))
         val t2 = coe(t, a, VPi(x, i, va2, b2))
         val u2 = check1(u, ctx.eval1(a2))
         Infer1(App1(t2, u2, i), b2(ctx.eval1(u2)))
@@ -1007,7 +1007,7 @@ object Elaboration extends RetryPostponed:
             val ctx2 = ctx.bind1(x, ety, vty)
             val (eb, vrt) = insert(infer1(b)(ctx2))(ctx2)
             val ert = ctx2.quote1(vrt)
-            (Lam1(x, i, ety, eb), VPi(x, i, vty, Clos(ctx.env, ert)))
+            (Lam1(x, i, ety, eb), VPi(x, i, vty, CClos1(ctx.env, ert)))
 
       case tm =>
         infer(tm) match
@@ -1184,12 +1184,14 @@ object Elaboration extends RetryPostponed:
           )
         )
 
-      case S.Var(x @ Name("Rep"), _) => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("Rep"), _) =>
+        Infer1(Prim1(x), VU1)
       case S.Var(x @ Name("ByteRep"), _) =>
         Infer1(Prim1(x), VPrim1(Name("Rep")))
       case S.Var(x @ Name("ShortRep"), _) =>
         Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("IntRep"), _) => Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("IntRep"), _) =>
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
       case S.Var(x @ Name("LongRep"), _) =>
         Infer1(Prim1(x), VPrim1(Name("Rep")))
       case S.Var(x @ Name("FloatRep"), _) =>
@@ -1199,7 +1201,74 @@ object Elaboration extends RetryPostponed:
       case S.Var(x @ Name("CharRep"), _) =>
         Infer1(Prim1(x), VPrim1(Name("Rep")))
       case S.Var(x @ Name("BoolRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("BoolRep")))
+        Infer1(Prim1(x), VPrim1(Name("Rep")))
+      case S.Var(x @ Name("elimRep"), _) =>
+        /*
+          (P : Rep -> Meta) (rep : Rep)
+          (BoolRep : P BoolRep)
+          (CharRep : P CharRep)
+          (ByteRep : P ByteRep)
+          (ShortRep : P ShortRep)
+          (IntRep : P IntRep)
+          (LongRep : P LongRep)
+          (FloatRep : P FloatRep)
+          (DoubleRep : P DoubleRep)
+          -> P rep
+         */
+        val rep = Prim1(Name("Rep"))
+        inline def b(x: String): Bind = DoBind(Name(x))
+        val ty = Pi(
+          b("P"),
+          Expl,
+          Pi(DontBind, Expl, rep, U1),
+          Pi(
+            b("rep"),
+            Expl,
+            rep,
+            Pi(
+              b("BoolRep"),
+              Expl,
+              App1(Var1(mkIx(1)), Prim1(Name("BoolRep")), Expl),
+              Pi(
+                b("CharRep"),
+                Expl,
+                App1(Var1(mkIx(2)), Prim1(Name("CharRep")), Expl),
+                Pi(
+                  b("ByteRep"),
+                  Expl,
+                  App1(Var1(mkIx(3)), Prim1(Name("ByteRep")), Expl),
+                  Pi(
+                    b("ShortRep"),
+                    Expl,
+                    App1(Var1(mkIx(4)), Prim1(Name("ShortRep")), Expl),
+                    Pi(
+                      b("IntRep"),
+                      Expl,
+                      App1(Var1(mkIx(5)), Prim1(Name("IntRep")), Expl),
+                      Pi(
+                        b("LongRep"),
+                        Expl,
+                        App1(Var1(mkIx(6)), Prim1(Name("LongRep")), Expl),
+                        Pi(
+                          b("FloatRep"),
+                          Expl,
+                          App1(Var1(mkIx(7)), Prim1(Name("FloatRep")), Expl),
+                          Pi(
+                            b("DoubleRep"),
+                            Expl,
+                            App1(Var1(mkIx(8)), Prim1(Name("DoubleRep")), Expl),
+                            App1(Var1(mkIx(9)), Var1(mkIx(8)), Expl)
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+        Infer1(Prim1(x), ctx.eval1(ty))
 
       case S.Var(x @ Name("Levity"), _) => Infer1(Prim1(x), VU1)
       case S.Var(x @ Name("Boxed"), _) =>
@@ -1211,7 +1280,7 @@ object Elaboration extends RetryPostponed:
             DontBind,
             Expl,
             VPrim1(Name("Rep")),
-            Clos(EEmpty, Prim1(Name("Levity")))
+            CClos1(EEmpty, Prim1(Name("Levity")))
           )
         )
 
@@ -1222,7 +1291,7 @@ object Elaboration extends RetryPostponed:
             DontBind,
             Expl,
             VPrim1(Name("Levity")),
-            Clos(EEmpty, CV1)
+            CClos1(EEmpty, CV1)
           )
         )
 
@@ -1390,7 +1459,7 @@ object Elaboration extends RetryPostponed:
             val qrt = ctx2.quote1(vrt)
             Infer1(
               Lam1(x, Impl, ety, eb),
-              VPi(x, Impl, vty, Clos(ctx.env, qrt))
+              VPi(x, Impl, vty, CClos1(ctx.env, qrt))
             )
 
       case S.App(f, a, i) =>
