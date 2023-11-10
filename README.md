@@ -81,7 +81,6 @@ TODO:
   - [x] JVM interop calls
   - [x] IO monad
 - [x] Newtypes
-- [ ] Add elimCV
 - [ ] Clean up primitives
   - [ ] List of accepted primitives
   - [ ] Move primitive types to evaluation module

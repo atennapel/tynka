@@ -99,6 +99,10 @@ object Evaluation:
     case ("elimBoxity", VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl))) =>
       vapp1(as(2)._1, rep, Expl)
 
+    case ("elimCV", VPrim1(Name("Comp"))) => as(1)._1
+    case ("elimCV", VRigid(HPrim(Name("Val")), SApp(SId, boxity, Expl))) =>
+      vapp1(as(2)._1, boxity, Expl)
+
     case (_, VFlex(id, sp)) => VFlex(id, SPrim(sp, ix, i, x, as))
     case (_, VRigid(h, sp)) => VRigid(h, SPrim(sp, ix, i, x, as))
     case (_, VUnfold(h, sp, v)) =>
@@ -445,6 +449,44 @@ object Evaluation:
                         1,
                         Expl,
                         List((p, Expl), (boxed, Expl), (unboxed, Expl))
+                      )
+                  )
+              )
+          )
+      )
+    case "elimCV" =>
+      val tcv = VPrim1(Name("CV"))
+      vlam1(
+        "P",
+        vfun1(tcv, VU1),
+        p =>
+          vlam1(
+            "cv",
+            tcv,
+            cv =>
+              vlam1(
+                "Comp",
+                vapp1(p, VPrim1(Name("Comp")), Expl),
+                comp =>
+                  vlam1(
+                    "Val",
+                    vlam1(
+                      "boxity",
+                      VPrim1(Name("Boxity")),
+                      b =>
+                        vapp1(
+                          p,
+                          vapp1(VPrim1(Name("Val")), b, Expl),
+                          Expl
+                        )
+                    ),
+                    vval =>
+                      vprimelim(
+                        x,
+                        cv,
+                        1,
+                        Expl,
+                        List((p, Expl), (comp, Expl), (vval, Expl))
                       )
                   )
               )

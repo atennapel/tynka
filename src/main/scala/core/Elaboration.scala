@@ -1288,7 +1288,7 @@ object Elaboration extends RetryPostponed:
         val boxity = VPrim1(Name("Boxity"))
         val ty = vpi(
           "P",
-          boxity,
+          vfun1(boxity, VU1),
           p =>
             vpi(
               "boxity",
@@ -1317,6 +1317,8 @@ object Elaboration extends RetryPostponed:
         )
         Infer1(Prim1(x), ty)
 
+      // case S.Var(x @ Name("CV"), _)   => Infer1(Prim1(x), VU1)
+      // case S.Var(x @ Name("Comp"), _) => Infer1(Prim1(x), VPrim1(Name("CV")))
       case S.Var(x @ Name("Val"), _) =>
         Infer1(
           Prim1(x),
@@ -1327,6 +1329,39 @@ object Elaboration extends RetryPostponed:
             CClos1(EEmpty, CV1)
           )
         )
+      case S.Var(x @ Name("elimCV"), _) =>
+        // (P : CV -> Meta) (cv : CV) (Comp : P Comp) (Val : (boxity : Boxity) -> P (Val boxity)) -> P cv
+        val tcv = VPrim1(Name("CV"))
+        val ty = vpi(
+          "P",
+          vfun1(tcv, VU1),
+          p =>
+            vpi(
+              "cv",
+              tcv,
+              cv =>
+                vpi(
+                  "Comp",
+                  vapp1(p, VPrim1(Name("Comp")), Expl),
+                  _ =>
+                    vpi(
+                      "Val",
+                      vpi(
+                        "boxity",
+                        VPrim1(Name("Boxity")),
+                        boxity =>
+                          vapp1(
+                            p,
+                            vapp1(VPrim1(Name("Val")), boxity, Expl),
+                            Expl
+                          )
+                      ),
+                      _ => vapp1(p, cv, Expl)
+                    )
+                )
+            )
+        )
+        Infer1(Prim1(x), ty)
 
       case S.Var(x @ Name("Byte"), _) =>
         Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("ByteRep"))))))
