@@ -199,10 +199,10 @@ object Monomorphize:
     (vs, ty.rt, spine)
 
   // monomorphization
-  enum Levity:
+  enum Boxity:
     case Boxed
     case Unboxed(rep: Rep)
-  export Levity.*
+  export Boxity.*
   enum Rep:
     case ByteRep
     case ShortRep
@@ -215,12 +215,12 @@ object Monomorphize:
   export Rep.*
 
   type DatatypeCons = List[(Name, List[(Bind, Ty)])]
-  type Datatype = (Name, Levity, DatatypeCons)
+  type Datatype = (Name, Boxity, DatatypeCons)
   private val monoMap: mutable.Map[(Name, List[Ty]), Name] =
     mutable.Map.empty
   private val monoData: mutable.ArrayBuffer[Datatype] =
     mutable.ArrayBuffer.empty
-  private val monoLevities: mutable.Map[Name, Levity] =
+  private val monoLevities: mutable.Map[Name, Boxity] =
     mutable.Map.empty
 
   private inline def goTDef(t: S.Ty): TDef = goVTDef(eval1(t)(EEmpty))
@@ -255,9 +255,9 @@ object Monomorphize:
     case VTConApp(dx, _) => getGlobalData0(dx).newtype
     case _               => false
 
-  private inline def goLevity(t: S.Ty, env: Env = EEmpty): Levity =
-    goLevity(eval1(t)(env))
-  private def goLevity(t: VTy): Levity = forceAll1(t) match
+  private inline def goBoxity(t: S.Ty, env: Env = EEmpty): Boxity =
+    goBoxity(eval1(t)(env))
+  private def goBoxity(t: VTy): Boxity = forceAll1(t) match
     case VPrim1(Name("Boxed")) => Boxed
     case VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl)) =>
       Unboxed(goRep(rep))
@@ -273,7 +273,7 @@ object Monomorphize:
     case VPrim1(Name("BoolRep"))   => BoolRep
     case _                         => impossible()
 
-  private def getLevity(t: Ty): Levity = t match
+  private def getBoxity(t: Ty): Boxity = t match
     case TCon(dx)              => monoLevities(dx)
     case TPrim(Name("Byte"))   => Unboxed(ByteRep)
     case TPrim(Name("Short"))  => Unboxed(ShortRep)
@@ -294,7 +294,7 @@ object Monomorphize:
 
   private def goParamRep(t: VTy): Ty = forceAll1(t) match
     case VTConApp(dx, ps) =>
-      goLevity(getGlobalData0(dx).levity) match
+      goBoxity(getGlobalData0(dx).boxity) match
         case Unboxed(ByteRep)   => TPrim(Name("Byte"))
         case Unboxed(ShortRep)  => TPrim(Name("Short"))
         case Unboxed(IntRep)    => TPrim(Name("Int"))
@@ -343,9 +343,9 @@ object Monomorphize:
         monoMap += (dx, mps) -> x
         val info = getGlobalData0(dx)
         if info.newtype then impossible()
-        val levity = goLevity(eval1(info.levity)(EEmpty))
-        monoData += ((x, levity, monoCons(dx, ps)))
-        monoLevities += (x -> levity)
+        val boxity = goBoxity(eval1(info.boxity)(EEmpty))
+        monoData += ((x, boxity, monoCons(dx, ps)))
+        monoLevities += (x -> boxity)
         x
 
   private def monoCons(dx: Name, ps: List[VTy]): DatatypeCons =

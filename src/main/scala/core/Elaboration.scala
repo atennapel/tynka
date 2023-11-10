@@ -188,7 +188,7 @@ object Elaboration extends RetryPostponed:
 
         case (pi @ VPi(x, Expl, a, b), VLift(cv, a2)) =>
           unify1(cv, VComp)
-          val lev = ctx.eval1(freshMeta(VLevity))
+          val lev = ctx.eval1(freshMeta(VBoxity))
           val a1 = ctx.eval1(freshMeta(VU0(VVal(lev))))
           val a2cv = freshCV()
           val va2cv = ctx.eval1(a2cv)
@@ -198,7 +198,7 @@ object Elaboration extends RetryPostponed:
           go(t, pi, VLift(VComp, fun))
         case (VLift(cv, a), pi @ VPi(x, Expl, t1, t2)) =>
           unify1(cv, VComp)
-          val lev = ctx.eval1(freshMeta(VLevity))
+          val lev = ctx.eval1(freshMeta(VBoxity))
           val a1 = ctx.eval1(freshMeta(VU0(VVal(lev))))
           val a2cv = freshCV()
           val va2cv = ctx.eval1(a2cv)
@@ -222,7 +222,7 @@ object Elaboration extends RetryPostponed:
       case VFun(l, a, bcv, b) => (l, a, bcv, b)
       case _ =>
         unify1(acv, VComp)
-        val lev = ctx.eval1(freshMeta(VLevity))
+        val lev = ctx.eval1(freshMeta(VBoxity))
         val a2 = ctx.eval1(freshMeta(VU0(VVal(lev))))
         val vbcv2 = ctx.eval1(freshCV())
         val b2 = ctx.eval1(freshMeta(VU0(vbcv2)))
@@ -439,7 +439,7 @@ object Elaboration extends RetryPostponed:
       case Left(p) => p
       case Right(ss) =>
         ss.map { scrut =>
-          val lev = ctx.eval1(freshMeta(VLevity))
+          val lev = ctx.eval1(freshMeta(VBoxity))
           val cv = VVal(lev)
           val vscrutty = ctx.eval1(freshMeta(VU0(cv)))
           val escrut = check0(scrut, vscrutty, cv)
@@ -848,7 +848,7 @@ object Elaboration extends RetryPostponed:
                   case DontBind => DoBind(Name(s"x${scrutCount - i}"))
                   case x        => x
                 val nctx = ctx.insert1(y, qt1)
-                val lev = ctx.eval1(freshMeta(VLevity))
+                val lev = ctx.eval1(freshMeta(VBoxity))
                 unify1(vscrutcv, VVal(lev))
                 go(
                   i - 1,
@@ -905,7 +905,7 @@ object Elaboration extends RetryPostponed:
 
       case (S.Pi(DontBind, Expl, t1, t2), VU0(cv)) =>
         unify1(cv, VComp)
-        val lev = freshMeta(VLevity)
+        val lev = freshMeta(VBoxity)
         val vlev = ctx.eval1(lev)
         val et1 = check1(t1, VU0(VVal(vlev)))
         val fcv = freshCV()
@@ -968,7 +968,7 @@ object Elaboration extends RetryPostponed:
           case S.ArgNamed(_)   => error(s"implicit lambda in Ty")
           case S.ArgIcit(Impl) => error(s"implicit lambda in Ty")
           case S.ArgIcit(Expl) =>
-            val alev = freshMeta(VLevity)
+            val alev = freshMeta(VBoxity)
             val acv = Val(alev)
             val avcv = ctx.eval1(acv)
             val ety = tyAnnot(mty, VU0(avcv))
@@ -1043,14 +1043,14 @@ object Elaboration extends RetryPostponed:
         )
 
       case S.Var(x @ Name("IO"), _) =>
-        // {l : Levity} -> Ty (Val l) -> Ty Comp
+        // {l : Boxity} -> Ty (Val l) -> Ty Comp
         Infer1(
           Prim1(x),
           ctx.eval1(
             Pi(
               DoBind(Name("l")),
               Impl,
-              Prim1(Name("Levity")),
+              Prim1(Name("Boxity")),
               Pi(
                 DontBind,
                 Expl,
@@ -1061,14 +1061,14 @@ object Elaboration extends RetryPostponed:
           )
         )
       case S.Var(rIO @ Name("returnIO"), _) =>
-        // {l : Levity} {A : Ty (Val l)} -> ^A -> ^(IO {l} A)
+        // {l : Boxity} {A : Ty (Val l)} -> ^A -> ^(IO {l} A)
         Infer1(
           Prim1(rIO),
           ctx.eval1(
             Pi(
               DoBind(Name("l")),
               Impl,
-              Prim1(Name("Levity")),
+              Prim1(Name("Boxity")),
               Pi(
                 DoBind(Name("A")),
                 Impl,
@@ -1094,7 +1094,7 @@ object Elaboration extends RetryPostponed:
           )
         )
       case S.Var(rRunIO @ Name("unsafePerformIO"), _) =>
-        // {l : Levity} {A : Ty (Val l)} -> ^(IO {l} A) -> ^A
+        // {l : Boxity} {A : Ty (Val l)} -> ^(IO {l} A) -> ^A
         inline def io(ixl: Int, ix: Int) =
           Lift(
             Comp,
@@ -1110,7 +1110,7 @@ object Elaboration extends RetryPostponed:
             Pi(
               DoBind(Name("l")),
               Impl,
-              Prim1(Name("Levity")),
+              Prim1(Name("Boxity")),
               Pi(
                 DoBind(Name("A")),
                 Impl,
@@ -1129,7 +1129,7 @@ object Elaboration extends RetryPostponed:
           )
         )
       case S.Var(rIO @ Name("bindIO"), _) =>
-        // {l1 l2 : Levity} {A : Ty (Val l1)} {B : Ty (Val l2)} -> ^(IO {l1} A) -> (^A -> ^(IO {l2} B)) -> ^(IO {l2} B)
+        // {l1 l2 : Boxity} {A : Ty (Val l1)} {B : Ty (Val l2)} -> ^(IO {l1} A) -> (^A -> ^(IO {l2} B)) -> ^(IO {l2} B)
         inline def io(lix: Int, ix: Int) =
           Lift(
             Comp,
@@ -1145,11 +1145,11 @@ object Elaboration extends RetryPostponed:
             Pi(
               DoBind(Name("l1")),
               Impl,
-              Prim1(Name("Levity")),
+              Prim1(Name("Boxity")),
               Pi(
                 DoBind(Name("l2")),
                 Impl,
-                Prim1(Name("Levity")),
+                Prim1(Name("Boxity")),
                 Pi(
                   DoBind(Name("A")),
                   Impl,
@@ -1270,9 +1270,9 @@ object Elaboration extends RetryPostponed:
         )
         Infer1(Prim1(x), ctx.eval1(ty))
 
-      case S.Var(x @ Name("Levity"), _) => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("Boxity"), _) => Infer1(Prim1(x), VU1)
       case S.Var(x @ Name("Boxed"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Levity")))
+        Infer1(Prim1(x), VPrim1(Name("Boxity")))
       case S.Var(x @ Name("Unboxed"), _) =>
         Infer1(
           Prim1(x),
@@ -1280,9 +1280,42 @@ object Elaboration extends RetryPostponed:
             DontBind,
             Expl,
             VPrim1(Name("Rep")),
-            CClos1(EEmpty, Prim1(Name("Levity")))
+            CClos1(EEmpty, Prim1(Name("Boxity")))
           )
         )
+      case S.Var(x @ Name("elimBoxity"), _) =>
+        // (P : Boxity -> Meta) (boxity : Boxity) (Boxed : P Boxed) (Unboxed : (rep : Rep) -> P (Unboxed rep)) -> P boxity
+        val boxity = VPrim1(Name("Boxity"))
+        val ty = vpi(
+          "P",
+          boxity,
+          p =>
+            vpi(
+              "boxity",
+              boxity,
+              b =>
+                vpi(
+                  "Boxed",
+                  vapp1(p, VPrim1(Name("Boxed")), Expl),
+                  _ =>
+                    vpi(
+                      "Unboxed",
+                      vpi(
+                        "rep",
+                        VPrim1(Name("Rep")),
+                        rep =>
+                          vapp1(
+                            p,
+                            vapp1(VPrim1(Name("Unboxed")), rep, Expl),
+                            Expl
+                          )
+                      ),
+                      _ => vapp1(p, b, Expl)
+                    )
+                )
+            )
+        )
+        Infer1(Prim1(x), ty)
 
       case S.Var(x @ Name("Val"), _) =>
         Infer1(
@@ -1290,7 +1323,7 @@ object Elaboration extends RetryPostponed:
           VPi(
             DontBind,
             Expl,
-            VPrim1(Name("Levity")),
+            VPrim1(Name("Boxity")),
             CClos1(EEmpty, CV1)
           )
         )
@@ -1310,14 +1343,14 @@ object Elaboration extends RetryPostponed:
       case S.Var(x @ Name("Char"), _) =>
         Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("CharRep"))))))
       case S.Var(x @ Name("Array"), _) =>
-        // {l : Levity} -> Ty (Val l) -> Ty (Val Boxed)
+        // {l : Boxity} -> Ty (Val l) -> Ty (Val Boxed)
         Infer1(
           Prim1(x),
           ctx.eval1(
             Pi(
               DoBind(Name("l")),
               Impl,
-              Prim1(Name("Levity")),
+              Prim1(Name("Boxity")),
               Pi(
                 DontBind,
                 Expl,
@@ -1431,7 +1464,7 @@ object Elaboration extends RetryPostponed:
         val (ea, vta) = insert(infer1(a))
         forceAll1(vta) match
           case VU0(cv) =>
-            val lev = freshMeta(VLevity)
+            val lev = freshMeta(VBoxity)
             val vlev = ctx.eval1(lev)
             unify1(cv, VVal(vlev))
             val bcv = freshCV()
@@ -1522,7 +1555,7 @@ object Elaboration extends RetryPostponed:
 
       case S.Foreign(io, ty, code, args) =>
         inline def freshVVal()(implicit ctx: Ctx): Val1 =
-          ctx.eval1(Val(freshMeta(VPrim1(Name("Levity")))))
+          ctx.eval1(Val(freshMeta(VPrim1(Name("Boxity")))))
         val vcv = freshVVal()
         val ety = check1(ty, VU0(vcv))
         val ecode = check1(code, VPrim1(Name("Label")))
@@ -1599,7 +1632,7 @@ object Elaboration extends RetryPostponed:
               error(
                 s"newtype datatype must have exactly 1 constructor with 1 parameter"
               )
-            Left(freshMeta(VLevity))
+            Left(freshMeta(VBoxity))
         setGlobal(
           GlobalData0(
             dx,
@@ -1613,7 +1646,7 @@ object Elaboration extends RetryPostponed:
           implicit val ctx: Ctx = innerctx
           // TODO: check for simple recursion
           val ecps = cps.map { (x, ty) =>
-            val qlev = lev.fold(m => m, _ => freshMeta(VLevity))
+            val qlev = lev.fold(m => m, _ => freshMeta(VBoxity))
             val vlev = ctx.eval1(qlev)
             (x, qlev, check1(ty, VU0(VVal(vlev))))
           }

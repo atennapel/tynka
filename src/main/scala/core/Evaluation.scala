@@ -95,6 +95,10 @@ object Evaluation:
     case ("elimRep", VPrim1(Name("FloatRep")))  => as(7)._1
     case ("elimRep", VPrim1(Name("DoubleRep"))) => as(8)._1
 
+    case ("elimBoxity", VPrim1(Name("Boxed"))) => as(1)._1
+    case ("elimBoxity", VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl))) =>
+      vapp1(as(2)._1, rep, Expl)
+
     case (_, VFlex(id, sp)) => VFlex(id, SPrim(sp, ix, i, x, as))
     case (_, VRigid(h, sp)) => VRigid(h, SPrim(sp, ix, i, x, as))
     case (_, VUnfold(h, sp, v)) =>
@@ -140,94 +144,6 @@ object Evaluation:
         VForeign(io, eval1(ty), eval1(code), args.map(eval0))
       case Wk10(t) => eval0(t)(env.wk1)
       case Wk00(t) => eval0(t)(env.wk0)
-
-  def vprim1(x: Name): Val1 = x.expose match
-    case "elimRep" =>
-      val rep = VPrim1(Name("Rep"))
-      vlam1(
-        "P",
-        vfun1(rep, VU1),
-        p =>
-          vlam1(
-            "rep",
-            rep,
-            rep =>
-              vlam1(
-                "BoolRep",
-                vapp1(p, VPrim1(Name("BoolRep")), Expl),
-                boolRep =>
-                  vlam1(
-                    "CharRep",
-                    vapp1(p, VPrim1(Name("CharRep")), Expl),
-                    charRep =>
-                      vlam1(
-                        "ByteRep",
-                        vapp1(p, VPrim1(Name("ByteRep")), Expl),
-                        byteRep =>
-                          vlam1(
-                            "ShortRep",
-                            vapp1(p, VPrim1(Name("ShortRep")), Expl),
-                            shortRep =>
-                              vlam1(
-                                "IntRep",
-                                vapp1(
-                                  p,
-                                  VPrim1(Name("IntRep")),
-                                  Expl
-                                ),
-                                intRep =>
-                                  vlam1(
-                                    "LongRep",
-                                    vapp1(
-                                      p,
-                                      VPrim1(Name("LongRep")),
-                                      Expl
-                                    ),
-                                    longRep =>
-                                      vlam1(
-                                        "FloatRep",
-                                        vapp1(
-                                          p,
-                                          VPrim1(Name("FloatRep")),
-                                          Expl
-                                        ),
-                                        floatRep =>
-                                          vlam1(
-                                            "DoubleRep",
-                                            vapp1(
-                                              p,
-                                              VPrim1(Name("DoubleRep")),
-                                              Expl
-                                            ),
-                                            doubleRep =>
-                                              vprimelim(
-                                                x,
-                                                rep,
-                                                1,
-                                                Expl,
-                                                List(
-                                                  (p, Expl),
-                                                  (boolRep, Expl),
-                                                  (charRep, Expl),
-                                                  (byteRep, Expl),
-                                                  (shortRep, Expl),
-                                                  (intRep, Expl),
-                                                  (longRep, Expl),
-                                                  (floatRep, Expl),
-                                                  (longRep, Expl)
-                                                )
-                                              )
-                                          )
-                                      )
-                                  )
-                              )
-                          )
-                      )
-                  )
-              )
-          )
-      )
-    case _ => VPrim1(x)
 
   def eval1(t: Tm1)(implicit env: Env): Val1 =
     t match
@@ -408,3 +324,130 @@ object Evaluation:
   def stage(tm: Tm0): Tm0 = quote0(eval0(tm)(EEmpty), UnfoldStage)(lvl0)
   def stageUnder(tm: Tm0, env: Env): Tm0 =
     quote0(eval0(tm)(env), UnfoldStage)(mkLvl(env.size))
+
+  // primitives
+  def vprim1(x: Name): Val1 = x.expose match
+    case "elimRep" =>
+      val rep = VPrim1(Name("Rep"))
+      vlam1(
+        "P",
+        vfun1(rep, VU1),
+        p =>
+          vlam1(
+            "rep",
+            rep,
+            rep =>
+              vlam1(
+                "BoolRep",
+                vapp1(p, VPrim1(Name("BoolRep")), Expl),
+                boolRep =>
+                  vlam1(
+                    "CharRep",
+                    vapp1(p, VPrim1(Name("CharRep")), Expl),
+                    charRep =>
+                      vlam1(
+                        "ByteRep",
+                        vapp1(p, VPrim1(Name("ByteRep")), Expl),
+                        byteRep =>
+                          vlam1(
+                            "ShortRep",
+                            vapp1(p, VPrim1(Name("ShortRep")), Expl),
+                            shortRep =>
+                              vlam1(
+                                "IntRep",
+                                vapp1(
+                                  p,
+                                  VPrim1(Name("IntRep")),
+                                  Expl
+                                ),
+                                intRep =>
+                                  vlam1(
+                                    "LongRep",
+                                    vapp1(
+                                      p,
+                                      VPrim1(Name("LongRep")),
+                                      Expl
+                                    ),
+                                    longRep =>
+                                      vlam1(
+                                        "FloatRep",
+                                        vapp1(
+                                          p,
+                                          VPrim1(Name("FloatRep")),
+                                          Expl
+                                        ),
+                                        floatRep =>
+                                          vlam1(
+                                            "DoubleRep",
+                                            vapp1(
+                                              p,
+                                              VPrim1(Name("DoubleRep")),
+                                              Expl
+                                            ),
+                                            doubleRep =>
+                                              vprimelim(
+                                                x,
+                                                rep,
+                                                1,
+                                                Expl,
+                                                List(
+                                                  (p, Expl),
+                                                  (boolRep, Expl),
+                                                  (charRep, Expl),
+                                                  (byteRep, Expl),
+                                                  (shortRep, Expl),
+                                                  (intRep, Expl),
+                                                  (longRep, Expl),
+                                                  (floatRep, Expl),
+                                                  (longRep, Expl)
+                                                )
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+    case "elimBoxity" =>
+      val boxity = VPrim1(Name("Boxity"))
+      vlam1(
+        "P",
+        boxity,
+        p =>
+          vlam1(
+            "boxity",
+            boxity,
+            b =>
+              vlam1(
+                "Boxed",
+                vapp1(p, VPrim1(Name("Boxed")), Expl),
+                boxed =>
+                  vlam1(
+                    "Unboxed",
+                    vlam1(
+                      "rep",
+                      VPrim1(Name("Rep")),
+                      rep =>
+                        vapp1(
+                          p,
+                          vapp1(VPrim1(Name("Unboxed")), rep, Expl),
+                          Expl
+                        )
+                    ),
+                    unboxed =>
+                      vprimelim(
+                        x,
+                        b,
+                        1,
+                        Expl,
+                        List((p, Expl), (boxed, Expl), (unboxed, Expl))
+                      )
+                  )
+              )
+          )
+      )
+    case _ => VPrim1(x)

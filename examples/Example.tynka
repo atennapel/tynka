@@ -1,6 +1,6 @@
-def VTy l = Ty (Val l)
+def VTy b = Ty (Val b)
 
-def recurse {l} {A : VTy l} {cv} {B : Ty cv} (x : A) (f : (A -> B) -> A -> B) : B =
+def recurse {b} {A : VTy b} {cv} {B : Ty cv} (x : A) (f : (A -> B) -> A -> B) : B =
   let rec go x := f go x; go x
 
 enum Void :=
@@ -11,26 +11,26 @@ def (!) (b : Bool) := if b then False else True
 def (&&) (a b : Bool) := if a then b else False
 def (||) (a b : Bool) := if a then True else b
 
-data Option {l} (A : VTy l) := None | Some A
+data Option {b} (A : VTy b) := None | Some A
 
-data List {l} (A : VTy l) := Nil | (::) (head : A) (tail : List A)
+data List {b} (A : VTy b) := Nil | (::) (head : A) (tail : List A)
 
-def head {lev} {A : VTy lev} (l : List A) : Option A =
+def head {b} {A : VTy b} (l : List A) : Option A =
   match l
   | Nil => None
   | hd :: _ => Some hd
 
-def tail {lev} {A : VTy lev} (l : List A) : Option (List A) =
+def tail {b} {A : VTy b} (l : List A) : Option (List A) =
   match l
   | Nil => None
   | _ :: tl => Some tl
 
-def foldr {lev} {A : VTy lev} {cv} {B : Ty cv} (n : B) (f : A -> B -> B) (l : List A) : B =
+def foldr {b} {A : VTy b} {cv} {B : Ty cv} (n : B) (f : A -> B -> B) (l : List A) : B =
   recurse l \go => match
   | Nil => n
   | hd :: tl => f hd (go tl)
 
-def foldl {l1 l2} {A : VTy l1} {B : VTy l2} (n : B) (f : B -> A -> B) (l : List A) : B =
+def foldl {b1 b2} {A : VTy b1} {B : VTy b2} (n : B) (f : B -> A -> B) (l : List A) : B =
   foldr (\acc => acc) (\hd go acc => go (f acc hd)) l n
 
 def Str = Class "java.lang.String"

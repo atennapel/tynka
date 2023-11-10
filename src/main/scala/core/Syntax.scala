@@ -76,7 +76,7 @@ object Syntax:
     case Lam1(name: Bind, icit: Icit, ty: Ty, body: Tm1)
     case App1(fn: Tm1, arg: Tm1, icit: Icit)
 
-    case Fun(levity: Ty, pty: Ty, cv: CV, rty: Ty)
+    case Fun(boxity: Ty, pty: Ty, cv: CV, rty: Ty)
     case CV1
     case Comp
     case Lift(cv: CV, ty: Ty)

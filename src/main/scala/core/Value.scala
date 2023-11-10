@@ -142,7 +142,7 @@ object Value:
     case VU0(cv: VCV)
     case VU1
 
-    case VFun(levity: VTy, pty: VTy, cv: VCV, rty: VTy)
+    case VFun(boxity: VTy, pty: VTy, cv: VCV, rty: VTy)
     case VCV1
     case VComp
     case VLift(cv: VCV, ty: VTy)
@@ -157,6 +157,8 @@ object Value:
   def vlam1(x: String, ty: VTy, b: Val1 => Val1): Val1 =
     VLam1(bind(x), Expl, ty, CFun1(b))
   def vfun1(ty: VTy, rt: VTy): Val1 = VPi(DontBind, Expl, ty, CFun1(_ => rt))
+  def vpi(x: String, ty: VTy, b: Val1 => Val1): Val1 =
+    VPi(bind(x), Expl, ty, CFun1(b))
 
   object VVar1:
     def apply(lvl: Lvl): Val1 = VRigid(HVar(lvl), SId)
@@ -191,10 +193,10 @@ object Value:
       case _ => None
 
   object VVal:
-    def apply(levity: Val1): Val1 =
-      VRigid(HPrim(Name("Val")), SApp(SId, levity, Expl))
+    def apply(boxity: Val1): Val1 =
+      VRigid(HPrim(Name("Val")), SApp(SId, boxity, Expl))
     def unapply(value: Val1): Option[Val1] = value match
-      case VRigid(HPrim(Name("Val")), SApp(SId, levity, Expl)) => Some(levity)
+      case VRigid(HPrim(Name("Val")), SApp(SId, boxity, Expl)) => Some(boxity)
       case _                                                   => None
 
   object VUnboxed:
@@ -204,5 +206,5 @@ object Value:
       case VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl)) => Some(rep)
       case _                                                    => None
 
-  val VLevity = VPrim1(Name("Levity"))
+  val VBoxity = VPrim1(Name("Boxity"))
   val VBoxed = VPrim1(Name("Boxed"))

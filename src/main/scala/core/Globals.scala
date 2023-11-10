@@ -31,7 +31,7 @@ object Globals:
         _name: Name,
         newtype: Boolean,
         params: List[(Icit, Bind, Ty)],
-        levity: Ty,
+        boxity: Ty,
         cons: List[Name]
     )
     case GlobalCon0(

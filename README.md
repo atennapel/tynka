@@ -3,6 +3,40 @@ The idea originates from this presentation by Andras Kovacs: https://www.youtube
 
 We have a language with two layers, one compile-time layer with full dependent types and a runtime-layer with a simply-typed language without higher-order functions or closures. We can get back higher-order functions and polymorphism in the compile-time layer, but after staging we get a very simple language that is easy to compile.
 
+```
+Runtime type hierarchy:
+
+Rep : Meta
+ByteRep : Rep
+ShortRep : Rep
+IntRep : Rep
+LongRep : Rep
+FloatRep : Rep
+DoubleRep : Rep
+CharRep : Rep
+BoolRep : Rep
+
+Boxity : Meta
+Boxed : Boxity
+Unboxed : Rep -> Boxity
+
+CV : Meta
+Comp : CV
+Val : Boxity -> CV
+
+Ty : CV -> Meta
+Fun : {b : Boxity} -> Ty (Val b) -> {cv : CV} -> Ty cv -> Ty Comp
+IO : {b : Boxity} -> Ty (Val b) -> Ty Comp
+
+Bool : Ty (Val (Unboxed BoolRep))
+Int : Ty (Val (Unboxed IntRep))
+etc.
+
+Array : {l : Boxity} -> Ty (Val l) -> Ty (Val Boxed)
+Enums : Ty (Val (Unboxed ...)) -- smallest Rep that fits all enum members
+ADTs : Ty (Val Boxed)
+```
+
 References:
 - https://github.com/AndrasKovacs/elaboration-zoo
 - https://github.com/AndrasKovacs/staged/tree/main/demo
@@ -47,6 +81,11 @@ TODO:
   - [x] JVM interop calls
   - [x] IO monad
 - [x] Newtypes
+- [ ] Add elimCV
+- [ ] Clean up primitives
+  - [ ] List of accepted primitives
+  - [ ] Move primitive types to evaluation module
+  - [ ] CV, Comp as primitives
 - [ ] Fix bug with postponed Universe metas
 - [ ] Boxing
 - [ ] Null
