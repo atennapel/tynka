@@ -86,8 +86,6 @@ object Pretty:
       case TCon(_)              => pretty1(tm)
       case U0(_)                => pretty1(tm)
       case U1                   => pretty1(tm)
-      case CV1                  => pretty1(tm)
-      case Comp                 => pretty1(tm)
       case Wk01(tm)             => prettyParen1(tm, app)(ns.tail)
       case Wk11(tm)             => prettyParen1(tm, app)(ns.tail)
       case _                    => s"(${pretty1(tm)})"
@@ -151,8 +149,6 @@ object Pretty:
 
     case U0(s) => s"Ty ${prettyParen1(s)}"
     case U1    => "Meta"
-    case CV1   => "CV"
-    case Comp  => "Comp"
 
     case Pi(_, _, _, _)   => prettyPi(tm)
     case Fun(_, _, _, _)  => prettyPi(tm)

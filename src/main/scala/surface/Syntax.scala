@@ -106,8 +106,6 @@ object Syntax:
 
     case U0(cv: Ty)
     case U1
-    case CV
-    case Comp
 
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
@@ -146,8 +144,6 @@ object Syntax:
       case StringLit(v)                   => s"\"$v\""
       case U0(cv)                         => s"(Ty $cv)"
       case U1                             => "Meta"
-      case CV                             => "CV"
-      case Comp                           => "Comp"
       case Pi(DontBind, Expl, ty, b)      => s"($ty -> $b)"
       case Pi(x, i, ty, b)                => s"(${i.wrap(s"$x : $ty")} -> $b)"
       case Lam(x, ArgIcit(Expl), None, b) => s"(\\$x => $b)"

@@ -143,14 +143,15 @@ object Value:
     case VU1
 
     case VFun(boxity: VTy, pty: VTy, cv: VCV, rty: VTy)
-    case VCV1
-    case VComp
     case VLift(cv: VCV, ty: VTy)
 
     case VQuote(tm: Val0)
 
     case VLabelLit(value: String)
   export Val1.*
+
+  val VCV1 = VPrim1(Name("CV"))
+  val VComp = VPrim1(Name("Comp"))
 
   private inline def bind(x: String): Bind =
     if x == "_" then DontBind else DoBind(Name(x))

@@ -84,7 +84,6 @@ TODO:
 - [ ] Clean up primitives
   - [ ] List of accepted primitives
   - [ ] Move primitive types to evaluation module
-  - [ ] CV, Comp as primitives
 - [ ] Fix bug with postponed Universe metas
 - [ ] Boxing
 - [ ] Null

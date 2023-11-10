@@ -77,8 +77,6 @@ object Syntax:
     case App1(fn: Tm1, arg: Tm1, icit: Icit)
 
     case Fun(boxity: Ty, pty: Ty, cv: CV, rty: Ty)
-    case CV1
-    case Comp
     case Lift(cv: CV, ty: Ty)
 
     case Quote(tm: Tm0)
@@ -117,8 +115,6 @@ object Syntax:
       case App1(fn, arg, i)     => s"($fn ${i.wrap(arg)})"
       case Fun(_, pty, _, rty)  => s"($pty -> $rty)"
       case TCon(x)              => s"$x"
-      case CV1                  => "CV"
-      case Comp                 => "Comp"
       case Lift(_, ty)          => s"^$ty"
       case Quote(tm)            => s"`$tm"
       case AppPruning(id, p)    => s"(?$id ...(${p.size}))"
@@ -147,4 +143,6 @@ object Syntax:
     case LBind1(locs: Locals, ty: Ty)
   export Locals.*
 
+  val CV1 = Prim1(Name("CV"))
   def Val(lev: Ty) = App1(Prim1(Name("Val")), lev, Expl)
+  val Comp = Prim1(Name("Comp"))

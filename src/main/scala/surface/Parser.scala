@@ -126,8 +126,6 @@ object Parser:
         <|> string.map(StringLit.apply)
         <|> ("Meta" #> U1)
         <|> ("Ty" *> projAtom).map(cv => U0(cv))
-        <|> ("CV" #> CV)
-        <|> ("Comp" #> Comp)
         <|> ident.map(x => Var(x))
     )
 

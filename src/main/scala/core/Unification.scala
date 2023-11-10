@@ -292,8 +292,6 @@ class Unification(retryPostponed: RetryPostponed):
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
       case VFun(l, pty, cv, rty) => Fun(go1(l), go1(pty), go1(cv), go1(rty))
-      case VCV1                  => CV1
-      case VComp                 => Comp
       case VLabelLit(v)          => LabelLit(v)
       case VLift(cv, ty)         => Lift(go1(cv), go1(ty))
       case VQuote(tm)            => quote(go0(tm))
@@ -449,8 +447,6 @@ class Unification(retryPostponed: RetryPostponed):
         unify1(ty1, ty2); goClos0(b1, b2)
       case (VFun(l1, t1, cv1, r1), VFun(l2, t2, cv2, r2)) =>
         unify1(l1, l2); unify1(t1, t2); unify1(cv1, cv2); unify1(r1, r2)
-      case (VCV1, VCV1)         => ()
-      case (VComp, VComp)       => ()
       case (VU1, VU1)           => ()
       case (VU0(cv1), VU0(cv2)) => unify1(cv1, cv2)
 

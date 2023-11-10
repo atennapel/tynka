@@ -162,8 +162,6 @@ object Evaluation:
       case App1(f, a, i)        => vapp1(eval1(f), eval1(a), i)
       case TCon(x)              => VTCon(x)
       case Fun(l, p, cv, r)     => VFun(eval1(l), eval1(p), eval1(cv), eval1(r))
-      case CV1                  => VCV1
-      case Comp                 => VComp
       case LabelLit(v)          => VLabelLit(v)
       case Lift(cv, ty)         => VLift(eval1(cv), eval1(ty))
       case Quote(tm)            => vquote(eval0(tm))
@@ -285,8 +283,6 @@ object Evaluation:
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
       case VFun(l, pty, cv, rty) => Fun(go1(l), go1(pty), go1(cv), go1(rty))
-      case VCV1                  => CV1
-      case VComp                 => Comp
       case VLabelLit(v)          => LabelLit(v)
       case VLift(cv, ty)         => Lift(go1(cv), go1(ty))
       case VQuote(tm)            => quote(go0(tm))

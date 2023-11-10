@@ -1317,8 +1317,8 @@ object Elaboration extends RetryPostponed:
         )
         Infer1(Prim1(x), ty)
 
-      // case S.Var(x @ Name("CV"), _)   => Infer1(Prim1(x), VU1)
-      // case S.Var(x @ Name("Comp"), _) => Infer1(Prim1(x), VPrim1(Name("CV")))
+      case S.Var(x @ Name("CV"), _)   => Infer1(Prim1(x), VU1)
+      case S.Var(x @ Name("Comp"), _) => Infer1(Prim1(x), VCV1)
       case S.Var(x @ Name("Val"), _) =>
         Infer1(
           Prim1(x),
@@ -1566,8 +1566,6 @@ object Elaboration extends RetryPostponed:
 
       case S.U0(cv) => Infer1(U0(check1(cv, VCV1)), VU1)
       case S.U1     => Infer1(U1, VU1)
-      case S.CV     => Infer1(CV1, VU1)
-      case S.Comp   => Infer1(Comp, VCV1)
 
       case S.Hole(_) => error("cannot infer hole")
 
