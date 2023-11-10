@@ -141,14 +141,14 @@ object Monomorphize:
           case S.Prim1(x) => (x.expose, Nil)
           case _          => impossible()
         flatten(tm) match
-          case ("returnIO", List(t, v)) =>
+          case ("returnIO", List(_, t, v)) =>
             val x = fresh()
             val rt = goTy(t)
             val ev = go1(v)
             (Lam(List((x, TDummy)), rt, ev), TDef(TDummy, rt))
-          case ("unsafePerformIO", List(t, v)) =>
+          case ("unsafePerformIO", List(_, t, v)) =>
             (App(go1(v), DummyValue), TDef(goTy(t)))
-          case ("bindIO", List(a, b, c, k)) =>
+          case ("bindIO", List(_, _, a, b, c, k)) =>
             // bindIO {a} {b} c k ~> \(w : Dummy) => let noinline r = c w; k r w
             val x = fresh()
             val t1 = goTy(a)
@@ -220,7 +220,7 @@ object Monomorphize:
     mutable.Map.empty
   private val monoData: mutable.ArrayBuffer[Datatype] =
     mutable.ArrayBuffer.empty
-  private val monoLevities: mutable.Map[Name, Boxity] =
+  private val monoBoxities: mutable.Map[Name, Boxity] =
     mutable.Map.empty
 
   private inline def goTDef(t: S.Ty): TDef = goVTDef(eval1(t)(EEmpty))
@@ -238,14 +238,15 @@ object Monomorphize:
         val con = info.cons.head
         goVTy(eval1(getGlobalCon0(con).params.head._3)(Env(ps.map(_._1))))
       else TCon(mono(dx, ps.map(_._1)))
-    case VPrim1(x @ Name("Byte"))                          => TPrim(x)
-    case VPrim1(x @ Name("Short"))                         => TPrim(x)
-    case VPrim1(x @ Name("Int"))                           => TPrim(x)
-    case VPrim1(x @ Name("Long"))                          => TPrim(x)
-    case VPrim1(x @ Name("Float"))                         => TPrim(x)
-    case VPrim1(x @ Name("Double"))                        => TPrim(x)
-    case VPrim1(x @ Name("Char"))                          => TPrim(x)
-    case VRigid(HPrim(Name("Array")), SApp(SId, ty, Expl)) => TArray(goVTy(ty))
+    case VPrim1(x @ Name("Byte"))   => TPrim(x)
+    case VPrim1(x @ Name("Short"))  => TPrim(x)
+    case VPrim1(x @ Name("Int"))    => TPrim(x)
+    case VPrim1(x @ Name("Long"))   => TPrim(x)
+    case VPrim1(x @ Name("Float"))  => TPrim(x)
+    case VPrim1(x @ Name("Double")) => TPrim(x)
+    case VPrim1(x @ Name("Char"))   => TPrim(x)
+    case VRigid(HPrim(Name("Array")), SApp(SApp(SId, _, Impl), ty, Expl)) =>
+      TArray(goVTy(ty))
     case VRigid(HPrim(Name("Class")), SApp(SId, l, Expl)) => TClass(goVLabel(l))
     case _                                                => TDummy
 
@@ -274,7 +275,7 @@ object Monomorphize:
     case _                         => impossible()
 
   private def getBoxity(t: Ty): Boxity = t match
-    case TCon(dx)              => monoLevities(dx)
+    case TCon(dx)              => monoBoxities(dx)
     case TPrim(Name("Byte"))   => Unboxed(ByteRep)
     case TPrim(Name("Short"))  => Unboxed(ShortRep)
     case TPrim(Name("Int"))    => Unboxed(IntRep)
@@ -345,7 +346,7 @@ object Monomorphize:
         if info.newtype then impossible()
         val boxity = goBoxity(eval1(info.boxity)(EEmpty))
         monoData += ((x, boxity, monoCons(dx, ps)))
-        monoLevities += (x -> boxity)
+        monoBoxities += (x -> boxity)
         x
 
   private def monoCons(dx: Name, ps: List[VTy]): DatatypeCons =

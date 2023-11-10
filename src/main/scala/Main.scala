@@ -4,14 +4,15 @@ import common.Debug.*
 import common.Ref
 import core.Syntax.*
 import core.Value.*
+import core.Primitives.*
 import core.Evaluation.*
 import core.Metas.*
 import core.Ctx
 import core.Globals.*
+import core.Pretty.*
 import core.Elaboration.{elaborate, ElaborateError}
 import ir.Compile.compile
 import jvmir.Generator.generate
-import core.Pretty.*
 
 import java.io.File
 import scala.io.Source

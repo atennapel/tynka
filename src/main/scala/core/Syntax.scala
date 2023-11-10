@@ -142,7 +142,3 @@ object Syntax:
     case LBind0(locs: Locals, ty: Ty, cv: CV)
     case LBind1(locs: Locals, ty: Ty)
   export Locals.*
-
-  val CV1 = Prim1(Name("CV"))
-  def Val(lev: Ty) = App1(Prim1(Name("Val")), lev, Expl)
-  val Comp = Prim1(Name("Comp"))

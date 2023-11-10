@@ -150,9 +150,6 @@ object Value:
     case VLabelLit(value: String)
   export Val1.*
 
-  val VCV1 = VPrim1(Name("CV"))
-  val VComp = VPrim1(Name("Comp"))
-
   private inline def bind(x: String): Bind =
     if x == "_" then DontBind else DoBind(Name(x))
   def vlam1(x: String, ty: VTy, b: Val1 => Val1): Val1 =
@@ -160,6 +157,8 @@ object Value:
   def vfun1(ty: VTy, rt: VTy): Val1 = VPi(DontBind, Expl, ty, CFun1(_ => rt))
   def vpi(x: String, ty: VTy, b: Val1 => Val1): Val1 =
     VPi(bind(x), Expl, ty, CFun1(b))
+  def vpiI(x: String, ty: VTy, b: Val1 => Val1): Val1 =
+    VPi(bind(x), Impl, ty, CFun1(b))
 
   object VVar1:
     def apply(lvl: Lvl): Val1 = VRigid(HVar(lvl), SId)
@@ -192,20 +191,3 @@ object Value:
           case _              => impossible()
         Some((name, go(sp).reverse))
       case _ => None
-
-  object VVal:
-    def apply(boxity: Val1): Val1 =
-      VRigid(HPrim(Name("Val")), SApp(SId, boxity, Expl))
-    def unapply(value: Val1): Option[Val1] = value match
-      case VRigid(HPrim(Name("Val")), SApp(SId, boxity, Expl)) => Some(boxity)
-      case _                                                   => None
-
-  object VUnboxed:
-    def apply(rep: Val1): Val1 =
-      VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl))
-    def unapply(value: Val1): Option[Val1] = value match
-      case VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl)) => Some(rep)
-      case _                                                    => None
-
-  val VBoxity = VPrim1(Name("Boxity"))
-  val VBoxed = VPrim1(Name("Boxed"))

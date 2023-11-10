@@ -5,6 +5,7 @@ import common.Debug.*
 import surface.Syntax as S
 import Syntax.*
 import Value.*
+import Primitives.*
 import Evaluation.*
 import Metas.*
 import Globals.*
@@ -597,12 +598,7 @@ object Elaboration extends RetryPostponed:
         case _ if clauses.tail.isEmpty =>
           error("non-exhaustive pattern match")(nctx)
         case Some(g) =>
-          val cond = checkMatchBody(
-            lets,
-            Right(g),
-            vbool,
-            VVal(VPrim1(Name("BoolRep")))
-          )(nctx)
+          val cond = checkMatchBody(lets, Right(g), vbool, VVal(VBoolRep))(nctx)
           val ifTrue = checkMatchBody(lets, body, vrty, vrcv)(nctx)
           val ifFalse = genMatch(clauses.tail, vrty, vrcv)
           return Guard(cond, ifTrue, ifFalse)
@@ -778,14 +774,8 @@ object Elaboration extends RetryPostponed:
       case S.Splice(t) => splice(check1(t, VLift(cv, ty)))
 
       case S.StringLit(v) =>
-        unify1(cv, VVal(VPrim1(Name("Boxed"))))
-        unify1(
-          ty,
-          VRigid(
-            HPrim(Name("Class")),
-            SApp(SId, VLabelLit("java.lang.String"), Expl)
-          )
-        )
+        unify1(cv, VVal(VBoxed))
+        unify1(ty, VString)
         StringLit(v)
 
       case tm =>
@@ -953,15 +943,7 @@ object Elaboration extends RetryPostponed:
     tm match
       case S.Pos(pos, tm) => infer0(tm)(ctx.enter(pos))
 
-      case S.StringLit(v) =>
-        (
-          StringLit(v),
-          VRigid(
-            HPrim(Name("Class")),
-            SApp(SId, VLabelLit("java.lang.String"), Expl)
-          ),
-          VVal(VPrim1(Name("Boxed")))
-        )
+      case S.StringLit(v) => (StringLit(v), VString, VVal(VBoxed))
 
       case S.Lam(x, i, mty, b) =>
         i match
@@ -1019,383 +1001,11 @@ object Elaboration extends RetryPostponed:
     tm match
       case S.Pos(pos, tm) => infer(tm)(ctx.enter(pos))
 
-      case S.IntLit(v) =>
-        Infer0(
-          IntLit(v),
-          VPrim1(Name("Int")),
-          VVal(VUnboxed(VPrim1(Name("IntRep"))))
-        )
-      case S.StringLit(v) => Infer1(LabelLit(v), VPrim1(Name("Label")))
+      case S.IntLit(v)    => Infer0(IntLit(v), VInt, VVal(VUnboxed(VIntRep)))
+      case S.StringLit(v) => Infer1(LabelLit(v), VLabel)
 
-      case S.Var(x @ Name("Label"), _) => Infer1(Prim1(x), VU1)
-      case S.Var(x @ Name("Class"), _) =>
-        // Label -> Ty (Val Boxed)
-        Infer1(
-          Prim1(x),
-          ctx.eval1(
-            Pi(
-              DontBind,
-              Expl,
-              Prim1(Name("Label")),
-              U0(Val(Prim1(Name("Boxed"))))
-            )
-          )
-        )
-
-      case S.Var(x @ Name("IO"), _) =>
-        // {l : Boxity} -> Ty (Val l) -> Ty Comp
-        Infer1(
-          Prim1(x),
-          ctx.eval1(
-            Pi(
-              DoBind(Name("l")),
-              Impl,
-              Prim1(Name("Boxity")),
-              Pi(
-                DontBind,
-                Expl,
-                U0(Val(Var1(mkIx(0)))),
-                U0(Comp)
-              )
-            )
-          )
-        )
-      case S.Var(rIO @ Name("returnIO"), _) =>
-        // {l : Boxity} {A : Ty (Val l)} -> ^A -> ^(IO {l} A)
-        Infer1(
-          Prim1(rIO),
-          ctx.eval1(
-            Pi(
-              DoBind(Name("l")),
-              Impl,
-              Prim1(Name("Boxity")),
-              Pi(
-                DoBind(Name("A")),
-                Impl,
-                U0(Val(Var1(mkIx(0)))),
-                Pi(
-                  DontBind,
-                  Expl,
-                  Lift(
-                    Val(Var1(mkIx(1))),
-                    Var1(ix0)
-                  ),
-                  Lift(
-                    Comp,
-                    App1(
-                      App1(Prim1(Name("IO")), Var1(mkIx(2)), Impl),
-                      Var1(mkIx(1)),
-                      Expl
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      case S.Var(rRunIO @ Name("unsafePerformIO"), _) =>
-        // {l : Boxity} {A : Ty (Val l)} -> ^(IO {l} A) -> ^A
-        inline def io(ixl: Int, ix: Int) =
-          Lift(
-            Comp,
-            App1(
-              App1(Prim1(Name("IO")), Var1(mkIx(ixl)), Impl),
-              Var1(mkIx(ix)),
-              Expl
-            )
-          )
-        Infer1(
-          Prim1(rRunIO),
-          ctx.eval1(
-            Pi(
-              DoBind(Name("l")),
-              Impl,
-              Prim1(Name("Boxity")),
-              Pi(
-                DoBind(Name("A")),
-                Impl,
-                U0(Val(Var1(mkIx(0)))),
-                Pi(
-                  DontBind,
-                  Expl,
-                  io(1, 0),
-                  Lift(
-                    Val(Var1(mkIx(2))),
-                    Var1(mkIx(1))
-                  )
-                )
-              )
-            )
-          )
-        )
-      case S.Var(rIO @ Name("bindIO"), _) =>
-        // {l1 l2 : Boxity} {A : Ty (Val l1)} {B : Ty (Val l2)} -> ^(IO {l1} A) -> (^A -> ^(IO {l2} B)) -> ^(IO {l2} B)
-        inline def io(lix: Int, ix: Int) =
-          Lift(
-            Comp,
-            App1(
-              App1(Prim1(Name("IO")), Var1(mkIx(lix)), Impl),
-              Var1(mkIx(ix)),
-              Expl
-            )
-          )
-        Infer1(
-          Prim1(rIO),
-          ctx.eval1(
-            Pi(
-              DoBind(Name("l1")),
-              Impl,
-              Prim1(Name("Boxity")),
-              Pi(
-                DoBind(Name("l2")),
-                Impl,
-                Prim1(Name("Boxity")),
-                Pi(
-                  DoBind(Name("A")),
-                  Impl,
-                  U0(Val(Var1(mkIx(1)))),
-                  Pi(
-                    DoBind(Name("B")),
-                    Impl,
-                    U0(Val(Var1(mkIx(1)))),
-                    Pi(
-                      DontBind,
-                      Expl,
-                      io(3, 1),
-                      Pi(
-                        DontBind,
-                        Expl,
-                        Pi(
-                          DontBind,
-                          Expl,
-                          Lift(
-                            Val(Var1(mkIx(4))),
-                            Var1(mkIx(2))
-                          ),
-                          io(4, 2)
-                        ),
-                        io(4, 2)
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-
-      case S.Var(x @ Name("Rep"), _) =>
-        Infer1(Prim1(x), VU1)
-      case S.Var(x @ Name("ByteRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("ShortRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("IntRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("LongRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("FloatRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("DoubleRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("CharRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("BoolRep"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Rep")))
-      case S.Var(x @ Name("elimRep"), _) =>
-        /*
-          (P : Rep -> Meta) (rep : Rep)
-          (BoolRep : P BoolRep)
-          (CharRep : P CharRep)
-          (ByteRep : P ByteRep)
-          (ShortRep : P ShortRep)
-          (IntRep : P IntRep)
-          (LongRep : P LongRep)
-          (FloatRep : P FloatRep)
-          (DoubleRep : P DoubleRep)
-          -> P rep
-         */
-        val rep = Prim1(Name("Rep"))
-        inline def b(x: String): Bind = DoBind(Name(x))
-        val ty = Pi(
-          b("P"),
-          Expl,
-          Pi(DontBind, Expl, rep, U1),
-          Pi(
-            b("rep"),
-            Expl,
-            rep,
-            Pi(
-              b("BoolRep"),
-              Expl,
-              App1(Var1(mkIx(1)), Prim1(Name("BoolRep")), Expl),
-              Pi(
-                b("CharRep"),
-                Expl,
-                App1(Var1(mkIx(2)), Prim1(Name("CharRep")), Expl),
-                Pi(
-                  b("ByteRep"),
-                  Expl,
-                  App1(Var1(mkIx(3)), Prim1(Name("ByteRep")), Expl),
-                  Pi(
-                    b("ShortRep"),
-                    Expl,
-                    App1(Var1(mkIx(4)), Prim1(Name("ShortRep")), Expl),
-                    Pi(
-                      b("IntRep"),
-                      Expl,
-                      App1(Var1(mkIx(5)), Prim1(Name("IntRep")), Expl),
-                      Pi(
-                        b("LongRep"),
-                        Expl,
-                        App1(Var1(mkIx(6)), Prim1(Name("LongRep")), Expl),
-                        Pi(
-                          b("FloatRep"),
-                          Expl,
-                          App1(Var1(mkIx(7)), Prim1(Name("FloatRep")), Expl),
-                          Pi(
-                            b("DoubleRep"),
-                            Expl,
-                            App1(Var1(mkIx(8)), Prim1(Name("DoubleRep")), Expl),
-                            App1(Var1(mkIx(9)), Var1(mkIx(8)), Expl)
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-        Infer1(Prim1(x), ctx.eval1(ty))
-
-      case S.Var(x @ Name("Boxity"), _) => Infer1(Prim1(x), VU1)
-      case S.Var(x @ Name("Boxed"), _) =>
-        Infer1(Prim1(x), VPrim1(Name("Boxity")))
-      case S.Var(x @ Name("Unboxed"), _) =>
-        Infer1(
-          Prim1(x),
-          VPi(
-            DontBind,
-            Expl,
-            VPrim1(Name("Rep")),
-            CClos1(EEmpty, Prim1(Name("Boxity")))
-          )
-        )
-      case S.Var(x @ Name("elimBoxity"), _) =>
-        // (P : Boxity -> Meta) (boxity : Boxity) (Boxed : P Boxed) (Unboxed : (rep : Rep) -> P (Unboxed rep)) -> P boxity
-        val boxity = VPrim1(Name("Boxity"))
-        val ty = vpi(
-          "P",
-          vfun1(boxity, VU1),
-          p =>
-            vpi(
-              "boxity",
-              boxity,
-              b =>
-                vpi(
-                  "Boxed",
-                  vapp1(p, VPrim1(Name("Boxed")), Expl),
-                  _ =>
-                    vpi(
-                      "Unboxed",
-                      vpi(
-                        "rep",
-                        VPrim1(Name("Rep")),
-                        rep =>
-                          vapp1(
-                            p,
-                            vapp1(VPrim1(Name("Unboxed")), rep, Expl),
-                            Expl
-                          )
-                      ),
-                      _ => vapp1(p, b, Expl)
-                    )
-                )
-            )
-        )
-        Infer1(Prim1(x), ty)
-
-      case S.Var(x @ Name("CV"), _)   => Infer1(Prim1(x), VU1)
-      case S.Var(x @ Name("Comp"), _) => Infer1(Prim1(x), VCV1)
-      case S.Var(x @ Name("Val"), _) =>
-        Infer1(
-          Prim1(x),
-          VPi(
-            DontBind,
-            Expl,
-            VPrim1(Name("Boxity")),
-            CClos1(EEmpty, CV1)
-          )
-        )
-      case S.Var(x @ Name("elimCV"), _) =>
-        // (P : CV -> Meta) (cv : CV) (Comp : P Comp) (Val : (boxity : Boxity) -> P (Val boxity)) -> P cv
-        val tcv = VPrim1(Name("CV"))
-        val ty = vpi(
-          "P",
-          vfun1(tcv, VU1),
-          p =>
-            vpi(
-              "cv",
-              tcv,
-              cv =>
-                vpi(
-                  "Comp",
-                  vapp1(p, VPrim1(Name("Comp")), Expl),
-                  _ =>
-                    vpi(
-                      "Val",
-                      vpi(
-                        "boxity",
-                        VPrim1(Name("Boxity")),
-                        boxity =>
-                          vapp1(
-                            p,
-                            vapp1(VPrim1(Name("Val")), boxity, Expl),
-                            Expl
-                          )
-                      ),
-                      _ => vapp1(p, cv, Expl)
-                    )
-                )
-            )
-        )
-        Infer1(Prim1(x), ty)
-
-      case S.Var(x @ Name("Byte"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("ByteRep"))))))
-      case S.Var(x @ Name("Short"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("ShortRep"))))))
-      case S.Var(x @ Name("Int"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("IntRep"))))))
-      case S.Var(x @ Name("Long"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("LongRep"))))))
-      case S.Var(x @ Name("Float"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("FloatRep"))))))
-      case S.Var(x @ Name("Double"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("DoubleRep"))))))
-      case S.Var(x @ Name("Char"), _) =>
-        Infer1(Prim1(x), VU0(VVal(VUnboxed(VPrim1(Name("CharRep"))))))
-      case S.Var(x @ Name("Array"), _) =>
-        // {l : Boxity} -> Ty (Val l) -> Ty (Val Boxed)
-        Infer1(
-          Prim1(x),
-          ctx.eval1(
-            Pi(
-              DoBind(Name("l")),
-              Impl,
-              Prim1(Name("Boxity")),
-              Pi(
-                DontBind,
-                Expl,
-                U0(Val(Var1(mkIx(0)))),
-                U0(Val(Prim1(Name("Boxed"))))
-              )
-            )
-          )
-        )
-
+      case S.Var(x, _) if allPrims.contains(x.expose) =>
+        Infer1(Prim1(x), primTypes(x.expose))
       case S.Var(x, _) =>
         ctx.lookup(x) match
           case Some(Name0(x, ty, cv)) =>
@@ -1587,18 +1197,16 @@ object Elaboration extends RetryPostponed:
         Infer0(etm, ty, cv)
 
       case S.Foreign(io, ty, code, args) =>
-        inline def freshVVal()(implicit ctx: Ctx): Val1 =
-          ctx.eval1(Val(freshMeta(VPrim1(Name("Boxity")))))
-        val vcv = freshVVal()
+        val vboxity = ctx.eval1(freshMeta(VBoxity))
+        val vcv = VVal(vboxity)
         val ety = check1(ty, VU0(vcv))
-        val ecode = check1(code, VPrim1(Name("Label")))
+        val ecode = check1(code, VLabel)
         val eargs = args.map { t =>
-          val cv = freshVVal()
+          val cv = ctx.eval1(Val(freshMeta(VBoxity)))
           check0(t, ctx.eval1(freshMeta(VU0(cv))), cv)
         }
         val vt = ctx.eval1(ety)
-        val rt =
-          if io then VRigid(HPrim(Name("IO")), SApp(SId, vt, Expl)) else vt
+        val rt = if io then VIO(vboxity, vt) else vt
         Infer0(Foreign(io, ety, ecode, eargs), rt, if io then VComp else vcv)
 
       case S.Split(scrut, cs) =>
@@ -1646,19 +1254,15 @@ object Elaboration extends RetryPostponed:
             (ctx.bind1(x, et, ctx.eval1(et)), (i, x, et) :: res)
         }
         val lev = k match
-          case S.SBoxed => Right(Prim1(Name("Boxed")))
+          case S.SBoxed => Right(Boxed)
           case S.SUnboxed =>
             if cs.exists(c => c.args.nonEmpty) then
               error(s"unboxed datatype constructors cannot have parameters")
             val lev = cs.size match
-              case n if n <= 2 =>
-                App1(Prim1(Name("Unboxed")), Prim1(Name("BoolRep")), Expl)
-              case n if n <= 128 =>
-                App1(Prim1(Name("Unboxed")), Prim1(Name("ByteRep")), Expl)
-              case n if n <= 32768 =>
-                App1(Prim1(Name("Unboxed")), Prim1(Name("ShortRep")), Expl)
-              case _ =>
-                App1(Prim1(Name("Unboxed")), Prim1(Name("IntRep")), Expl)
+              case n if n <= 2     => Unboxed(BoolRep)
+              case n if n <= 128   => Unboxed(ByteRep)
+              case n if n <= 32768 => Unboxed(ShortRep)
+              case _               => Unboxed(IntRep)
             Right(lev)
           case S.SNewtype =>
             if cs.size != 1 || cs.head.args.size != 1 then

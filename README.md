@@ -81,9 +81,7 @@ TODO:
   - [x] JVM interop calls
   - [x] IO monad
 - [x] Newtypes
-- [ ] Clean up primitives
-  - [ ] List of accepted primitives
-  - [ ] Move primitive types to evaluation module
+- [ ] Meta datatypes
 - [ ] Fix bug with postponed Universe metas
 - [ ] Boxing
 - [ ] Null
@@ -92,7 +90,6 @@ TODO:
 - [ ] Constant folding for primitives
 - [ ] Non-Int primitive literals
 - [ ] Recursive meta definitions (?)
-- [ ] Meta datatypes
 - [ ] Or-patterns
 - [ ] Pattern lambdas, lets and binds
 - [ ] Infer multi-match lambda

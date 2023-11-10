@@ -1,6 +1,7 @@
 package common
 
 import scala.annotation.{targetName, unused}
+import scala.collection.mutable
 
 object Common:
   def impossible(): Nothing = throw new Exception("impossible")
