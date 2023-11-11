@@ -82,6 +82,19 @@ object Evaluation:
       VUnfold(h, SMetaApp(sp, a), () => vmetaapp(v(), a))
     case _ => impossible()
 
+  def vproj(v: Val1, p: ProjType): Val1 = v match
+    case VPair(fst, snd) =>
+      p match
+        case Fst         => fst
+        case Snd         => snd
+        case Named(_, 0) => fst
+        case Named(x, i) => vproj(snd, Named(x, i - 1))
+    case VRigid(hd, sp) => VRigid(hd, SProj(sp, p))
+    case VFlex(hd, sp)  => VFlex(hd, SProj(sp, p))
+    case VUnfold(h, sp, v) =>
+      VUnfold(h, SProj(sp, p), () => vproj(v(), p))
+    case _ => impossible()
+
   val primTypes = getPrimTypes((f, a) => vappE(f, a), (f, a) => vappI(f, a))
   val primElims =
     getPrimEliminators((f, a) => vappE(f, a), (f, a) => vappI(f, a), vprimelim)
@@ -158,6 +171,7 @@ object Evaluation:
     case SId                     => v
     case SApp(sp, a, i)          => vapp1(vspine(v, sp), a, i)
     case SMetaApp(sp, a)         => vmetaapp(vspine(v, sp), a)
+    case SProj(sp, p)            => vproj(vspine(v, sp), p)
     case SPrim(sp, ix, i, x, as) => vprimelim(x, vspine(v, sp), ix, i, as)
 
   def vappPruning(v: Val1, p: Pruning)(implicit env: Env): Val1 =
@@ -205,6 +219,9 @@ object Evaluation:
       case Pi(x, i, ty, b)      => VPi(x, i, eval1(ty), Clos1(b))
       case Lam1(x, i, ty, b)    => VLam1(x, i, eval1(ty), Clos1(b))
       case App1(f, a, i)        => vapp1(eval1(f), eval1(a), i)
+      case Sigma(x, t, b)       => VSigma(x, eval1(t), Clos1(b))
+      case Pair(a, b)           => VPair(eval1(a), eval1(b))
+      case Proj(t, p)           => vproj(eval1(t), p)
       case TCon(x)              => VTCon(x)
       case Fun(l, p, cv, r)     => VFun(eval1(l), eval1(p), eval1(cv), eval1(r))
       case LabelLit(v)          => VLabelLit(v)
@@ -292,6 +309,7 @@ object Evaluation:
   ): Tm1 = sp match
     case SId            => h
     case SApp(sp, v, i) => App1(quote1(h, sp, q), quote1(v, q), i)
+    case SProj(sp, p)   => Proj(quote1(h, sp, q), p)
     case SMetaApp(sp, v) =>
       val a = v match
         case Left(v)  => Left(quote0(v, q))
@@ -325,6 +343,8 @@ object Evaluation:
       case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
       case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
+      case VSigma(x, ty, b)           => Sigma(x, go1(ty), goClos(b))
+      case VPair(f, s)                => Pair(go1(f), go1(s))
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
       case VFun(l, pty, cv, rty) => Fun(go1(l), go1(pty), go1(cv), go1(rty))

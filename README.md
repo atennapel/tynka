@@ -85,8 +85,9 @@ TODO:
 - [ ] Sigma types
   - [x] Sigma, pair and projection syntax
   - [x] Nested pair syntax
-  - [ ] Sigma, pair and projection core syntax
-  - [ ] Sigma, pair and projection core values
+  - [x] Sigma, pair and projection core syntax
+  - [x] Sigma, pair and projection core values
+  - [ ] Sigma Unification
   - [ ] Sigma elaboration
   - [ ] Pair elaboration
   - [ ] Projection elaboration

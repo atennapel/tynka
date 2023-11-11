@@ -55,6 +55,7 @@ object Value:
   enum Spine:
     case SId
     case SApp(sp: Spine, arg: Val1, icit: Icit)
+    case SProj(spine: Spine, proj: S.ProjType)
     case SMetaApp(sp: Spine, arg: Either[Val0, Val1])
     case SPrim(
         sp: Spine,
@@ -69,6 +70,7 @@ object Value:
       def go(acc: Int, sp: Spine): Int = sp match
         case SId                   => acc
         case SApp(sp, _, _)        => go(acc + 1, sp)
+        case SProj(sp, _)          => go(acc + 1, sp)
         case SMetaApp(sp, _)       => go(acc + 1, sp)
         case SPrim(sp, _, _, _, _) => go(acc + 1, sp)
       go(0, this)
@@ -78,9 +80,14 @@ object Value:
       def go(acc: Spine, sp: Spine): Spine = sp match
         case SId                     => acc
         case SApp(sp, v, i)          => go(SApp(acc, v, i), sp)
+        case SProj(sp, p)            => go(SProj(acc, p), sp)
         case SMetaApp(sp, v)         => go(SMetaApp(acc, v), sp)
         case SPrim(sp, ix, i, x, as) => go(SPrim(acc, ix, i, x, as), sp)
       go(SId, this)
+
+    def isEmpty: Boolean = this match
+      case SId => true
+      case _   => false
   export Spine.*
 
   enum Val0:
@@ -135,6 +142,9 @@ object Value:
 
     case VPi(name: Bind, icit: Icit, ty: VTy, body: Clos1)
     case VLam1(name: Bind, icit: Icit, ty: VTy, body: Clos1)
+
+    case VSigma(name: Bind, ty: VTy, body: Clos1)
+    case VPair(fst: Val1, snd: Val1)
 
     case VMetaPi(meta: Boolean, ty: VTy, body: Clos1)
     case VMetaLam(meta: Boolean, body: Clos1)

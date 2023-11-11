@@ -17,6 +17,13 @@ object Pretty:
     case MetaApp(f, Left(a))  => s"${prettyApp1(f)} ${prettyParen0(a)}"
     case f                    => prettyParen1(f)
 
+  private def prettySigma(tm: Tm1)(implicit ns: List[Bind]): String = tm match
+    case Sigma(DontBind, t, b) =>
+      s"${prettyParen1(t, true)} ** ${prettySigma(b)(DontBind :: ns)}"
+    case Sigma(xx @ DoBind(x), t, b) =>
+      s"($x : ${pretty1(t)}) ** ${prettySigma(b)(xx :: ns)}"
+    case rest => pretty1(rest)
+
   private def prettyPi(tm: Ty)(implicit ns: List[Bind]): String = tm match
     case Fun(_, a, _, b) => s"${prettyParen1(a, true)} -> ${prettyPi(b)}"
     case Pi(DontBind, Expl, t, b) =>
@@ -86,6 +93,8 @@ object Pretty:
       case TCon(_)              => pretty1(tm)
       case U0(_)                => pretty1(tm)
       case U1                   => pretty1(tm)
+      case Pair(_, _)           => pretty1(tm)
+      case Proj(_, _)           => pretty1(tm)
       case Wk01(tm)             => prettyParen1(tm, app)(ns.tail)
       case Wk11(tm)             => prettyParen1(tm, app)(ns.tail)
       case _                    => s"(${pretty1(tm)})"
@@ -157,6 +166,17 @@ object Pretty:
     case MetaLam(_, _)    => prettyLam1(tm)
     case App1(_, _, _)    => prettyApp1(tm)
     case MetaApp(_, _)    => prettyApp1(tm)
+
+    case Sigma(_, _, _) => prettySigma(tm)
+    case Pair(_, _) =>
+      def flattenPair(tm: Tm1): List[Tm1] = tm match
+        case Pair(fst, snd) => fst :: flattenPair(snd)
+        case tm             => List(tm)
+      val es = flattenPair(tm)
+      if es.last == Prim1(Name("[]")) then
+        s"[${es.init.map(pretty1).mkString(", ")}]"
+      else s"(${es.map(pretty1).mkString(", ")})"
+    case Proj(t, p) => s"${prettyParen1(t)}$p"
 
     case Lift(_, t) => s"^${prettyParen1(t)}"
     case Quote(t)   => s"`${prettyParen0(t)}"
