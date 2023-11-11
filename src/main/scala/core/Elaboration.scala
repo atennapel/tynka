@@ -1156,6 +1156,10 @@ object Elaboration extends RetryPostponed:
                 Infer0(App0(ef, ea), t2, rcv)
               case Infer1(ef, fty) => apply1(fty, Expl, ef, a)
 
+      case S.Sigma(x, a, b) => ???
+      case S.Pair(f, s)     => ???
+      case S.Proj(s, p)     => ???
+
       case S.Lift(ty) =>
         val cv = freshCV()
         val vcv = ctx.eval1(cv)

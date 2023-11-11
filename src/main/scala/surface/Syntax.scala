@@ -75,6 +75,17 @@ object Syntax:
     case ArgIcit(icit: Icit)
   export ArgInfo.*
 
+  enum ProjType:
+    case Fst
+    case Snd
+    case Named(name: Name)
+
+    override def toString: String = this match
+      case Fst      => ".1"
+      case Snd      => ".2"
+      case Named(x) => s".$x"
+  export ProjType.*
+
   enum Pat:
     case PVar(name: Bind)
     case PCon(con: Name, name: Bind, args: List[Pat])
@@ -110,6 +121,10 @@ object Syntax:
     case Pi(name: Bind, icit: Icit, ty: Ty, body: Ty)
     case Lam(name: Bind, info: ArgInfo, ty: Option[Ty], body: Tm)
     case App(fn: Tm, arg: Tm, info: ArgInfo)
+
+    case Sigma(name: Bind, ty: Ty, body: Ty)
+    case Pair(fst: Tm, snd: Tm)
+    case Proj(tm: Tm, proj: ProjType)
 
     case Match(
         scrut: List[Tm],
@@ -154,6 +169,10 @@ object Syntax:
       case App(fn, arg, ArgIcit(Expl)) => s"($fn $arg)"
       case App(fn, arg, ArgIcit(Impl)) => s"($fn ${Impl.wrap(arg)})"
       case App(fn, arg, ArgNamed(x))   => s"($fn ${Impl.wrap(s"$x = $arg")})"
+      case Sigma(DontBind, t, b)       => s"($t ** $b)"
+      case Sigma(x, t, b)              => s"(($x : $t) ** $b)"
+      case Pair(a, b)                  => s"($a, $b)"
+      case Proj(t, p)                  => s"$t$p"
       case Match(scrut, pats) =>
         s"(match${if scrut.isEmpty then "" else " "}${scrut
             .mkString(", ")}${if pats.isEmpty then "" else " "}${pats

@@ -83,9 +83,13 @@ TODO:
 - [x] Newtypes
 - [x] Meta datatypes
 - [ ] Sigma types
-  - [ ] Nested pair syntax
-  - [ ] Named projection
-  - [ ] List literals
+  - [x] Sigma, pair and projection syntax
+  - [x] Nested pair syntax
+  - [ ] Sigma, pair and projection core syntax
+  - [ ] Sigma, pair and projection core values
+  - [ ] Sigma elaboration
+  - [ ] Pair elaboration
+  - [ ] Projection elaboration
   - [ ] Array literals
 - [ ] Label operations: eqLabel and appendLabel
 - [ ] Con

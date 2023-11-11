@@ -47,6 +47,7 @@ object Parser:
         ",",
         "->",
         "<-",
+        "**",
         "_",
         "^",
         "`",
@@ -110,9 +111,9 @@ object Parser:
         <|> ("`" *> projAtom).map(Quote.apply)
         <|> ("$" *> projAtom).map(Splice.apply)
         <|> attempt("(" *> userOp.map(x => Var(x)) <* ")")
-        <|> attempt("(" *> ")").map(_ => unittype)
-        <|> ("[" *> "]").map(_ => unit)
-        <|> ("(" *> tm <* ")")
+        <|> ("(" *> sepEndBy(tm, ",").map(mkPair) <* ")")
+        <|> (option("#").map(_.isDefined) <~> "[" *> sepEndBy(tm, ",") <* "]")
+          .map(mkUnitPair)
         <|> attempt(holeP)
         <|> attempt(int.map(IntLit.apply))
         <|> string.map(StringLit.apply)
@@ -125,11 +126,25 @@ object Parser:
     private val unit = Var(Name("[]"))
     private val hole = Hole(None)
 
+    private def mkPair(ts: List[Tm]): Tm = ts match
+      case Nil => unittype
+      case ts  => ts.reduceRight(Pair.apply)
+
+    private val nil = Var(Name("Nil"))
+    private val cons = Var(Name("::"))
+    private def mkUnitPair(isList: Boolean, ts: List[Tm]): Tm =
+      if isList then
+        ts.foldRight(nil)((x, y) =>
+          App(App(cons, x, ArgIcit(Expl)), y, ArgIcit(Expl))
+        )
+      else ts.foldRight(unit)(Pair.apply)
+
     lazy val tm: Parsley[Tm] = positioned(
       attempt(
         piSigma
       ) <|> let <|> lam <|> doP <|> matchP <|> splitP <|> ifP <|> foreignP <|>
         precedence[Tm](app)(
+          Ops(InfixR)("**" #> ((l, r) => Sigma(DontBind, l, r))),
           Ops(InfixR)("->" #> ((l, r) => Pi(DontBind, Expl, l, r)))
         )
     )
@@ -151,7 +166,10 @@ object Parser:
       )) <~> ("->" #> false <|> "**" #> true) <~> tm)
         .map { case ((ps, isSigma), rt) =>
           ps.foldRight(rt) { case ((xs, i, ty), rt) =>
-            xs.foldRight(rt)((x, rt) => Pi(x, i, ty.getOrElse(hole), rt))
+            xs.foldRight(rt)((x, rt) =>
+              if isSigma then Sigma(x, ty.getOrElse(hole), rt)
+              else Pi(x, i, ty.getOrElse(hole), rt)
+            )
           }
         }
 
@@ -390,7 +408,12 @@ object Parser:
         <|> ("{" *> tm <* "}").map(t => List((t, ArgIcit(Impl))))
         <|> projAtom.map(t => List((t, ArgIcit(Expl))))
 
-    private lazy val projAtom: Parsley[Tm] = atom
+    private lazy val projAtom: Parsley[Tm] = positioned(
+      (atom <~> many(proj)).map((t, ps) => ps.foldLeft(t)(Proj.apply))
+    )
+
+    private lazy val proj: Parsley[ProjType] =
+      "." *> ("1" #> Fst <|> "2" #> Snd <|> identOrOp.map(Named.apply))
 
     private def typeFromParams(meta: Boolean, ps: List[DefParam], rt: Ty): Ty =
       ps.foldRight(rt) { case ((xs, i, ty), b) =>
