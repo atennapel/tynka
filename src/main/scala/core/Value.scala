@@ -154,6 +154,8 @@ object Value:
     if x == "_" then DontBind else DoBind(Name(x))
   def vlam1(x: String, ty: VTy, b: Val1 => Val1): Val1 =
     VLam1(bind(x), Expl, ty, CFun1(b))
+  def vlamI(x: String, ty: VTy, b: Val1 => Val1): Val1 =
+    VLam1(bind(x), Impl, ty, CFun1(b))
   def vfun1(ty: VTy, rt: VTy): Val1 = VPi(DontBind, Expl, ty, CFun1(_ => rt))
   def vpi(x: String, ty: VTy, b: Val1 => Val1): Val1 =
     VPi(bind(x), Expl, ty, CFun1(b))

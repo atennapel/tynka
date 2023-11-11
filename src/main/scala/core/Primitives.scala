@@ -37,7 +37,19 @@ object Primitives:
     "Float",
     "Double",
     "Char",
-    "Array"
+    "Array",
+    "()",
+    "[]",
+    "BoolM",
+    "TrueM",
+    "FalseM",
+    "elimBoolM",
+    "HId",
+    "Refl",
+    "elimHId",
+    "IFixM",
+    "IInM",
+    "elimIFixM"
   )
 
   val CV1 = Prim1(Name("CV"))
@@ -70,8 +82,8 @@ object Primitives:
   val VDoubleRep = VPrim1(Name("DoubleRep"))
 
   val VLabel = VPrim1(Name("Label"))
-  def VClass(l: Val1) = VRigid(HPrim(Name("Class")), SApp(SId, l, Expl))
-  def VClassLabel(x: String) = VClass(VLabelLit(x))
+  inline def VClass(l: Val1) = VRigid(HPrim(Name("Class")), SApp(SId, l, Expl))
+  inline def VClassLabel(x: String) = VClass(VLabelLit(x))
   val VString = VClassLabel("java.lang.String")
 
   val VInt = VPrim1(Name("Int"))
@@ -79,8 +91,37 @@ object Primitives:
   inline def VIO(b: Val1, t: Val1) =
     VRigid(HPrim(Name("IO")), SApp(SApp(SId, b, Impl), t, Expl))
 
+  val VUnitType = VPrim1(Name("()"))
+  val VBoolM = VPrim1(Name("BoolM"))
+  val VTrueM = VPrim1(Name("TrueM"))
+  val VFalseM = VPrim1(Name("FalseM"))
+
+  inline def VHId(a: Val1, b: Val1, x: Val1, y: Val1) = VRigid(
+    HPrim(Name("HId")),
+    SApp(SApp(SApp(SApp(SId, a, Impl), b, Impl), x, Expl), y, Expl)
+  )
+  inline def VRefl(a: Val1, x: Val1) =
+    VRigid(HPrim(Name("Refl")), SApp(SApp(SId, a, Impl), x, Impl))
+
+  inline def VIFixM(ii: Val1, f: Val1, i: Val1) =
+    VRigid(
+      HPrim(Name("IFixM")),
+      SApp(SApp(SApp(SId, ii, Impl), f, Expl), i, Expl)
+    )
+  inline def VIFixM1(ii: Val1, f: Val1) =
+    VRigid(
+      HPrim(Name("IFixM")),
+      SApp(SApp(SId, ii, Impl), f, Expl)
+    )
+  inline def VIInM(ii: Val1, f: Val1, i: Val1, x: Val1) =
+    VRigid(
+      HPrim(Name("IInM")),
+      SApp(SApp(SApp(SApp(SId, ii, Impl), f, Impl), i, Impl), x, Expl)
+    )
+
   inline def getPrimTypes(
-      inline vappE: (Val1, Val1) => Val1
+      inline vappE: (Val1, Val1) => Val1,
+      inline vappI: (Val1, Val1) => Val1
   ): Map[String, VTy] = Map(
     "Label" -> VU1,
     "Class" -> vfun1(VLabel, VU0(VVal(VBoxed))),
@@ -267,11 +308,156 @@ object Primitives:
     "Float" -> VU0(VVal(VUnboxed(VFloatRep))),
     "Double" -> VU0(VVal(VUnboxed(VDoubleRep))),
     "Char" -> VU0(VVal(VUnboxed(VCharRep))),
-    "Array" -> vpiI("b", VBoxity, b => vfun1(VU0(VVal(b)), VU0(VVal(VBoxed))))
+    "Array" -> vpiI("b", VBoxity, b => vfun1(VU0(VVal(b)), VU0(VVal(VBoxed)))),
+    "()" -> VU1,
+    "[]" -> VUnitType,
+    "BoolM" -> VU1,
+    "TrueM" -> VBoolM,
+    "FalseM" -> VBoolM,
+    "elimBoolM" ->
+      // (P : BoolM -> Meta) (b : BoolM) (TrueM : P TrueM) (FalseM : P FalseM) -> P b
+      vpi(
+        "P",
+        vfun1(VBoolM, VU1),
+        p =>
+          vpi(
+            "b",
+            VBoolM,
+            b =>
+              vpi(
+                "TrueM",
+                vappE(p, VTrueM),
+                _ => vpi("FalseM", vappE(p, VFalseM), _ => vappE(p, b))
+              )
+          )
+      ),
+    "HId" -> vpiI("A", VU1, a => vpiI("B", VU1, b => vfun1(a, vfun1(b, VU1)))),
+    "Refl" -> vpiI("A", VU1, a => vpiI("x", a, x => VHId(a, a, x, x))),
+    "elimHId" ->
+      /*
+        {A : Meta} {x : A} {y : A}
+        (P : {y : A} -> HId {A} {A} x y -> Meta)
+        (p : HId {A} {A} x y)
+        (Refl : P {x} (Refl {A} {x}))
+        -> P {y} p
+       */
+      vpiI(
+        "A",
+        VU1,
+        a =>
+          vpiI(
+            "x",
+            a,
+            x =>
+              vpiI(
+                "y",
+                a,
+                y =>
+                  vpi(
+                    "P",
+                    vpiI("y", a, y => vfun1(VHId(a, a, x, y), VU1)),
+                    pp =>
+                      vpi(
+                        "p",
+                        VHId(a, a, x, y),
+                        p =>
+                          vpi(
+                            "Refl",
+                            vappE(vappI(pp, x), VRefl(a, x)),
+                            _ => vappE(vappI(pp, y), p)
+                          )
+                      )
+                  )
+              )
+          )
+      ),
+    "IFixM" -> vpiI(
+      "I",
+      VU1,
+      ii => vfun1(vfun1(vfun1(ii, VU1), vfun1(ii, VU1)), vfun1(ii, VU1))
+    ),
+    "IInM" ->
+      // {I : Meta} -> {F : (I -> Meta) -> I -> Meta} -> {i : I} -> F (IFixM {I} F) i -> IFixM {I} F i
+      vpiI(
+        "I",
+        VU1,
+        ii =>
+          vpiI(
+            "F",
+            vfun1(vfun1(ii, VU1), vfun1(ii, VU1)),
+            f =>
+              vpiI(
+                "i",
+                ii,
+                i =>
+                  vfun1(vappE(vappE(f, VIFixM(ii, f, i)), i), VIFixM(ii, f, i))
+              )
+          )
+      ),
+    "elimIFixM" ->
+      /*
+      {I : Meta} {F : (I -> Meta) -> I -> Meta}
+      (P : {i : I} -> IFixM {I} F i -> Meta)
+      {i : I} (x : IFixM {I} F i)
+      (IInM : ({j : I} -> (z : IFixM {I} F j) -> P {j} z) -> {i : I} -> (y : F (IFixM {I} F) i) -> P {i} (IInM {I} {F} {i} y)
+      -> P {i} x
+       */
+      vpiI(
+        "I",
+        VU1,
+        ii =>
+          vpiI(
+            "F",
+            vfun1(vfun1(ii, VU1), vfun1(ii, VU1)),
+            f =>
+              vpi(
+                "P",
+                vpiI("i", ii, i => vfun1(VIFixM(ii, f, i), VU1)),
+                p =>
+                  vpiI(
+                    "i",
+                    ii,
+                    i =>
+                      vpi(
+                        "x",
+                        VIFixM(ii, f, i),
+                        x =>
+                          vpi(
+                            "IInM",
+                            vfun1(
+                              vpiI(
+                                "j",
+                                ii,
+                                j =>
+                                  vpi(
+                                    "z",
+                                    VIFixM(ii, f, j),
+                                    z => vappE(vappI(p, j), z)
+                                  )
+                              ),
+                              vpiI(
+                                "i",
+                                ii,
+                                i =>
+                                  vpi(
+                                    "y",
+                                    vappE(vappE(f, VIFixM1(ii, f)), i),
+                                    y => vappE(vappI(p, i), VIInM(ii, f, i, y))
+                                  )
+                              )
+                            ),
+                            _ => vappE(vappI(p, i), x)
+                          )
+                      )
+                  )
+              )
+          )
+      )
   )
 
   inline def getPrimEliminators(
       inline vappE: (Val1, Val1) => Val1,
+      inline vappI: (Val1, Val1) => Val1,
       inline vprimelim: (Name, Val1, Int, Icit, List[(Val1, Icit)]) => Val1
   ): Map[String, VTy] = Map(
     "elimRep" ->
@@ -393,6 +579,143 @@ object Primitives:
                         1,
                         Expl,
                         List((p, Expl), (comp, Expl), (vval, Expl))
+                      )
+                  )
+              )
+          )
+      ),
+    "elimBoolM" ->
+      vlam1(
+        "P",
+        vfun1(VBoolM, VU1),
+        p =>
+          vlam1(
+            "b",
+            VBoolM,
+            b =>
+              vlam1(
+                "TrueM",
+                vappE(p, VTrueM),
+                t =>
+                  vlam1(
+                    "FalseM",
+                    vappE(p, VFalseM),
+                    f =>
+                      vprimelim(
+                        Name("elimBoolM"),
+                        b,
+                        1,
+                        Expl,
+                        List((p, Expl), (t, Expl), (f, Expl))
+                      )
+                  )
+              )
+          )
+      ),
+    "elimHId" ->
+      vlamI(
+        "A",
+        VU1,
+        a =>
+          vlamI(
+            "x",
+            a,
+            x =>
+              vlamI(
+                "y",
+                a,
+                y =>
+                  vlam1(
+                    "P",
+                    vpiI("y", a, y => vfun1(VHId(a, a, x, y), VU1)),
+                    pp =>
+                      vlam1(
+                        "p",
+                        VHId(a, a, x, y),
+                        p =>
+                          vlam1(
+                            "Refl",
+                            vappE(vappI(pp, x), VRefl(a, x)),
+                            refl =>
+                              vprimelim(
+                                Name("elimHId"),
+                                refl,
+                                4,
+                                Expl,
+                                List(
+                                  (a, Impl),
+                                  (x, Impl),
+                                  (y, Impl),
+                                  (pp, Expl),
+                                  (refl, Expl)
+                                )
+                              )
+                          )
+                      )
+                  )
+              )
+          )
+      ),
+    "elimIFixM" ->
+      vlamI(
+        "I",
+        VU1,
+        ii =>
+          vlamI(
+            "F",
+            vfun1(vfun1(ii, VU1), vfun1(ii, VU1)),
+            f =>
+              vlam1(
+                "P",
+                vpiI("i", ii, i => vfun1(VIFixM(ii, f, i), VU1)),
+                p =>
+                  vlamI(
+                    "i",
+                    ii,
+                    i =>
+                      vlam1(
+                        "x",
+                        VIFixM(ii, f, i),
+                        x =>
+                          vlam1(
+                            "IInM",
+                            vfun1(
+                              vpiI(
+                                "j",
+                                ii,
+                                j =>
+                                  vpi(
+                                    "z",
+                                    VIFixM(ii, f, j),
+                                    z => vappE(vappI(p, j), z)
+                                  )
+                              ),
+                              vpiI(
+                                "i",
+                                ii,
+                                i =>
+                                  vpi(
+                                    "y",
+                                    vappE(vappE(f, VIFixM1(ii, f)), i),
+                                    y => vappE(vappI(p, i), VIInM(ii, f, i, y))
+                                  )
+                              )
+                            ),
+                            in =>
+                              vprimelim(
+                                Name("elimIFixM"),
+                                x,
+                                4,
+                                Expl,
+                                List(
+                                  (ii, Impl),
+                                  (f, Impl),
+                                  (p, Expl),
+                                  (i, Impl),
+                                  (in, Expl)
+                                )
+                              )
+                          )
                       )
                   )
               )

@@ -110,6 +110,8 @@ object Parser:
         <|> ("`" *> projAtom).map(Quote.apply)
         <|> ("$" *> projAtom).map(Splice.apply)
         <|> attempt("(" *> userOp.map(x => Var(x)) <* ")")
+        <|> attempt("(" *> ")").map(_ => unittype)
+        <|> ("[" *> "]").map(_ => unit)
         <|> ("(" *> tm <* ")")
         <|> attempt(holeP)
         <|> attempt(int.map(IntLit.apply))
@@ -119,7 +121,8 @@ object Parser:
         <|> ident.map(x => Var(x))
     )
 
-    private val unittype = Var(Name("Unit"))
+    private val unittype = Var(Name("()"))
+    private val unit = Var(Name("[]"))
     private val hole = Hole(None)
 
     lazy val tm: Parsley[Tm] = positioned(

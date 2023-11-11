@@ -81,15 +81,23 @@ TODO:
   - [x] JVM interop calls
   - [x] IO monad
 - [x] Newtypes
-- [ ] Meta datatypes
-- [ ] Fix bug with postponed Universe metas
+- [x] Meta datatypes
+- [ ] Sigma types
+  - [ ] Nested pair syntax
+  - [ ] Named projection
+  - [ ] List literals
+  - [ ] Array literals
+- [ ] Label operations: eqLabel and appendLabel
+- [ ] Con
+- [ ] Opaque definitions and unfolding
 - [ ] Boxing
 - [ ] Null
+- [ ] Modules
 - [ ] Products
-- [ ] Array literals
 - [ ] Constant folding for primitives
 - [ ] Non-Int primitive literals
 - [ ] Recursive meta definitions (?)
 - [ ] Or-patterns
 - [ ] Pattern lambdas, lets and binds
 - [ ] Infer multi-match lambda
+- [ ] Fix bug with postponed Universe metas

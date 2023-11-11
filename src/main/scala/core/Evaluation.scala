@@ -82,8 +82,9 @@ object Evaluation:
       VUnfold(h, SMetaApp(sp, a), () => vmetaapp(v(), a))
     case _ => impossible()
 
-  val primTypes = getPrimTypes((f, a) => vappE(f, a))
-  val primElims = getPrimEliminators((f, a) => vappE(f, a), vprimelim)
+  val primTypes = getPrimTypes((f, a) => vappE(f, a), (f, a) => vappI(f, a))
+  val primElims =
+    getPrimEliminators((f, a) => vappE(f, a), (f, a) => vappI(f, a), vprimelim)
   inline def vprim1(x: Name): Val1 =
     if primElims.contains(x.expose) then primElims(x.expose) else VPrim1(x)
 
@@ -104,12 +105,48 @@ object Evaluation:
     case ("elimRep", VPrim1(Name("DoubleRep"))) => as(8)._1
 
     case ("elimBoxity", VPrim1(Name("Boxed"))) => as(1)._1
-    case ("elimBoxity", VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, Expl))) =>
+    case ("elimBoxity", VRigid(HPrim(Name("Unboxed")), SApp(SId, rep, _))) =>
       vapp1(as(2)._1, rep, Expl)
 
     case ("elimCV", VPrim1(Name("Comp"))) => as(1)._1
-    case ("elimCV", VRigid(HPrim(Name("Val")), SApp(SId, boxity, Expl))) =>
+    case ("elimCV", VRigid(HPrim(Name("Val")), SApp(SId, boxity, _))) =>
       vapp1(as(2)._1, boxity, Expl)
+
+    case ("elimBoolM", VPrim1(Name("TrueM")))  => as(1)._1
+    case ("elimBoolM", VPrim1(Name("FalseM"))) => as(2)._1
+
+    case ("elimHId", VRigid(HPrim(Name("Refl")), _)) => as(4)._1
+
+    // elimIFixM {I} {F} P in {i} (IIn {I} {F} {i} x) ~> in (\{j} y. elimIFix {I} {F} p in {j} y) {i} x
+    case (
+          "elimIFixM",
+          VRigid(
+            HPrim(Name("IInM")),
+            SApp(SApp(SApp(SApp(SId, _, _), _, _), i, _), el, _)
+          )
+        ) =>
+      val ii = as(0)._1
+      val f = as(1)._1
+      val in = as(4)._1
+      vappE(
+        vappI(
+          vappE(
+            in,
+            vlamI(
+              "j",
+              ii,
+              j =>
+                vlam1(
+                  "y",
+                  VIFixM(ii, f, j),
+                  y => vprimelim(x, y, 4, Expl, as.init :+ (j, Impl))
+                )
+            )
+          ),
+          i
+        ),
+        el
+      )
 
     case (_, VFlex(id, sp)) => VFlex(id, SPrim(sp, ix, i, x, as))
     case (_, VRigid(h, sp)) => VRigid(h, SPrim(sp, ix, i, x, as))

@@ -34,7 +34,7 @@ object Common:
   // names
   case class Name(x: String):
     override def toString: String =
-      if !isOperator then x else s"($x)"
+      if !isOperator || (x.head == '(' || x.head == '[') then x else s"($x)"
     def isOperator: Boolean = !x.head.isLetter && x.head != '_'
     def expose: String = x
     def toBind: Bind = DoBind(this)

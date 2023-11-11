@@ -479,6 +479,9 @@ class Unification(retryPostponed: RetryPostponed):
       case (VFlex(id, sp), v) => solve(id, sp, v)
       case (v, VFlex(id, sp)) => solve(id, sp, v)
 
+      case (VRigid(HPrim(Name("[]")), _), _) => ()
+      case (_, VRigid(HPrim(Name("[]")), _)) => ()
+
       case (top1 @ VUnfold(h1, sp1, v1), top2 @ VUnfold(h2, sp2, v2)) =>
         try
           if h1 != h2 then throw UnifyError("head mismatch")
