@@ -866,6 +866,7 @@ object Elaboration extends RetryPostponed:
         unify1(ty2, ty)
         Var1(lvl.toIx(ctx.lvl))
 
+      /* TODO: fix this
       case (S.Var(x, _), VU1) if varHasUnknownType1(x) =>
         val Some(Name1(_, ty2)) = ctx.lookup(x): @unchecked
         val VFlex(m, _) = forceAll1(ty2): @unchecked
@@ -876,10 +877,16 @@ object Elaboration extends RetryPostponed:
           s"postpone ?p$pid as ?$placeholder: check1 $tm : ${ctx.pretty1(ty)}"
         )
         PostponedCheck1(pid)
+       */
 
       case (tm, VPi(x, Impl, t1, t2)) =>
         val qt1 = ctx.quote1(t1)
         Lam1(x, Impl, qt1, check1(tm, t2(VVar1(ctx.lvl)))(ctx.insert1(x, qt1)))
+
+      case (S.Pair(f, s), VSigma(_, a, b)) =>
+        val ef = check1(f, a)
+        val es = check1(s, b(ctx.eval1(ef)))
+        Pair(ef, es)
 
       case (S.Match(Nil, ps), VPi(x, Expl, t1, t2)) if ps.size > 0 =>
         checkLambdaMatch1(ps.head._2.size, ps, ty) match
@@ -995,6 +1002,34 @@ object Elaboration extends RetryPostponed:
         infer(tm) match
           case Infer0(tm, ty, cv) => (quote(tm), VLift(cv, ty))
           case Infer1(tm, ty)     => (tm, ty)
+
+  private def projIndex(tm: Val1, x: Bind, ix: Int, clash: Boolean): Val1 =
+    x match
+      case DoBind(x) if !clash => vproj(tm, Named(Some(x), ix))
+      case _ =>
+        @tailrec
+        def go(tm: Val1, ix: Int): Val1 = ix match
+          case 0 => vproj(tm, Fst)
+          case n => go(vproj(tm, Snd), n - 1)
+        go(tm, ix)
+  private def projNamed(tm: Val1, ty: VTy, x: Name)(implicit
+      ctx: Ctx
+  ): (ProjType, VTy) =
+    @tailrec
+    def go(ty: VTy, ix: Int, ns: Set[Name]): (ProjType, VTy) =
+      forceAll1(ty) match
+        case VSigma(DoBind(y), fstty, _) if x == y =>
+          (Named(Some(x), ix), fstty)
+        case VSigma(y, _, sndty) =>
+          val (clash, newns) = y match
+            case DoBind(y) => (ns.contains(y), ns + y)
+            case DontBind  => (false, ns)
+          go(sndty(projIndex(tm, y, ix, clash)), ix + 1, newns)
+        case _ =>
+          throw error(
+            s"expected sigma in named projection .$x, got ${ctx.pretty1(ty)}"
+          )
+    go(ty, 0, Set.empty)
 
   private def infer(tm: S.Tm)(implicit ctx: Ctx): Infer =
     if !tm.isPos then debug(s"infer $tm")
@@ -1156,9 +1191,33 @@ object Elaboration extends RetryPostponed:
                 Infer0(App0(ef, ea), t2, rcv)
               case Infer1(ef, fty) => apply1(fty, Expl, ef, a)
 
-      case S.Sigma(x, a, b) => ???
-      case S.Pair(f, s)     => ???
-      case S.Proj(s, p)     => ???
+      case S.Sigma(x, a, b) =>
+        val ea = check1(a, VU1)
+        val eb = check1(b, VU1)(ctx.bind1(x, ea, ctx.eval1(ea)))
+        Infer1(Sigma(x, ea, eb), VU1)
+      case S.Pair(f, s) =>
+        val (ef, t1) = infer1(f)
+        val (es, t2) = infer1(s)
+        Infer1(Pair(ef, es), VSigma(DontBind, t1, CFun1(_ => t2)))
+      case S.Proj(s, p) =>
+        val (es, sty) = insertPi(infer1(s))
+        (forceAll1(sty), p) match
+          case (_, S.Named(x)) =>
+            val (p, pty) = projNamed(ctx.eval1(es), sty, x)
+            Infer1(Proj(es, p), pty)
+          case (VSigma(_, t1, _), S.Fst) => Infer1(Proj(es, Fst), t1)
+          case (VSigma(_, _, t2), S.Snd) =>
+            Infer1(Proj(es, Snd), t2(vfst(ctx.eval1(es))))
+          case _ =>
+            val qpty = freshMeta(VU1)
+            val pty = ctx.eval1(qpty)
+            val x = DoBind(Name("x"))
+            val rty = CClos1(ctx.env, freshMeta(VU1)(ctx.bind1(x, qpty, pty)))
+            val es2 = coe(es, sty, VSigma(x, pty, rty))
+            p match
+              case S.Fst => Infer1(Proj(es2, Fst), pty)
+              case S.Snd => Infer1(Proj(es2, Snd), rty(vfst(ctx.eval1(es2))))
+              case _     => error(s"ambigious named project")
 
       case S.Lift(ty) =>
         val cv = freshCV()

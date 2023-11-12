@@ -234,6 +234,8 @@ object Parser:
 
     private lazy val splitPatP
         : Parsley[(Bind, List[(Bind, ArgInfo, Option[Tm])])] =
+      /*
+      TODO: fix operators here
       attempt(
         precedence[(Bind, List[Bind])](bind.map(x => (x, Nil)))(
           defaultOps(
@@ -243,7 +245,7 @@ object Parser:
         )
       ).map((x, ps) =>
         (x, ps.map(a => (a, ArgIcit(Expl), None)))
-      ) <|> (bind <~> many(lamParam)).map((x, ps) =>
+      ) <|>*/ (bind <~> many(lamParam)).map((x, ps) =>
         (x, ps.flatMap((xs, i, t) => xs.map(x => (x, i, t))))
       )
 

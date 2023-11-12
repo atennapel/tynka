@@ -82,16 +82,8 @@ TODO:
   - [x] IO monad
 - [x] Newtypes
 - [x] Meta datatypes
-- [ ] Sigma types
-  - [x] Sigma, pair and projection syntax
-  - [x] Nested pair syntax
-  - [x] Sigma, pair and projection core syntax
-  - [x] Sigma, pair and projection core values
-  - [ ] Sigma Unification
-  - [ ] Sigma elaboration
-  - [ ] Pair elaboration
-  - [ ] Projection elaboration
-  - [ ] Array literals
+- [x] Sigma types
+- [ ] Array literals
 - [ ] Label operations: eqLabel and appendLabel
 - [ ] Con
 - [ ] Opaque definitions and unfolding
@@ -105,4 +97,3 @@ TODO:
 - [ ] Or-patterns
 - [ ] Pattern lambdas, lets and binds
 - [ ] Infer multi-match lambda
-- [ ] Fix bug with postponed Universe metas

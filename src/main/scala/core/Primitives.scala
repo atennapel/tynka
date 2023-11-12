@@ -389,8 +389,7 @@ object Primitives:
               vpiI(
                 "i",
                 ii,
-                i =>
-                  vfun1(vappE(vappE(f, VIFixM(ii, f, i)), i), VIFixM(ii, f, i))
+                i => vfun1(vappE(vappE(f, VIFixM1(ii, f)), i), VIFixM(ii, f, i))
               )
           )
       ),

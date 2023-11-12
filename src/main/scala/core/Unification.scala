@@ -98,6 +98,7 @@ class Unification(retryPostponed: RetryPostponed):
           val data = go(sp)
           invertVal1(v, VVar1(data._1), Expl, data)
         case SPrim(_, _, _, _, _) => throw UnifyError("failed to invert")
+        case SProj(_, _)          => throw UnifyError("failed to invert")
     val (dom, _, sub, pr, isLinear) = go(sp)
     (PSub(None, dom, lvl, sub), if isLinear then None else Some(pr))
 
@@ -205,6 +206,7 @@ class Unification(retryPostponed: RetryPostponed):
                 case NeedsPruning => throw UnifyError("failed to prune")
                 case _ => (Some(PruneMeta0(psubst0(t))) :: sp2, OKNonRenaming)
         case SPrim(_, _, _, _, _) => throw UnifyError(s"failed to prune")
+        case SProj(_, _)          => throw UnifyError(s"failed to prune")
     val (sp2, status) = go(sp)
     val m2 = status match
       case OKRenaming    => m
@@ -257,6 +259,7 @@ class Unification(retryPostponed: RetryPostponed):
   private def psubstSp(h: Tm1, sp: Spine)(implicit psub: PSub): Tm1 = sp match
     case SId            => h
     case SApp(sp, v, i) => App1(psubstSp(h, sp), psubst1(v), i)
+    case SProj(sp, p)   => Proj(psubstSp(h, sp), p)
     case SMetaApp(sp, v) =>
       val a = v match
         case Left(v)  => Left(psubst0(v))
@@ -289,6 +292,8 @@ class Unification(retryPostponed: RetryPostponed):
       case VUnfold(UGlobal(x), sp, _) => goSp(Global1(x), sp)
       case VPi(x, i, ty, b)           => Pi(x, i, go1(ty), goClos(b))
       case VLam1(x, i, ty, b)         => Lam1(x, i, go1(ty), goClos(b))
+      case VSigma(x, ty, b)           => Sigma(x, go1(ty), goClos(b))
+      case VPair(f, s)                => Pair(go1(f), go1(s))
       case VU0(cv)                    => U0(go1(cv))
       case VU1                        => U1
       case VFun(l, pty, cv, rty) => Fun(go1(l), go1(pty), go1(cv), go1(rty))
@@ -405,6 +410,18 @@ class Unification(retryPostponed: RetryPostponed):
       case Some(p) if p.exists(_ == PESkip) => pruneMeta(p, m)
       case _                                => ()
 
+  @tailrec
+  private def unifyProj(top1: Val1, a: Spine, top2: Val1, b: Spine, n: Int)(
+      implicit l: Lvl
+  ): Unit =
+    (a, n) match
+      case (a, 0)             => unify1(top1, a, top2, b)
+      case (SProj(a, Snd), n) => unifyProj(top1, a, top2, b, n - 1)
+      case _ =>
+        throw UnifyError(
+          s"spine projection mismatch ${quote1(top1, UnfoldNone)} ~ ${quote1(top2, UnfoldNone)}"
+        )
+
   private def unify1(top1: Val1, sp1: Spine, top2: Val1, sp2: Spine)(implicit
       lvl: Lvl
   ): Unit =
@@ -419,6 +436,12 @@ class Unification(retryPostponed: RetryPostponed):
       case (SPrim(sp1, _, _, x1, as1), SPrim(sp2, _, _, x2, as2)) if x1 == x2 =>
         unify1(top1, sp1, top2, sp2);
         as1.zip(as2).foreach { case ((v1, _), (v2, _)) => unify1(v1, v2) }
+      case (SProj(sp1, p1), SProj(sp2, p2)) if p1 == p2 =>
+        unify1(top1, sp1, top2, sp2)
+      case (SProj(sp1, Fst), SProj(sp2, Named(_, n))) =>
+        unifyProj(top1, sp1, top2, sp2, n)
+      case (SProj(sp1, Named(_, n)), SProj(sp2, Fst)) =>
+        unifyProj(top1, sp1, top2, sp2, n)
       case _ =>
         throw UnifyError(
           s"spine mismatch ${quote1(top1, UnfoldNone)} ~ ${quote1(top2, UnfoldNone)}"
@@ -441,6 +464,8 @@ class Unification(retryPostponed: RetryPostponed):
       case (VQuote(v1), VQuote(v2)) => unify0(v1, v2)
       case (VPi(_, i1, ty1, b1), VPi(_, i2, ty2, b2)) if i1 == i2 =>
         unify1(ty1, ty2); goClos(b1, b2)
+      case (VSigma(_, ty1, b1), VSigma(_, ty2, b2)) =>
+        unify1(ty1, ty2); goClos(b1, b2)
       case (VMetaPi(true, ty1, b1), VMetaPi(true, ty2, b2)) =>
         unify1(ty1, ty2); goClos(b1, b2)
       case (VMetaPi(false, ty1, b1), VMetaPi(false, ty2, b2)) =>
@@ -457,6 +482,10 @@ class Unification(retryPostponed: RetryPostponed):
       case (f, VLam1(_, i, _, b)) =>
         val v = VVar1(lvl)
         unify1(vapp1(f, v, i), b(v))(lvl + 1)
+
+      case (VPair(f1, s1), VPair(f2, s2)) => unify1(f1, f2); unify1(s1, s2)
+      case (VPair(f, s), o) => unify1(f, vfst(o)); unify1(s, vsnd(o))
+      case (o, VPair(f, s)) => unify1(vfst(o), f); unify1(vsnd(o), s)
 
       case (VMetaLam(true, b1), VMetaLam(true, b2))   => goClos(b1, b2)
       case (VMetaLam(false, b1), VMetaLam(false, b2)) => goClos0(b1, b2)

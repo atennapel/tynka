@@ -94,6 +94,8 @@ object Evaluation:
     case VUnfold(h, sp, v) =>
       VUnfold(h, SProj(sp, p), () => vproj(v(), p))
     case _ => impossible()
+  inline def vfst(v: Val1): Val1 = vproj(v, Fst)
+  inline def vsnd(v: Val1): Val1 = vproj(v, Snd)
 
   val primTypes = getPrimTypes((f, a) => vappE(f, a), (f, a) => vappI(f, a))
   val primElims =
@@ -130,7 +132,7 @@ object Evaluation:
 
     case ("elimHId", VRigid(HPrim(Name("Refl")), _)) => as(4)._1
 
-    // elimIFixM {I} {F} P in {i} (IIn {I} {F} {i} x) ~> in (\{j} y. elimIFix {I} {F} p in {j} y) {i} x
+    // elimIFixM {I} {F} P {i} (IIn {I} {F} {i} x) in ~> in (\{j} y. elimIFix {I} {F} p in {j} y) {i} x
     case (
           "elimIFixM",
           VRigid(
