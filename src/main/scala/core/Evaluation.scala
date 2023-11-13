@@ -103,6 +103,18 @@ object Evaluation:
   inline def vprim1(x: Name): Val1 =
     if primElims.contains(x.expose) then primElims(x.expose) else VPrim1(x)
 
+  def vappendLabel(l1: Val1, l2: Val1): Val1 =
+    (l1, l2) match
+      case (VLabelLit(a), VLabelLit(b)) => VLabelLit(a + b)
+      case (a, VLabelLit(""))           => a
+      case (VLabelLit(""), b)           => b
+      case _                            => VAppendLabel(l1, l2)
+  def veqLabel(l1: Val1, l2: Val1): Val1 =
+    (l1, l2) match
+      case (a, b) if a == b             => VTrueM
+      case (VLabelLit(a), VLabelLit(b)) => if a == b then VTrueM else VFalseM
+      case _                            => VEqLabel(l1, l2)
+
   def vprimelim(
       x: Name,
       scrut: Val1,
@@ -162,6 +174,9 @@ object Evaluation:
         ),
         el
       )
+
+    case ("appendLabel", l1) => vappendLabel(l1, as(0)._1)
+    case ("eqLabel", l1)     => veqLabel(l1, as(0)._1)
 
     case (_, VFlex(id, sp)) => VFlex(id, SPrim(sp, ix, i, x, as))
     case (_, VRigid(h, sp)) => VRigid(h, SPrim(sp, ix, i, x, as))
@@ -247,14 +262,15 @@ object Evaluation:
         case Solved(v, _)   => VUnfold(UMeta(id), sp, () => vspine(v, sp))
     case v => v
 
-  @tailrec
   def forceAll1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
         case Unsolved(_, _) => top
         case Solved(v, _)   => forceAll1(vspine(v, sp))
-    case VUnfold(_, _, v) => forceAll1(v())
-    case v                => v
+    case VUnfold(_, _, v)     => forceAll1(v())
+    case VAppendLabel(l1, l2) => vappendLabel(forceAll1(l1), forceAll1(l2))
+    case VEqLabel(l1, l2)     => veqLabel(forceAll1(l1), forceAll1(l2))
+    case v                    => v
 
   @tailrec
   def forceAll0(v: Val0): Val0 = v match
@@ -264,14 +280,15 @@ object Evaluation:
         case _         => top
     case v => v
 
-  @tailrec
   def forceMetas1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
         case Unsolved(_, _) => top
         case Solved(v, _)   => forceMetas1(vspine(v, sp))
     case VUnfold(UMeta(_), _, v) => forceMetas1(v())
-    case v                       => v
+    case VAppendLabel(l1, l2) => vappendLabel(forceMetas1(l1), forceMetas1(l2))
+    case VEqLabel(l1, l2)     => veqLabel(forceMetas1(l1), forceMetas1(l2))
+    case v                    => v
 
   @tailrec
   def forceMetas0(v: Val0): Val0 = v match
@@ -289,14 +306,15 @@ object Evaluation:
         case _         => top
     case v => v
 
-  @tailrec
   def forceStage1(v: Val1): Val1 = v match
     case top @ VFlex(id, sp) =>
       getMeta(id) match
         case Unsolved(_, _) => top
         case Solved(v, _)   => forceStage1(vspine(v, sp))
-    case VUnfold(_, _, v) => forceStage1(v())
-    case v                => v
+    case VUnfold(_, _, v)     => forceStage1(v())
+    case VAppendLabel(l1, l2) => vappendLabel(forceStage1(l1), forceStage1(l2))
+    case VEqLabel(l1, l2)     => veqLabel(forceStage1(l1), forceStage1(l2))
+    case v                    => v
 
   // quoting
   enum QuoteOption:

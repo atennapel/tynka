@@ -25,6 +25,8 @@ object Primitives:
     "BoolRep",
     "elimRep",
     "Label",
+    "appendLabel",
+    "eqLabel",
     "Class",
     "IO",
     "returnIO",
@@ -82,6 +84,27 @@ object Primitives:
   val VDoubleRep = VPrim1(Name("DoubleRep"))
 
   val VLabel = VPrim1(Name("Label"))
+  object VAppendLabel:
+    def apply(l1: Val1, l2: Val1): Val1 =
+      VRigid(HPrim(Name("appendLabel")), SApp(SApp(SId, l1, Expl), l2, Expl))
+    def unapply(value: Val1): Option[(Val1, Val1)] = value match
+      case VRigid(
+            HPrim(Name("appendLabel")),
+            SApp(SApp(SId, l1, Expl), l2, Expl)
+          ) =>
+        Some((l1, l2))
+      case _ => None
+  object VEqLabel:
+    def apply(l1: Val1, l2: Val1): Val1 =
+      VRigid(HPrim(Name("eqLabel")), SApp(SApp(SId, l1, Expl), l2, Expl))
+    def unapply(value: Val1): Option[(Val1, Val1)] = value match
+      case VRigid(
+            HPrim(Name("eqLabel")),
+            SApp(SApp(SId, l1, Expl), l2, Expl)
+          ) =>
+        Some((l1, l2))
+      case _ => None
+
   inline def VClass(l: Val1) = VRigid(HPrim(Name("Class")), SApp(SId, l, Expl))
   inline def VClassLabel(x: String) = VClass(VLabelLit(x))
   val VString = VClassLabel("java.lang.String")
@@ -451,7 +474,9 @@ object Primitives:
                   )
               )
           )
-      )
+      ),
+    "appendLabel" -> vfun1(VLabel, vfun1(VLabel, VLabel)),
+    "eqLabel" -> vfun1(VLabel, vfun1(VLabel, VBoolM))
   )
 
   inline def getPrimEliminators(
@@ -719,5 +744,25 @@ object Primitives:
                   )
               )
           )
-      )
+      ),
+    "appendLabel" -> vlam1(
+      "l1",
+      VLabel,
+      l1 =>
+        vlam1(
+          "l2",
+          VLabel,
+          l2 => vprimelim(Name("appendLabel"), l1, 0, Expl, List((l2, Expl)))
+        )
+    ),
+    "eqLabel" -> vlam1(
+      "l1",
+      VLabel,
+      l1 =>
+        vlam1(
+          "l2",
+          VLabel,
+          l2 => vprimelim(Name("eqLabel"), l1, 0, Expl, List((l2, Expl)))
+        )
+    )
   )

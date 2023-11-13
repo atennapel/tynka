@@ -333,7 +333,7 @@ object Elaboration extends RetryPostponed:
             s"retryAllPostponed ?p$id as ?$m: check1 $tm : ${ctx.pretty1(ty)}"
           )
           val (etm, vty) = insert(infer1(tm))
-          setPostponed(id, PECheck1Done(ctx, None)) // prevent retry
+          // setPostponed(id, PECheck1Done(ctx, Some(etm))) // TODO: this is wrong!
           val etm2 = coe(etm, vty, ty)
           setPostponed(id, PECheck1Done(ctx, Some(etm2)))
           unifyPlaceholder(m, etm2)
@@ -931,7 +931,7 @@ object Elaboration extends RetryPostponed:
 
       case (S.Hole(_), _) => freshMeta(ty)
 
-      case (tm, VFlex(m, _)) =>
+      case (tm, VFlex(m, _)) if isNotVar(tm) =>
         val placeholder = freshMetaId(ty)
         val pid = newPostponed(PECheck1(ctx, tm, ty, placeholder))
         addBlocking(pid, m)
@@ -943,6 +943,10 @@ object Elaboration extends RetryPostponed:
       case (tm, _) =>
         val (etm, vty) = insert(infer1(tm))
         coe(etm, vty, ty)
+
+  private def isNotVar(t: S.Tm): Boolean = t match
+    case S.Var(_, _) => false
+    case _           => true
 
   // inference
   private def infer0(tm: S.Tm)(implicit ctx: Ctx): (Tm0, VTy, VCV) =
