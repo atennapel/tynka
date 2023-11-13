@@ -83,7 +83,6 @@ TODO:
 - [x] Newtypes
 - [x] Meta datatypes
 - [x] Sigma types
-- [ ] Array literals
 - [ ] Label operations: eqLabel and appendLabel
 - [ ] Con
 - [ ] Opaque definitions and unfolding

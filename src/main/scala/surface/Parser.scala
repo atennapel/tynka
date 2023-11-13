@@ -130,8 +130,8 @@ object Parser:
       case Nil => unittype
       case ts  => ts.reduceRight(Pair.apply)
 
-    private val nil = Var(Name("Nil"))
-    private val cons = Var(Name("::"))
+    private val nil = Var(Name("NilM"))
+    private val cons = Var(Name("ConsM"))
     private def mkUnitPair(isList: Boolean, ts: List[Tm]): Tm =
       if isList then
         ts.foldRight(nil)((x, y) =>
