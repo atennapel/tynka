@@ -110,5 +110,5 @@ object Main:
           stream.close()
           println(lineSrc)
           println(s"${" " * (col - 1)}^")
-          println(s"in ${filename}")
+          println(s"in ${filename}:$line:$col")
         if isDebug then err.printStackTrace()

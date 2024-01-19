@@ -694,7 +694,7 @@ object Elaboration extends RetryPostponed:
             if matchedCons == cons then Exhausted(vrty)
             else
               error(
-                s"non-exhaustive pattern match, ${(cons -- matchedCons).mkString(", ")} left"
+                s"non-exhaustive pattern match: ${(cons -- matchedCons).mkString(", ")} left"
               )
           else if matchedCons == cons then Exhausted(vrty)
           else
